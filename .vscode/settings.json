@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "Dockerfile*": "dockerfile",
+        "*.html": "html",
+        "*.src": "c"
+    }
+}
