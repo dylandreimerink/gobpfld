@@ -6,7 +6,6 @@ import (
 	"io"
 	"unsafe"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"github.com/dylandreimerink/gobpfld/ebpf"
@@ -77,7 +76,6 @@ func (p *BPFProgram) Load(settings BPFProgramLoadSettings) (log string, err erro
 		if !bpfMap.IsLoaded() {
 			err = bpfMap.Load()
 			if err != nil {
-				spew.Dump(err)
 				return "", fmt.Errorf("error while loading map '%s': %w", mapName, err)
 			}
 		}
