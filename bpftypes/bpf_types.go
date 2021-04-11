@@ -6,7 +6,8 @@ import (
 
 const (
 	// The max length of an object name as defined by the linux kernel
-	BPF_OBJ_NAME_LEN = 16
+	// The actual size of the string is 16 bytes, but the last byte must always be 0x00
+	BPF_OBJ_NAME_LEN = 15
 )
 
 // BPFCommand is a enum which describes a number of different commands which can be sent to the kernel

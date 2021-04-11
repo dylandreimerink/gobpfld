@@ -95,7 +95,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (map[string]*B
 						err = bpfMap.Name.SetString(symbol.Name)
 						if err != nil {
 							if settings.TruncateNames && errors.Is(err, ErrObjNameToLarge) {
-								err = bpfMap.Name.SetString(section.Name[:bpftypes.BPF_OBJ_NAME_LEN])
+								err = bpfMap.Name.SetString(symbol.Name[:bpftypes.BPF_OBJ_NAME_LEN])
 								if err != nil {
 									return nil, fmt.Errorf("failed to truncate map name: %w", err)
 								}
@@ -205,18 +205,24 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (map[string]*B
 
 		// Populate program with map reloc data from reloc table
 		for _, relocEntry := range relocTable {
-			bpfMap, found := bpfMaps[relocEntry.Symbol.Name]
+			// The map name is the name of the symbol truncated to BPF_OBJ_NAME_LEN
+			mapName := relocEntry.Symbol.Name
+			if settings.TruncateNames && len(mapName) > bpftypes.BPF_OBJ_NAME_LEN {
+				mapName = mapName[:bpftypes.BPF_OBJ_NAME_LEN]
+			}
+
+			bpfMap, found := bpfMaps[mapName]
 			if !found {
-				return nil, fmt.Errorf("program references undefined map named '%s'", relocEntry.Symbol.Name)
+				return nil, fmt.Errorf("program references undefined map named '%s'", mapName)
 			}
 
 			// Add map to list of maps used by program if not already in list
-			_, found = program.Maps[relocEntry.Symbol.Name]
+			_, found = program.Maps[mapName]
 			if !found {
-				program.Maps[relocEntry.Symbol.Name] = bpfMap
+				program.Maps[mapName] = bpfMap
 			}
 
-			relLocations := program.MapFDLocations[relocEntry.Symbol.Name]
+			relLocations := program.MapFDLocations[mapName]
 			if relLocations == nil {
 				relLocations = []uint64{}
 			}
@@ -227,7 +233,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (map[string]*B
 			}
 			relLocations = append(relLocations, absOff)
 
-			program.MapFDLocations[relocEntry.Symbol.Name] = relLocations
+			program.MapFDLocations[mapName] = relLocations
 		}
 	}
 
