@@ -24,7 +24,7 @@ GoBPFLD is a loader/library to make eBPF tool development in Go smoother. It is 
 
 ## Features
 
-* Load pre-compiled eBPF programs from ELF files (see elf package)
+* Load pre-compiled eBPF programs from ELF files (see LoadProgramFromELF)
 * Decode eBPF bytecode (see BPFProgram.DecodeToReader and ebpf.Decode)
 * Encode eBPF instructions into bytecode (see ebpf.Encode)
 * Loading eBPF maps into the kernel (see BPFMap.Load)
@@ -45,6 +45,7 @@ As mentioned earlier the first milestone/focus area of this project has been on 
 
 Features/tasks in this list are commonly used/requested because they are used in common use cases / scenarios.
 
+* Data relocation from ELF files(static global variables)
 * Attach to sockets
 * Attach to kprobes
 * Attach to tc (traffic control)

@@ -163,10 +163,6 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (map[string]*B
 		case elf.SHT_REL:
 			// Relocation table
 
-			if section.Name != ".relxdp_stats1" {
-				continue
-			}
-
 			data, err := section.Data()
 			if err != nil {
 				return nil, fmt.Errorf("error while loading section '%s': %w", section.Name, err)
