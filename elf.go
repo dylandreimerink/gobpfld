@@ -95,7 +95,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (map[string]*B
 						err = bpfMap.Name.SetString(symbol.Name)
 						if err != nil {
 							if settings.TruncateNames && errors.Is(err, ErrObjNameToLarge) {
-								err = bpfMap.Name.SetString(symbol.Name[:bpftypes.BPF_OBJ_NAME_LEN])
+								err = bpfMap.Name.SetString(symbol.Name[:bpftypes.BPF_OBJ_NAME_LEN-1])
 								if err != nil {
 									return nil, fmt.Errorf("failed to truncate map name: %w", err)
 								}
@@ -135,7 +135,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (map[string]*B
 			err = program.Name.SetString(section.Name)
 			if err != nil {
 				if settings.TruncateNames && errors.Is(err, ErrObjNameToLarge) {
-					err = program.Name.SetString(section.Name[:bpftypes.BPF_OBJ_NAME_LEN])
+					err = program.Name.SetString(section.Name[:bpftypes.BPF_OBJ_NAME_LEN-1])
 					if err != nil {
 						return nil, fmt.Errorf("failed to truncate program name: %w", err)
 					}
@@ -207,8 +207,8 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (map[string]*B
 		for _, relocEntry := range relocTable {
 			// The map name is the name of the symbol truncated to BPF_OBJ_NAME_LEN
 			mapName := relocEntry.Symbol.Name
-			if settings.TruncateNames && len(mapName) > bpftypes.BPF_OBJ_NAME_LEN {
-				mapName = mapName[:bpftypes.BPF_OBJ_NAME_LEN]
+			if settings.TruncateNames && len(mapName) > bpftypes.BPF_OBJ_NAME_LEN-1 {
+				mapName = mapName[:bpftypes.BPF_OBJ_NAME_LEN-1]
 			}
 
 			bpfMap, found := bpfMaps[mapName]

@@ -94,7 +94,7 @@ func (p *BPFProgram) Load(settings BPFProgramLoadSettings) (log string, err erro
 		ProgramType:        settings.ProgramType,
 		InsnCnt:            uint32(len(p.Instructions)),
 		Insns:              uintptr(unsafe.Pointer(&p.Instructions[0])),
-		License:            uintptr(unsafe.Pointer(&licenceCStr)),
+		License:            uintptr(unsafe.Pointer(&licenceCStr[0])),
 		LogLevel:           settings.VerifierLogLevel,
 		LogSize:            uint32(settings.VerifierLogSize),
 		LogBuf:             uintptr(unsafe.Pointer(&verifierLogBytes[0])),
@@ -333,12 +333,12 @@ func NewObjName(initialName string) (*ObjName, error) {
 var ErrObjNameToLarge = errors.New("object name to large")
 
 func (on *ObjName) SetBytes(strBytes []byte) error {
-	if len(strBytes) > bpftypes.BPF_OBJ_NAME_LEN {
-		return fmt.Errorf("%w: limit is %d bytes, length: %d", ErrObjNameToLarge, bpftypes.BPF_OBJ_NAME_LEN, len(strBytes))
+	if len(strBytes) > bpftypes.BPF_OBJ_NAME_LEN-1 {
+		return fmt.Errorf("%w: limit is %d bytes, length: %d", ErrObjNameToLarge, bpftypes.BPF_OBJ_NAME_LEN-1, len(strBytes))
 	}
 
 	on.str = string(strBytes)
-	for i := 0; i < bpftypes.BPF_OBJ_NAME_LEN; i++ {
+	for i := 0; i < bpftypes.BPF_OBJ_NAME_LEN-1; i++ {
 		if len(strBytes) > i {
 			on.cname[i] = strBytes[i]
 			continue
@@ -351,12 +351,12 @@ func (on *ObjName) SetBytes(strBytes []byte) error {
 
 func (on *ObjName) SetString(str string) error {
 	strBytes := []byte(str)
-	if len(strBytes) > bpftypes.BPF_OBJ_NAME_LEN {
-		return fmt.Errorf("%w: limit is %d bytes, length: %d", ErrObjNameToLarge, bpftypes.BPF_OBJ_NAME_LEN, len(strBytes))
+	if len(strBytes) > bpftypes.BPF_OBJ_NAME_LEN-1 {
+		return fmt.Errorf("%w: limit is %d bytes, length: %d", ErrObjNameToLarge, bpftypes.BPF_OBJ_NAME_LEN-1, len(strBytes))
 	}
 
 	on.str = str
-	for i := 0; i < bpftypes.BPF_OBJ_NAME_LEN; i++ {
+	for i := 0; i < bpftypes.BPF_OBJ_NAME_LEN-1; i++ {
 		if len(strBytes) > i {
 			on.cname[i] = strBytes[i]
 			continue
