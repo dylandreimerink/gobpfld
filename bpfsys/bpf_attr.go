@@ -13,13 +13,13 @@ type BPFAttribute interface {
 
 // struct used by BPF_MAP_CREATE command
 type BPFAttrMapCreate struct {
-	MapType               bpftypes.BPFMapType // one of enum bpf_map_type
-	KeySize               uint32              // size of key in bytes
-	ValueSize             uint32              // size of value in bytes
-	MaxEntries            uint32              // max number of entries in a map
-	MapFlags              uint32              // BPF_MAP_CREATE related flags
-	InnerMapFD            BPFfd               // fd pointing to the inner map
-	NumaNode              uint32              // numa node (effective only if BPF_F_NUMA_NODE is set)
+	MapType               bpftypes.BPFMapType  // one of enum bpf_map_type
+	KeySize               uint32               // size of key in bytes
+	ValueSize             uint32               // size of value in bytes
+	MaxEntries            uint32               // max number of entries in a map
+	MapFlags              bpftypes.BPFMapFlags // BPF_MAP_CREATE related flags
+	InnerMapFD            BPFfd                // fd pointing to the inner map
+	NumaNode              uint32               // numa node (effective only if BPF_F_NUMA_NODE is set)
 	MapName               [bpftypes.BPF_OBJ_NAME_LEN]byte
 	MapIFIndex            uint32 // ifindex of netdev to create on
 	BTFFD                 BPFfd  // fd pointing to a BTF type data

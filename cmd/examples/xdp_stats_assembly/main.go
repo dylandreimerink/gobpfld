@@ -9,6 +9,7 @@ import (
 	"github.com/dylandreimerink/gobpfld"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"github.com/dylandreimerink/gobpfld/ebpf"
+	"golang.org/x/sys/unix"
 )
 
 // This example command executes the same program as xdp_stats which is basic03-map-counter from
@@ -23,12 +24,14 @@ func main() {
 		Licence: "GPL",
 		Maps: map[string]gobpfld.BPFMap{
 			"xdp_stats_map": &gobpfld.BPFGenericMap{
-				Name: gobpfld.MustNewObjName("xdp_stats_map"),
-				Definition: gobpfld.BPFMapDef{
-					Type:       bpftypes.BPF_MAP_TYPE_ARRAY,
-					KeySize:    4, // SizeOf(uint32)
-					ValueSize:  8, // SizeOf(uint64)
-					MaxEntries: 5,
+				AbstractMap: gobpfld.AbstractMap{
+					Name: gobpfld.MustNewObjName("xdp_stats_map"),
+					Definition: gobpfld.BPFMapDef{
+						Type:       bpftypes.BPF_MAP_TYPE_ARRAY,
+						KeySize:    4, // SizeOf(uint32)
+						ValueSize:  8, // SizeOf(uint64)
+						MaxEntries: 5,
+					},
 				},
 			},
 		},
@@ -130,9 +133,8 @@ func main() {
 	statsMap := program.Maps["xdp_stats_map"].(*gobpfld.BPFGenericMap)
 
 	log, err := program.Load(gobpfld.BPFProgramLoadSettings{
-		ProgramType:        bpftypes.BPF_PROG_TYPE_XDP,
-		VerifierLogLevel:   bpftypes.BPFLogLevelBasic,
-		ExpectedAttachType: bpftypes.BPF_CGROUP_INET_INGRESS,
+		ProgramType:      bpftypes.BPF_PROG_TYPE_XDP,
+		VerifierLogLevel: bpftypes.BPFLogLevelBasic,
 	})
 
 	fmt.Printf("BPF Verifier log:\n%s\n", log)
@@ -144,12 +146,11 @@ func main() {
 	}
 
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt)
+	signal.Notify(sigChan, os.Interrupt, unix.SIGTERM, unix.SIGINT)
 
 	err = program.XDPLinkAttach(gobpfld.BPFProgramXDPLinkAttachSettings{
 		InterfaceName: "lo",
 		Replace:       true,
-		XDPMode:       gobpfld.XDPModeSKB,
 	})
 
 	if err != nil {

@@ -72,12 +72,14 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (map[string]*B
 
 				for i := 0; i < len(data); i += BPFMapDefSize {
 					bpfMap := &BPFGenericMap{
-						Definition: BPFMapDef{
-							Type:       bpftypes.BPFMapType(elfFile.ByteOrder.Uint32(data[i : i+4])),
-							KeySize:    elfFile.ByteOrder.Uint32(data[i+4 : i+8]),
-							ValueSize:  elfFile.ByteOrder.Uint32(data[i+8 : i+12]),
-							MaxEntries: elfFile.ByteOrder.Uint32(data[i+12 : i+16]),
-							Flags:      elfFile.ByteOrder.Uint32(data[i+16 : i+20]),
+						AbstractMap: AbstractMap{
+							Definition: BPFMapDef{
+								Type:       bpftypes.BPFMapType(elfFile.ByteOrder.Uint32(data[i : i+4])),
+								KeySize:    elfFile.ByteOrder.Uint32(data[i+4 : i+8]),
+								ValueSize:  elfFile.ByteOrder.Uint32(data[i+8 : i+12]),
+								MaxEntries: elfFile.ByteOrder.Uint32(data[i+12 : i+16]),
+								Flags:      bpftypes.BPFMapFlags(elfFile.ByteOrder.Uint32(data[i+16 : i+20])),
+							},
 						},
 					}
 

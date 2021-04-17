@@ -10,6 +10,7 @@ import (
 
 	"github.com/dylandreimerink/gobpfld"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
+	"golang.org/x/sys/unix"
 
 	_ "embed"
 )
@@ -40,9 +41,8 @@ func main() {
 	statsMap := program.Maps["xdp_stats_map"].(*gobpfld.BPFGenericMap)
 
 	log, err := program.Load(gobpfld.BPFProgramLoadSettings{
-		ProgramType:        bpftypes.BPF_PROG_TYPE_XDP,
-		VerifierLogLevel:   bpftypes.BPFLogLevelBasic,
-		ExpectedAttachType: bpftypes.BPF_CGROUP_INET_INGRESS,
+		ProgramType:      bpftypes.BPF_PROG_TYPE_XDP,
+		VerifierLogLevel: bpftypes.BPFLogLevelBasic,
 	})
 
 	fmt.Printf("BPF Verifier log:\n%s\n", log)
@@ -53,12 +53,11 @@ func main() {
 	}
 
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt)
+	signal.Notify(sigChan, os.Interrupt, unix.SIGTERM, unix.SIGINT)
 
 	err = program.XDPLinkAttach(gobpfld.BPFProgramXDPLinkAttachSettings{
 		InterfaceName: "lo",
 		Replace:       true,
-		XDPMode:       gobpfld.XDPModeSKB,
 	})
 
 	if err != nil {

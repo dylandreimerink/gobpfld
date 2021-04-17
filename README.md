@@ -37,6 +37,16 @@ GoBPFLD is a loader/library to make eBPF tool development in Go smoother. It is 
 
 The cmd/examples directory contains examples programs which demonstrate how to use this library and its capabilities.
 
+## eBPF useful links
+
+* [Cilium BPF and XDP Reference Guide](https://docs.cilium.io/en/stable/bpf/)
+* [IOVisor eBPF features per kernel version](https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md)
+* [XDP tutorial and simple examples](https://github.com/xdp-project/xdp-tutorial)
+* [BPF helper functions manual page](https://man7.org/linux/man-pages/man7/bpf-helpers.7.html)
+* [Linux kernel (e)BPF socket filter document](https://github.com/torvalds/linux/blob/master/Documentation/networking/filter.rst)
+* [Linux kernel (e)BPF documentation](https://github.com/torvalds/linux/tree/master/Documentation/bpf)
+* [Linux kernel example programs](https://github.com/torvalds/linux/tree/master/samples/bpf)
+
 ## TODO/Roadmap/Scope limits
 
 As mentioned earlier the first milestone/focus area of this project has been on implementing basic eBPF and XDP related features, and thus is missing a lot of stuff. This is a list of features to be added later, just to keep track.
@@ -84,3 +94,35 @@ Features/tasks in this list are cool to have but secondary to the primary goal o
 Features/tasks in this list are out of the scope of the project. We have to draw the line somewhere to avoid feature creep.
 
 * cBPF support (cBPF is not even supported by Linux anymore, just converted to eBPF, which you can also to with [tools](https://github.com/cloudflare/cbpfc) for any exiting program)
+
+## eBPF troubleshooting and known issues
+
+eBPF can be very difficult at times, I have identified two reasons so far. The first being that errors returned by syscalls can mean any of a thousands things in a general category, like a hint, the rest is trail and error. The second is that the verifier is very strict.
+
+### Common verifier errors
+
+#### EPERM(1) - Operation not permitted
+
+* Program is executed as non-root user without CAP_BPF or CAP_SYS_ADMIN
+
+#### E2BIG(7) - Arg list too long
+
+* Program has to many instruction (older kernels only allow 4096 instructions per program, newer kernels >100000)
+
+#### ENOMEM(12) - Out of memory
+
+* A userspace buffer sent to the kernel is to small(verifier log(1 MiB default) is suspect for large programs)
+* System is out of RAM and can't allocate memory for the eBPF VM/verifier/ect.
+
+#### EACCES(13) - Permission denied
+
+* Verifier error (check verifier log for details)
+
+#### EFAULT(14) - Bad address
+
+* Bug in gobpfld code (invalid pointers sent to the syscall)
+
+#### EINVAL(22) - Invalid argument
+
+* Verifier error (check verifier log for details)
+* Bug in gobpfld code (invalid argument sent to the syscall)

@@ -1,6 +1,7 @@
 package bpftypes
 
 import (
+	"strings"
 	"unsafe"
 )
 
@@ -104,38 +105,164 @@ func (cmd BPFCommand) String() string {
 
 // BPFMapType is an enum type which describes a type of map
 // From bpf_map_type https://github.com/torvalds/linux/blob/master/include/uapi/linux/bpf.h#L136
+//
+// There are generic map types which allow a user to use any key and value type they wish (within limits) and
+// specialized map types which typically have only one or a few purposes, must have specific keys or values, and/or
+// can only be used in conjunction with specific helper functions.
 type BPFMapType uint32
 
 const (
+	// BPF_MAP_TYPE_UNSPEC is a invalid map type with the numeric value of 0, so map types are always unspecified
+	// if not initialized.
 	BPF_MAP_TYPE_UNSPEC BPFMapType = iota
+	// BPF_MAP_TYPE_HASH is a generic map type which has no key or value memory layout restrictions. Memory for
+	// this map is not pre-allocated unless requested with an additional flag. The value of the key is hashed
+	// and looked up in a hashmap.
 	BPF_MAP_TYPE_HASH
+	// BPF_MAP_TYPE_ARRAY is a generic map type which has no key or value memory layout restrictions. Memory for
+	// this map is pre-allocated in a contiguous memory region. The value of key is interperted as an offset aka
+	// index.
 	BPF_MAP_TYPE_ARRAY
+	// BPF_MAP_TYPE_PROG_ARRAY is a specialized map type which is used in conjunction with the bpf_tail_call
+	// helper function to "tail call" into another eBPF program.
+	// The key of this map is an array index (0 to 'max_entries').
+	// The value of this map is a eBPF program file descriptor gotten from the bpf syscall
 	BPF_MAP_TYPE_PROG_ARRAY
+	// BPF_MAP_TYPE_PERF_EVENT_ARRAY is a specialized map type that is used in conjunction with the bpf_perf_event_read,
+	// bpf_perf_event_output, bpf_perf_event_read_value, bpf_skb_output, or bpf_xdp_output helper functions.
+	// This allows eBPF programs to generate events in the 'perf' linux profiler which can be read by a userspace program.
+	// The key is an array inex (0 to 'max_entires')
+	// The value is a file descriptor returned by the perf_event_open syscall
 	BPF_MAP_TYPE_PERF_EVENT_ARRAY
+	// BPF_MAP_TYPE_PERCPU_HASH is a generic map type which has no key or value memory layout restrictions. It is similar to
+	// the BPF_MAP_TYPE_HASH map type, however, for every logical CPU a separate map is created and maintained.
+	// A eBPF program can only interact with the version of the map allocated to the CPU it is running on.
+	// The advantage of this scheme is that no race conditions can ever occur so no locking is required and no CPU
+	// caches have to be kept in sync, this makes it very fast. The downside is that since every CPU has a unique copy
+	// the memory usage is multiplied by the CPU core count of the machine (trading of speed for memory usage).
+	//
+	// When interacting with this map from the syscall/userspace side all values for every version of the map is returned
+	// at once as an array. This may seem confusing since the buffer size in userspace needs to be way larger than the
+	// value size in the map definition indicates. Getting a u8 values from a per cpu map on a 16 logical CPU core machine
+	// takes 16 bytes. The returned array is indexed by CPU number.
 	BPF_MAP_TYPE_PERCPU_HASH
+	// BPF_MAP_TYPE_PERCPU_ARRAY is a generic map type which has no key or value memory layout restrictions. It works the
+	// same as the BPF_MAP_TYPE_PERCPU_HASH map except it has been pre-allocated and the key is interperted as an array
+	// index so from 0 to 'max_entires'
 	BPF_MAP_TYPE_PERCPU_ARRAY
+	// BPF_MAP_TYPE_STACK_TRACE is a specialized map type which is used to store a stacktrace which can be accessed
+	// by eBPF programs to to tracing or make metrics.
+	//
+	// TODO figure out the key and value types of this maps. The kernel samples seem to suggest this map is automatically
+	// when a program is called and has to be cleaned by a userspace application which also has a chance to access the trace.
 	BPF_MAP_TYPE_STACK_TRACE
+	// BPF_MAP_TYPE_CGROUP_ARRAY is a specialized map type that is used in conjunction with the bpf_skb_under_cgroup
+	// or bpf_current_task_under_cgroup helper functions. It can be used to check if the eBPF program is running in
+	// the context of a specific cgroup.
+	// The key is an array index (0 to 'max_entries').
+	// The value is a cgroup file descriptor.
 	BPF_MAP_TYPE_CGROUP_ARRAY
+	// BPF_MAP_TYPE_LRU_HASH is a generic map type which has no key or value memory layout restrictions. It is
+	// similar to the BPF_MAP_TYPE_HASH type with one exception. When the map is full and a value is written to it
+	// the least recently used element of the map is replaced with the new element.
+	// This is usefull for use cases like caches or statistics where losing data is not the end of the world.
 	BPF_MAP_TYPE_LRU_HASH
+	// BPF_MAP_TYPE_LRU_PERCPU_HASH is a generic map type which has no key or value memory layout restrictions.
+	// It is the per cpu variant of the BPF_MAP_TYPE_LRU_HASH map type and combines both features.
+	// Please look at the description of the BPF_MAP_TYPE_PERCPU_HASH type for the per cpu features and
+	// the BPF_MAP_TYPE_LRU_HASH map type for lru features
 	BPF_MAP_TYPE_LRU_PERCPU_HASH
+	// BPF_MAP_TYPE_LPM_TRIE is a specialized map type which uses longest prefix matching when looking up elements
+	// in the map. This is mainly usefull for IP range lookups where more specific IP prefixes take precedence over
+	// less specific IP prefixes.
+	// The key must start with a unsigned 32 bit integer which denotes the amount of bits to consider followed by
+	// a user determined number of bytes containing the actual data to be matches.
+	// The value type is arbitrary.
 	BPF_MAP_TYPE_LPM_TRIE
+	// BPF_MAP_TYPE_ARRAY_OF_MAPS is a specialized map type that refers to other maps.
+	// The key of this map type is an array index(0 to 'max_entires').
+	// The value of this map type is a pointer to another map.
 	BPF_MAP_TYPE_ARRAY_OF_MAPS
+	// BPF_MAP_TYPE_ARRAY_OF_MAPS is a specialized map type that refers to other maps.
+	// The key of this map type is hashed and can my any type.
+	// The value of this map is a pointer to another map.
 	BPF_MAP_TYPE_HASH_OF_MAPS
+	// BPF_MAP_TYPE_DEVMAP is a specialized map type that is used in conjunction with the bpf_redirect_map
+	// helper function to redirect a XDP frame to a specific network device which sends it out of its associated
+	// port. This allows us to implement driver level switching.
+	// The key of a devmap is an array index (0 to 'max_entries')
+	// The value of a devmap must follow the bpf_devmap_val memory layout https://elixir.bootlin.com/linux/v5.11.15/source/include/uapi/linux/bpf.h#L4390
 	BPF_MAP_TYPE_DEVMAP
+	// BPF_MAP_TYPE_SOCKMAP is a specialized map type that is used in conjunction with the bpf_sk_redirect_map or
+	// bpf_msg_redirect_map map helper functions to redirect packets to sockets.
+	// The key of a sockmap is an array index (0 to 'max_entries')
+	// The value of a sockmap is a file descriptor to a socket, returned by the socket(2) syscall
 	BPF_MAP_TYPE_SOCKMAP
+	// BPF_MAP_TYPE_CPUMAP is a specialized map type that is used in conjunction with the bpf_redirect_map
+	// helper function to redirect a XDP frame to a specific CPU for further processing by the kernel
+	// network stack. This essentially allows an XDP to do RPS(Receive Packet Steering).
+	// Example: https://github.com/torvalds/linux/blob/master/samples/bpf/xdp_redirect_cpu_kern.c
+	// The key of a devmap is an array index (0 to 'max_entries')
+	// The value of a devmap must follow the bpf_devmap_val memory layout https://elixir.bootlin.com/linux/v5.11.15/source/include/uapi/linux/bpf.h#L4403
 	BPF_MAP_TYPE_CPUMAP
+	// BPF_MAP_TYPE_XSKMAP is a specialized map type that is used in conjunction with the bpf_redirect_map
+	// helper function to pass a XDP frame to a AF_XDP socket thus bypassing the kernel network stack.
+	// Using AF_XDP is complicated and requires a lot of setup from the loader.
+	// https://github.com/torvalds/linux/blob/master/Documentation/networking/af_xdp.rst
 	BPF_MAP_TYPE_XSKMAP
+	// BPF_MAP_TYPE_SOCKHASH is a specialized map type that is used in conjunction with the bpf_sk_redirect_hash
+	// and bpf_msg_redirect_hash helper function to redirect packets to sockets. It is almost identical to BPF_MAP_TYPE_SOCKMAP
+	// but is implemented with a hashmap instead of an array.
 	BPF_MAP_TYPE_SOCKHASH
+	// BPF_MAP_TYPE_CGROUP_STORAGE is a specialized map type that is used in conjunction with the bpf_get_local_storage
+	// helper function. This map is used to store arbitrary data in a memory area linked to the cgroup.
+	// The key of the map is the cgroup_inode_id(uint64) or bpf_cgroup_storage_key.
+	// The value of the map is arbitrary.
+	// https://github.com/torvalds/linux/blob/master/Documentation/bpf/map_cgroup_storage.rst
 	BPF_MAP_TYPE_CGROUP_STORAGE
+	// BPF_MAP_TYPE_REUSEPORT_SOCKARRAY is a specialized map type that is used in conjunction with the sk_select_reuseport
+	// helper function to redirect a packet to a specific socket which is bound to the a port using the
+	// SO_REUSEPORT socket option. The SO_REUSEPORT socket option allows multiple sockets to listen on the same port
+	// which are typically placed on different threads, this scheme can improve performance. https://lwn.net/Articles/542629/.
 	BPF_MAP_TYPE_REUSEPORT_SOCKARRAY
+	// BPF_MAP_TYPE_PERCPU_CGROUP_STORAGE is the per cpu version of BPF_MAP_TYPE_CGROUP_STORAGE.
+	// https://github.com/torvalds/linux/blob/master/Documentation/bpf/map_cgroup_storage.rst
 	BPF_MAP_TYPE_PERCPU_CGROUP_STORAGE
+	// BPF_MAP_TYPE_QUEUE is a specialized map type that is used in conjunction with the bpf_map_push_elem,
+	// bpf_map_pop_elem, and bpf_map_peek_elem helper functions. This map type implements a LIFO/FIFO queue
+	// which does not allow for arbitrary access and does not use keys.
+	// The value of the map is arbitrary.
 	BPF_MAP_TYPE_QUEUE
+	// BPF_MAP_TYPE_STACK is a specialized map type that is used in conjunction with the bpf_map_push_elem,
+	// bpf_map_pop_elem, and bpf_map_peek_elem helper functions. This map type implements a stack
+	// which does not allow for arbitrary access and does not use keys.
+	// The value of the map is arbitrary.
 	BPF_MAP_TYPE_STACK
+	// BPF_MAP_TYPE_SK_STORAGE is a specialized map type that is used in conjunction with the bpf_sk_storage_get
+	// helper function. This map allows a program to attach stored data to a socket. This has the advantage
+	// of not having to manage this memory since it will be freed when the socket closes.
+	// The key of the map is not used since a program can only access data for the socket on which
+	// it was triggered.
+	// The value type is arbitrary.
 	BPF_MAP_TYPE_SK_STORAGE
+	// BPF_MAP_TYPE_DEVMAP_HASH is a specialized map type that is used in conjunction with the bpf_redirect_map
+	// helper function. It it almost the same as the BPF_MAP_TYPE_DEVMAP type except the key is hashed so
+	// non-contiguous keys can be used without wasting memory.
 	BPF_MAP_TYPE_DEVMAP_HASH
+	// BPF_MAP_TYPE_STRUCT_OPS is used in BPF_PROG_TYPE_STRUCT_OPS programs.
+	// TODO figure out how BPF_PROG_TYPE_STRUCT_OPS programs work and how the map should be used
 	BPF_MAP_TYPE_STRUCT_OPS
+	// BPF_MAP_TYPE_RINGBUF is a specialized map type that is used in conjunction with the bpf_ringbuf_output,
+	// bpf_ringbuf_reserve, bpf_ringbuf_submit, bpf_ringbuf_discard, and bpf_ringbuf_query helper function.
+	// https://github.com/torvalds/linux/blob/master/Documentation/bpf/ringbuf.rst
 	BPF_MAP_TYPE_RINGBUF
+	// BPF_MAP_TYPE_INODE_STORAGE is a specialized map type that is used in conjunction with the bpf_inode_storage_get
+	// and bpf_inode_storage_delete helper functions. This can be used to attach data to a inode. This is especially useful
+	// for eBPF programs that deal with files like LSM programs. When the inode is deleted, the associated data is also deleted.
 	BPF_MAP_TYPE_INODE_STORAGE
+	// BPF_MAP_TYPE_INODE_STORAGE is a specialized map type that is used in conjunction with the bpf_task_storage_get
+	// and bpf_task_storage_delete helper functions. This can be used to attach data to a task.
+	// When the task ends, the data is deleted.
 	BPF_MAP_TYPE_TASK_STORAGE
 )
 
@@ -186,18 +313,56 @@ type BPFProgType uint32
 
 const (
 	BPF_PROG_TYPE_UNSPEC BPFProgType = iota
+	// The BPF_PROG_TYPE_SOCKET_FILTER program type can be attached to a socket using the SO_ATTACH_BPF
+	// option via the setsockopt syscall. The program is called for inbound packet and can be used to filter,
+	// trim, and modify packets. The program is given a pointer to __sk_buff and should return the amount of
+	// bytes of the packet to keep, all remaining bytes will be trimmed. A return value of 0 means drop.
 	BPF_PROG_TYPE_SOCKET_FILTER
+	// The BPF_PROG_TYPE_KPROBE program type can be attached to kprobes and uprobes.
+	// The main purpose of this is to collect information and/or to debug the kernel. The program is executed
+	// every time the breakpoint it is attached to is hit while that breakpoint is enabled.
+	// You can find more info about kprobes here: https://lwn.net/Articles/132196/
 	BPF_PROG_TYPE_KPROBE
+	// The BPF_PROG_TYPE_SCHED_CLS program type can be attached to tc(traffic control) and acts as a traffic
+	// classifier. For more details on this program type check out the tc-bpf manpage
+	// https://man7.org/linux/man-pages/man8/tc-bpf.8.html
 	BPF_PROG_TYPE_SCHED_CLS
+	// The BPF_PROG_TYPE_SCHED_ACT program type can be attached to tc(traffic control) and can tell tc to perform
+	// a certain action on. For more details on this program type check out the tc-bpf manpage
+	// https://man7.org/linux/man-pages/man8/tc-bpf.8.html
 	BPF_PROG_TYPE_SCHED_ACT
+	// The BPF_PROG_TYPE_TRACEPOINT program type can be attached to kernel tracepoints. Tracepoints are predefined
+	// places in the kernel which are interesting to monitor. The program is called every time the kernel executes
+	// code with a enabled tracepoint to which the eBPF program is attached.
+	// You can read more about this program type here: https://lwn.net/Articles/683504/
 	BPF_PROG_TYPE_TRACEPOINT
+	// The BPF_PROG_TYPE_XDP program type can be attached to network interfaces. A XDP program is triggered for every
+	// incoming data frame that is received on the network interface the program is attached to. The program is typically
+	// called from a network driver as soon as possible, before the kernel network stack. XDP programs can modify, redirect,
+	// or pass frames which can be used for very high performance network programs.
 	BPF_PROG_TYPE_XDP
+	// The BPF_PROG_TYPE_PERF_EVENT program type can be attached to perf events. The program is triggered for every perf
+	// event it is attached to within a given scope. It is mainly used for collecting information and monitoring.
+	// You can read more about perf and perf_events here: http://www.brendangregg.com/perf.html
 	BPF_PROG_TYPE_PERF_EVENT
+	// The BPF_PROG_TYPE_CGROUP_SKB program type can be attached to cgroups and is triggered on IP ingress/egress.
+	// The program can then allow or deny the ip packet to pass thus restricting network access for programs running
+	// in that cgroup programmatically.
 	BPF_PROG_TYPE_CGROUP_SKB
+	// The BPF_PROG_TYPE_CGROUP_SOCK program type can be attached to cgroups and is triggered when a new socket is
+	// requested. The program can then allow or deny for example a program in a cgroup from listening on a specific
+	// network port.
 	BPF_PROG_TYPE_CGROUP_SOCK
+	// The BPF_PROG_TYPE_LWT_IN program type can be attached to specific network routes. The program is called for every
+	// incoming packet to that route to decapsulate it. This allows a eBPF program to implement a tunneling
+	// protocol which is not supported by default by linux or to dynamically change its behavior using maps.
 	BPF_PROG_TYPE_LWT_IN
 	BPF_PROG_TYPE_LWT_OUT
 	BPF_PROG_TYPE_LWT_XMIT
+	// The BPF_PROG_TYPE_SOCK_OPS program type can be attached to cgroups and is triggered on a number of socket
+	// operations like TCP connection state changes, connection timeout, and new listening sockets.
+	// This program type can change the options of the socket with the bpf_setsockopt helper function,
+	// for example to change MTU or buffer sizes of the socket.
 	BPF_PROG_TYPE_SOCK_OPS
 	BPF_PROG_TYPE_SK_SKB
 	BPF_PROG_TYPE_CGROUP_DEVICE
@@ -265,8 +430,14 @@ func (pt BPFProgType) String() string {
 type BPFAttachType uint32
 
 const (
+	// BPF_CGROUP_INET_INGRESS is used to attach a BPF_PROG_TYPE_CGROUP_SKB program to the ingress IP traffic
+	// of a cgroup
 	BPF_CGROUP_INET_INGRESS BPFAttachType = iota
+	// BPF_CGROUP_INET_EGRESS is used to attach a BPF_PROG_TYPE_CGROUP_SKB program to the egress IP traffic
+	// of a cgroup
 	BPF_CGROUP_INET_EGRESS
+	// BPF_CGROUP_INET_SOCK_CREATE is used to attach a BPF_PROG_TYPE_CGROUP_SOCK program to the socket create
+	// operation of a cgroup. Meaning the program will be called for every socket to be created.
 	BPF_CGROUP_INET_SOCK_CREATE
 	BPF_CGROUP_SOCK_OPS
 	BPF_SK_SKB_STREAM_PARSER
@@ -298,10 +469,15 @@ const (
 	BPF_CGROUP_INET6_GETPEERNAME
 	BPF_CGROUP_INET4_GETSOCKNAME
 	BPF_CGROUP_INET6_GETSOCKNAME
+	// BPF_XDP_DEVMAP is set in the expectred attach type of a XDP program when it wants to use a BPF_XDP_DEVMAP.
 	BPF_XDP_DEVMAP
+	// BPF_CGROUP_INET_SOCK_CREATE is used to attach a BPF_PROG_TYPE_CGROUP_SOCK program to the socket release
+	// operation of a cgroup. Meaning the program will be called for every socket that is released.
 	BPF_CGROUP_INET_SOCK_RELEASE
+	// BPF_XDP_CPUMAP is set in the expectred attach type of a XDP program when it wants to use a BPF_MAP_TYPE_CPUMAP.
 	BPF_XDP_CPUMAP
 	BPF_SK_LOOKUP
+	// BPF_XDP is used to attach a BPF_PROG_TYPE_XDP program to a network interface.
 	BPF_XDP
 )
 
@@ -609,4 +785,68 @@ type BPFLineInfo struct {
 	FileNameOffset    uint32
 	LineOffset        uint32
 	ColumnOffset      uint32
+}
+
+type BPFMapFlags uint32
+
+const (
+	BPFMapFlagsNoPreAlloc BPFMapFlags = 1 << iota
+	// BPFMapFlagsNoPreAlloc is a flag that signals that instead of having one common LRU list in the
+	// BPF_MAP_TYPE_LRU_[PERCPU_]HASH map, use a percpu LRU list which can scale and perform better.
+	// Note, the LRU nodes (including free nodes) cannot be moved across different LRU lists.
+	BPFMapFlagsNoCommonLRU
+	// BPFMapFlagsNUMANode is a flag that signals that a numa node may be specified during map creation
+	BPFMapFlagsNUMANode
+	// BPFMapFlagsReadOnly is a flag that signals that the userspace may not write to this map
+	BPFMapFlagsReadOnly
+	// BPFMapFlagsWriteOnly is a flag that signals that the userspace may not read from this map
+	BPFMapFlagsWriteOnly
+	// BPFMapFlagsStackBuildID is a flag for stack_map that signals to store build_id+offset instead of pointer
+	BPFMapFlagsStackBuildID
+	// BPFMapFlagsZeroSeed is a flag that signals to zero-initialize hash function seed.
+	// This should only be used for testing.
+	BPFMapFlagsZeroSeed
+	// BPFMapFlagsReadOnlyProg is a flag that signals that the eBPF program may not write to this map
+	BPFMapFlagsReadOnlyProg
+	// BPFMapFlagsWriteOnlyProg is a flag that signals that the eBPF program may not write to this map
+	BPFMapFlagsWriteOnlyProg
+	// BPFMapFlagsClone is a flag that signals to clone the map from listener for newly accepted socket
+	BPFMapFlagsClone
+	// BPFMapFlagsMMapable is a flag that enables memory-mapping BPF map
+	BPFMapFlagsMMapable
+	// BPFMapFlagsPreserveElems is a flag that signals the kernel to share perf_event among processes
+	BPFMapFlagsPreserveElems
+	// BPFMapFlagsInnerMap  is a flag that signals the kernel to create a map that is suitable to be an inner map
+	// with dynamic max entries
+	BPFMapFlagsInnerMap
+	// BPFMapFlagsMax is a pseudo flag used for iteration within the library and should not be used
+	BPFMapFlagsMax
+)
+
+var mapDefFlagToStr = map[BPFMapFlags]string{
+	BPFMapFlagsNoPreAlloc:    "BPFMapFlagsNoPreAlloc",
+	BPFMapFlagsNoCommonLRU:   "BPFMapFlagsNoCommonLRU",
+	BPFMapFlagsNUMANode:      "BPFMapFlagsNUMANode",
+	BPFMapFlagsReadOnly:      "BPFMapFlagsReadOnly",
+	BPFMapFlagsWriteOnly:     "BPFMapFlagsWriteOnly",
+	BPFMapFlagsStackBuildID:  "BPFMapFlagsStackBuildID",
+	BPFMapFlagsZeroSeed:      "BPFMapFlagsZeroSeed",
+	BPFMapFlagsReadOnlyProg:  "BPFMapFlagsReadOnlyProg",
+	BPFMapFlagsWriteOnlyProg: "BPFMapFlagsWriteOnlyProg",
+	BPFMapFlagsClone:         "BPFMapFlagsClone",
+	BPFMapFlagsMMapable:      "BPFMapFlagsMMapable",
+	BPFMapFlagsPreserveElems: "BPFMapFlagsPreserveElems",
+	BPFMapFlagsInnerMap:      "BPFMapFlagsInnerMap",
+}
+
+func (f BPFMapFlags) String() string {
+	var flags []string
+
+	for flag := BPFMapFlagsNoPreAlloc; flag < BPFMapFlagsInnerMap; flag = flag << 1 {
+		if f&flag > 0 {
+			flags = append(flags, mapDefFlagToStr[flag])
+		}
+	}
+
+	return strings.Join(flags, "|")
 }
