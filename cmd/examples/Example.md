@@ -13,3 +13,7 @@ It demonstrates opening and decoding an ELF file into a BPFProgram and BPFMap, l
 This program is functionally identical to the xdp_stats example, but the program is not loaded from an ELF file, rather the `ebpf` package is used to craft the same program from individual instructions.
 
 It demonstrates how userspace applications can generate programs dynamically without needing a full toolchain to build the programs.
+
+## per_cpu_map
+
+This eBPF program attaches to the loopback interface of the host and counts the amount of packets received per CPU, it stores this information in a `BPF_MAP_TYPE_PERCPU_ARRAY` map. This example demonstrates how to read from and write to a per CPU map type with the `gopbfld.BPFGenericMap`.

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dylandreimerink/gobpfld"
+	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"golang.org/x/sys/unix"
 
@@ -71,7 +72,7 @@ func main() {
 	// This number can be different from the number available to the kernel if this process
 	// has custom CPU affinity / scheduling. To avoid this the /proc/cpuinfo "file" should be
 	// parsed which seems the most reliable method for CPU count detection.
-	// This is not (yet) included in gobpfld however.
+	// But this is not (yet) included in gobpfld.
 	numCPUs := runtime.NumCPU()
 
 	ticker := time.Tick(1 * time.Second)
@@ -79,6 +80,7 @@ func main() {
 	for {
 		select {
 		case <-ticker:
+			// Alternate between using a slice and an array, just for fun
 			i += 1
 			if i%2 == 0 {
 				key := uint32(0)
@@ -96,9 +98,23 @@ func main() {
 				for i := 0; i < numCPUs; i++ {
 					fmt.Printf("CPU %d: %d packets processed\n", i, valueSlice[i])
 				}
+
+				// Every 10 seconds write the current counts to index 1
+				if i%10 == 0 {
+					key := uint32(1)
+
+					err := counterMap.Set(&key, &valueSlice, bpfsys.BPFMapElemAny)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "error while setting data to per-cpu map: %s\n", err.Error())
+						// Close sigchan to trigger a shutdown
+						close(sigChan)
+						break
+					}
+				}
+
 			} else {
 				key := uint32(0)
-				// Array must be static, so we pick a number of CPUs we will not exceed
+				// Array must have a static size, so we pick a number of CPUs we will not exceed
 				valueArray := [1024]uint64{}
 
 				err := counterMap.Get(&key, &valueArray)
@@ -114,7 +130,6 @@ func main() {
 					fmt.Printf("CPU %d: %d packets processed\n", i, valueArray[i])
 				}
 			}
-
 		case <-sigChan:
 			fmt.Println("Detaching XPD program and stopping")
 

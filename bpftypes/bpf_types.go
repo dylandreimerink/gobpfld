@@ -202,8 +202,8 @@ const (
 	// helper function to redirect a XDP frame to a specific CPU for further processing by the kernel
 	// network stack. This essentially allows an XDP to do RPS(Receive Packet Steering).
 	// Example: https://github.com/torvalds/linux/blob/master/samples/bpf/xdp_redirect_cpu_kern.c
-	// The key of a devmap is an array index (0 to 'max_entries')
-	// The value of a devmap must follow the bpf_devmap_val memory layout https://elixir.bootlin.com/linux/v5.11.15/source/include/uapi/linux/bpf.h#L4403
+	// The key of a cpumap is an array index (0 to 'max_entries')
+	// The value of a cpumap must follow the bpf_cpumap_val memory layout https://elixir.bootlin.com/linux/v5.11.15/source/include/uapi/linux/bpf.h#L4403
 	BPF_MAP_TYPE_CPUMAP
 	// BPF_MAP_TYPE_XSKMAP is a specialized map type that is used in conjunction with the bpf_redirect_map
 	// helper function to pass a XDP frame to a AF_XDP socket thus bypassing the kernel network stack.
