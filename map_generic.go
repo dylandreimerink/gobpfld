@@ -284,9 +284,11 @@ func (m *BPFGenericMap) GetBatch(keys interface{}, values interface{}, maxBatchS
 		return 0, fmt.Errorf("can't read from an unloaded map")
 	}
 
+	var batch uint64
 	attr := &bpfsys.BPFAttrMapBatch{
-		MapFD: m.Fd,
-		Count: maxBatchSize,
+		MapFD:    m.Fd,
+		OutBatch: uintptr(unsafe.Pointer(&batch)),
+		Count:    maxBatchSize,
 	}
 
 	attr.Keys, err = m.toBatchKeysPtr(keys, maxBatchSize)
@@ -350,10 +352,12 @@ func (m *BPFGenericMap) SetBatch(
 		return 0, fmt.Errorf("can't write to an unloaded map")
 	}
 
+	var batch uint64
 	attr := &bpfsys.BPFAttrMapBatch{
-		MapFD: m.Fd,
-		Count: maxBatchSize,
-		Flags: flags,
+		MapFD:    m.Fd,
+		OutBatch: uintptr(unsafe.Pointer(&batch)),
+		Count:    maxBatchSize,
+		Flags:    flags,
 		// TODO ElemFlags is only used for the spinlock flag, for which we will add suport later
 	}
 
@@ -418,9 +422,11 @@ func (m *BPFGenericMap) DeleteBatch(
 		return 0, fmt.Errorf("can't delete elements from an array type map")
 	}
 
+	var batch uint64
 	attr := &bpfsys.BPFAttrMapBatch{
-		MapFD: m.Fd,
-		Count: maxBatchSize,
+		MapFD:    m.Fd,
+		OutBatch: uintptr(unsafe.Pointer(&batch)),
+		Count:    maxBatchSize,
 	}
 
 	attr.Keys, err = m.toBatchKeysPtr(keys, maxBatchSize)
@@ -478,9 +484,11 @@ func (m *BPFGenericMap) GetAndDeleteBatch(keys interface{}, values interface{}, 
 		return 0, fmt.Errorf("can't delete elements from an array type map")
 	}
 
+	var batch uint64
 	attr := &bpfsys.BPFAttrMapBatch{
-		MapFD: m.Fd,
-		Count: maxBatchSize,
+		MapFD:    m.Fd,
+		OutBatch: uintptr(unsafe.Pointer(&batch)),
+		Count:    maxBatchSize,
 	}
 
 	attr.Keys, err = m.toBatchKeysPtr(keys, maxBatchSize)

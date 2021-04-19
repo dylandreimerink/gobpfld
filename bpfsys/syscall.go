@@ -7,6 +7,13 @@ import (
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 )
 
+// ENOTSUPP - Operation is not supported
+var ENOTSUPP = syscall.Errno(524)
+
+var nonStdErrors = map[syscall.Errno]string{
+	ENOTSUPP: "Operation is not supported",
+}
+
 type BPFSyscallError struct {
 	// The underlaying syscall error number
 	Errno syscall.Errno
@@ -16,11 +23,16 @@ type BPFSyscallError struct {
 }
 
 func (e *BPFSyscallError) Error() string {
-	if e.Err == "" {
-		return fmt.Sprintf("%s (%d)", e.Errno.Error(), e.Errno)
+	errStr := nonStdErrors[e.Errno]
+	if errStr == "" {
+		errStr = e.Errno.Error()
 	}
 
-	return fmt.Sprintf("%s (%s)(%d)", e.Err, e.Errno.Error(), e.Errno)
+	if e.Err == "" {
+		return fmt.Sprintf("%s (%d)", errStr, e.Errno)
+	}
+
+	return fmt.Sprintf("%s (%s)(%d)", e.Err, errStr, e.Errno)
 }
 
 // BPFfd is an alias of a file descriptor returned by bpf to identify a map or program.
@@ -204,9 +216,6 @@ func ProgramAttach(attr *BPFAttrProgAttachDetach) error {
 func ProgramDetach(attr *BPFAttrProgAttachDetach) error {
 	return bpfNoReturn(bpftypes.BPF_PROG_DETACH, attr, int(attr.Size()))
 }
-
-// ENOTSUPP - Operation is not supported
-var ENOTSUPP = syscall.Errno(524)
 
 // ProgramTestRun runs the eBPF program associated with the attr.ProgFD a attr.Repeat number of times against
 // a provided program context attr.CtxIn and data attr.DataIn, and return the modified program context attr.CtxOut,
