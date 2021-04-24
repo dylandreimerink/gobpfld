@@ -2,6 +2,10 @@ package gobpfld
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path"
+	"strings"
 	"unsafe"
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
@@ -30,6 +34,7 @@ type AbstractMap struct {
 	Definition BPFMapDef
 }
 
+// Load validates and loads the userspace map definition into the kernel.
 func (m *AbstractMap) Load() error {
 	err := m.Definition.Validate()
 	if err != nil {
@@ -51,6 +56,143 @@ func (m *AbstractMap) Load() error {
 	}
 
 	m.Loaded = true
+
+	return nil
+}
+
+// Unload closes the file descriptor associate with the map, this will cause the map to unload from the kernel
+// if it is not still in use by a eBPF program, bpf FS, or a userspace program still holding a fd to the map.
+func (m *AbstractMap) Unload() error {
+	err := m.Fd.Close()
+	if err != nil {
+		return fmt.Errorf("error while closing fd: %w", err)
+	}
+
+	m.Fd = 0
+	m.Loaded = false
+
+	return nil
+}
+
+// BPFSysPath is the path to the bpf FS used to pin objects to
+const BPFSysPath = "/sys/fs/bpf/"
+
+// Pin pins the map to a location in the bpf filesystem, since the file system now also holds a reference
+// to the map the original creator of the map can terminate without triggering the map to be closed as well.
+// A map can be unpinned from the bpf FS by another process thus transfering it or persisting it across
+// multiple runs of the same program.
+func (m *AbstractMap) Pin(relativePath string) error {
+	if !m.Loaded {
+		return fmt.Errorf("can't pin an unloaded map")
+	}
+
+	sysPath := fmt.Sprint(BPFSysPath, relativePath)
+
+	// Create directories if any are missing
+	err := os.MkdirAll(path.Dir(sysPath), 0644)
+	if err != nil {
+		return fmt.Errorf("error while making directories: %w", err)
+	}
+
+	cPath := StringToCStrBytes(sysPath)
+
+	err = bpfsys.ObjectPin(&bpfsys.BPFAttrObj{
+		BPFfd:    m.Fd,
+		Pathname: uintptr(unsafe.Pointer(&cPath[0])),
+	})
+	if err != nil {
+		return fmt.Errorf("bpf syscall error: %w", err)
+	}
+
+	return nil
+}
+
+// Unpin captures the file descriptor of the map at the given 'relativePath' from the kernel.
+// The definition in this map must match the definition of the pinned map, otherwise this function
+// will return an error since mismatched definitions might cause seemingly unrelated bugs in other functions.
+// If 'deletePin' is true the bpf FS pin will be removed after successfully loading the map, thus transfering
+// ownership of the map in a scenario where the map is not shared between multiple programs.
+// Otherwise the pin will keep existing which will cause the map to not be deleted when this program exits.
+func (m *AbstractMap) Unpin(relativePath string, deletePin bool) error {
+	if m.Loaded {
+		return fmt.Errorf("can't unpin a map since it is already loaded")
+	}
+
+	sysPath := fmt.Sprint(BPFSysPath, relativePath)
+	cpath := StringToCStrBytes(sysPath)
+
+	var err error
+	m.Fd, err = bpfsys.ObjectGet(&bpfsys.BPFAttrObj{
+		Pathname: uintptr(unsafe.Pointer(&cpath[0])),
+	})
+	if err != nil {
+		return fmt.Errorf("bpf obj get syscall error: %w", err)
+	}
+
+	pinnedMapDef := BPFMapDef{}
+	err = bpfsys.ObjectGetInfoByFD(&bpfsys.BPFAttrGetInfoFD{
+		BPFFD:   m.Fd,
+		Info:    uintptr(unsafe.Pointer(&pinnedMapDef)),
+		InfoLen: uint32(BPFMapDefSize),
+	})
+	if err != nil {
+		return fmt.Errorf("bpf obj get info by fd syscall error: %w", err)
+	}
+
+	// Since other functions use the definition for userspace checks we need to make sure
+	// that the map def in the kernel is the same a the one in userspace.
+	// The other approach would be to just match the userspace definition to the one in the kernel
+	// but if this AbstractMap is embedded in a specialized map and we unpin a generic map by accident
+	// it could result in strange bugs, so this is more fool proof but less user automatic.
+	// Map types embedding the AbstractType should define their own constructor functions which can
+	// make a map from a pinned map path.
+	if m.Definition.Equal(pinnedMapDef) {
+		// Getting the map from the FS created a new file descriptor. Close it so the kernel knows we will
+		// not be using it. If we leak the FD the map will never close.
+		fdErr := m.Fd.Close()
+		if fdErr != nil {
+			return fmt.Errorf("pinned map definition doesn't match definition of current map, new fd wasn't closed: %w", err)
+		}
+
+		return fmt.Errorf("pinned map definition doesn't match definition of current map")
+	}
+
+	m.Loaded = true
+
+	if deletePin {
+		err = os.Remove(sysPath)
+		if err != nil {
+			return fmt.Errorf("error while deleting pin: %w", err)
+		}
+
+		// Get the directories in the relative path
+		dirs := path.Dir(relativePath)
+		if dirs == "." || dirs == "/" {
+			dirs = ""
+		}
+
+		// get array of dirs
+		relDirs := strings.Split(dirs, string(os.PathSeparator))
+		// If there is at least one directory
+		if relDirs[0] != "" {
+			// Loop over all directories
+			for _, dir := range relDirs {
+				dirPath := fmt.Sprint(BPFSysPath, dir)
+				files, err := ioutil.ReadDir(dirPath)
+				if err != nil {
+					return fmt.Errorf("error while reading dir: %w", err)
+				}
+
+				// If the dir is empty, remove it
+				if len(files) == 0 {
+					err = os.Remove(dirPath)
+					if err != nil {
+						return fmt.Errorf("error while deleting empty dir: %w", err)
+					}
+				}
+			}
+		}
+	}
 
 	return nil
 }
@@ -79,6 +221,15 @@ type BPFMapDef struct {
 	ValueSize  uint32
 	MaxEntries uint32
 	Flags      bpftypes.BPFMapFlags
+}
+
+// Equal checks if two map definitions are functionally identical
+func (def BPFMapDef) Equal(other BPFMapDef) bool {
+	return def.Type == other.Type &&
+		def.KeySize == other.KeySize &&
+		def.ValueSize == other.ValueSize &&
+		def.MaxEntries == other.MaxEntries &&
+		def.Flags == other.Flags
 }
 
 // Validate checks if the map definition is valid, the kernel also does these checks but if the kernel finds an error

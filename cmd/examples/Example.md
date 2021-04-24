@@ -17,3 +17,13 @@ It demonstrates how userspace applications can generate programs dynamically wit
 ## per_cpu_map
 
 This eBPF program attaches to the loopback interface of the host and counts the amount of packets received per CPU, it stores this information in a `BPF_MAP_TYPE_PERCPU_ARRAY` map. This example demonstrates how to read from and write to a per CPU map type with the `gopbfld.BPFGenericMap`.
+
+## map_pinning
+
+This program demonstrates how to pin and unpin maps to the bpf FS using gobpfld.
+
+## TODO
+
+A list of example/sample programs should be created to demonstrate key features:
+
+- Bulk map operation

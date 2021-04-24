@@ -62,10 +62,11 @@ Features/tasks in this list are commonly used/requested because they are used in
 * Attach to tracepoints
 * Attack to perf events
 * Tailcall support
-* Map pinning and unpinning
-* Bulk map ops
+* ~~Map pinning and unpinning~~
+* ~~Bulk map ops~~
 * Program pinning and unpinning
 * BPF2BPF function calls
+* Map iterator construct (looping over maps is very common)
 
 ### Should have
 
