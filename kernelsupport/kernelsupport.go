@@ -24,11 +24,6 @@ type KernelFeatures struct {
 // MustGetKernelFeatures to improve performance.
 var CurrentFeatures = MustGetKernelFeatures()
 
-type kernelFeatureVersion struct {
-	version  kernelVersion
-	features KernelFeatures
-}
-
 // MustGetKernelFeatures runs GetKernelFeatures but panics if any error is detected
 func MustGetKernelFeatures() KernelFeatures {
 	features, err := GetKernelFeatures()

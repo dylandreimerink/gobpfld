@@ -10,13 +10,13 @@ GoBPFLD is a pure go eBPF loader/userspace library as an alternative to using [g
 
 eBPF is a Linux specific feature (ignoring [userspace eBPF](https://github.com/generic-ebpf/generic-ebpf)) which was introduced in kernel 3.18. This means that for this library to work the executable must be run on a Linux machine with 3.18 or above.
 
-This library currently assumes that all features of the latest stable kernel are available. So some features of the library may not work at runtime due to missing functionality. This will most likely present itself as errors thrown by the kernel because it doesn't understand something or missing data because it isn't set by the kernel. You can find a great overview of features per kernel version [here](https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md).
+This library detects (at runtime) which version of the linux kernel is being used. Higher level features will attempt to fallback to still over as much functionality as possible. This library attempts to catch the usage of unsupported features and return nice verbose human readable errors. If this fails the kernel will still return an error, which is less verbose. For some features running on a newer kernel version may be required. You can find a great overview of features per kernel version [here](https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md).
 
 ## Security
 
 Programs which interact with the kernel via the [bpf syscall](https://man7.org/linux/man-pages/man2/bpf.2.html) need to have extra [capabilities](https://man7.org/linux/man-pages/man7/capabilities.7.html) if they are not running as the root user. In particular the `CAP_BPF` or `CAP_SYS_ADMIN` capability. `CAP_BPF` is available since kernel 5.8 and is preferred since it has the least privileges needed. If you run on a kernel version lower than 5.8, `CAP_SYS_ADMIN` is the only option you have to grant non-root users access to the `bpf` syscall. In this case it might be a better option to run you program as root and switch to a non-root user when not using the bpf syscall. This can be accomplished by using the [seteuid](https://man7.org/linux/man-pages/man3/seteuid.3p.html) syscall via the [syscall.Seteuid](https://golang.org/pkg/syscall/#Setuid) function.
 
-There are a number of eBPF related vulnerabilities known so far: [CVE-2016-2383](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-2383), [CVE-2016-4557](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-4557), [CVE-2021-20268](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-20268). The kernel has the ability to JIT eBPF programs which translates the eBPF instruction into actual machine code to be executed. Not only that but it executes in the kernel with all associated privileges. To ensure that eBPF programs don't access memory outside the eBPF vm, the kernel attempts to detect illegal code, if the verifier fails we have security issues. Programs using this library therefor must be sure that the eBPF programs don't contain user input without sanitization. Even normal features of eBPF such as packet manipulation or dropping may be considered security issues in some cases.
+There are a number of eBPF related vulnerabilities known so far: [CVE-2016-2383](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-2383), [CVE-2016-4557](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-4557), [CVE-2021-20268](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-20268). The kernel has the ability to JIT eBPF programs which translates the eBPF instruction into actual machine code to be executed. Not only that but it executes in the kernel with all associated privileges. To ensure that eBPF programs don't access memory outside the eBPF vm, the kernel attempts to detect illegal code, if the verifier fails we have security issues. Programs using this library therefor must be sure that the eBPF programs don't contain user input without sanitization. Even normal features of eBPF such as packet manipulation or dropping may be considered security issues in some cases. More info about eBPF JIT and eBPF hardening can be found in the [cilium reference guide](https://docs.cilium.io/en/latest/bpf/#jit)
 
 ## Use cases
 
@@ -67,7 +67,7 @@ Features/tasks in this list are commonly used/requested because they are used in
 * Program pinning and unpinning
 * BPF2BPF function calls
 * Map iterator construct (looping over maps is very common)
-* Linux kernel version detection (so programs can programmatically decide which features they can use, then error, warn or be backwards compatible)
+* (partially implemented) Linux kernel version detection (so programs can programmatically decide which features they can use, then error, warn or be backwards compatible)
 
 ### Should have
 
