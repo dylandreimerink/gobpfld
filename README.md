@@ -67,6 +67,7 @@ Features/tasks in this list are commonly used/requested because they are used in
 * Program pinning and unpinning
 * BPF2BPF function calls
 * Map iterator construct (looping over maps is very common)
+* Linux kernel version detection (so programs can programmatically decide which features they can use, then error, warn or be backwards compatible)
 
 ### Should have
 
@@ -77,7 +78,6 @@ Features/tasks in this list are not critical for most users but still important 
 * Program testing (Being able to unit test an XDP program would be great)
 * Support for LWT programs (Light weight tunnel)
 * BTF support (So we have more type info to work with)
-* Linux kernel version detection(so programs can programmatically decide which features they can use, then error, warn or be backwards compatible)
 * ARM64 support / testing (ARM is on the rise)
 * ARM32 support / testing (ARM is on the rise)
 

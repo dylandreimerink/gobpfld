@@ -1,18 +1,25 @@
 package bpfsys
 
 import (
+	"errors"
 	"fmt"
 	"syscall"
 
 	"github.com/dylandreimerink/gobpfld/bpftypes"
+	"github.com/dylandreimerink/gobpfld/kernelsupport"
 )
 
 // ENOTSUPP - Operation is not supported
 var ENOTSUPP = syscall.Errno(524)
 
+// a map of string translations for syscall errors which are no included in the standard library
 var nonStdErrors = map[syscall.Errno]string{
 	ENOTSUPP: "Operation is not supported",
 }
+
+// ErrNotSupported is returned when attempting to use a feature that is not supported
+// by the kernel version on which the program is executed.
+var ErrNotSupported = errors.New("feature not supported by kernel version")
 
 type BPFSyscallError struct {
 	// The underlaying syscall error number
@@ -95,6 +102,41 @@ func bpfNoReturn(cmd bpftypes.BPFCommand, attr BPFAttribute, size int) error {
 //
 // Calling Close on the returned file descriptor will delete the map.
 func MapCreate(attr *BPFAttrMapCreate) (fd BPFfd, err error) {
+	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapNumaCreate) {
+		if attr.NumaNode != uint32(0) || attr.MapFlags&bpftypes.BPFMapFlagsNUMANode > 0 {
+			return 0, fmt.Errorf("NUMA node can't be specified: %w", ErrNotSupported)
+		}
+	}
+
+	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapSyscallRW) {
+		if attr.MapFlags&(bpftypes.BPFMapFlagsReadOnly|bpftypes.BPFMapFlagsWriteOnly) > 0 {
+			return 0, fmt.Errorf("map access can't be restricted from syscall side: %w", ErrNotSupported)
+		}
+	}
+
+	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapName) {
+		if attr.MapName != [16]byte{} {
+			return 0, fmt.Errorf("map name can't be specified: %w", ErrNotSupported)
+		}
+	}
+
+	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapZeroSeed) {
+		if attr.MapFlags&bpftypes.BPFMapFlagsZeroSeed > 0 {
+			return 0, fmt.Errorf("zero seed flag not supported: %w", ErrNotSupported)
+		}
+	}
+
+	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapBPFRW) {
+		if attr.MapFlags&(bpftypes.BPFMapFlagsReadOnlyProg|bpftypes.BPFMapFlagsWriteOnlyProg) > 0 {
+			return 0, fmt.Errorf("map access can't be restricted from bpf side: %w", ErrNotSupported)
+		}
+	}
+
 	return Bpf(bpftypes.BPF_MAP_CREATE, attr, int(attr.Size()))
 }
 
@@ -135,6 +177,12 @@ func MapDeleteElem(attr *BPFAttrMapElem) error {
 //    attr.Value_NextValue pointer to the key of the next element.
 //  * If attr.Key is the last element, an error with errno ENOENT(2) is returned.
 func MapGetNextKey(attr *BPFAttrMapElem) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapGetNextNull) &&
+		attr.Value_NextKey == uintptr(0) {
+
+		return fmt.Errorf("NextKey == NULL: %w", ErrNotSupported)
+	}
+
 	err := bpfNoReturn(bpftypes.BPF_MAP_GET_NEXT_KEY, attr, int(attr.Size()))
 	if syserr, ok := err.(*BPFSyscallError); ok {
 		syserr.Err = map[syscall.Errno]string{
@@ -427,6 +475,11 @@ func BTFGetNextID(attr *BPFAttrGetID) error {
 // If an error is returned and errno is not syscall.EFAULT, attr.Count
 // is set to the number of successfully processed elements.
 func MapLookupBatch(attr *BPFAttrMapBatch) error {
+	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapLookupBatch) {
+		return fmt.Errorf("batch lookup not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_MAP_LOOKUP_BATCH, attr, int(attr.Size()))
 }
 
@@ -440,6 +493,11 @@ func MapLookupBatch(attr *BPFAttrMapBatch) error {
 //	  attr.Count elements may be deleted without returning the keys
 //	  and values of the deleted elements.
 func MapLookupBatchAndDelete(attr *BPFAttrMapBatch) error {
+	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapLookupAndDeleteBatch) {
+		return fmt.Errorf("batch lookup and delete not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_MAP_LOOKUP_AND_DELETE_BATCH, attr, int(attr.Size()))
 }
 
@@ -473,12 +531,17 @@ func MapLookupBatchAndDelete(attr *BPFAttrMapBatch) error {
 // If an error is returned and errno is not syscall.EFAULT, attr.Count
 // is set to the number of successfully processed elements.
 func MapUpdateBatch(attr *BPFAttrMapBatch) error {
+	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapUpdateBatch) {
+		return fmt.Errorf("batch update not supported: %w", ErrNotSupported)
+	}
+
 	err := bpfNoReturn(bpftypes.BPF_MAP_UPDATE_BATCH, attr, int(attr.Size()))
 	if syserr, ok := err.(*BPFSyscallError); ok {
 		syserr.Err = map[syscall.Errno]string{
 			syscall.E2BIG:  "the number of elements in the map reached the *max_entries* limit specified at map creation time",
 			syscall.EEXIST: "attr.Flags specifies BPFMapElemNoExists and the element with attr.Keys[*] already exists in the map",
-			syscall.ENOENT: "attr.Flags specifies BPFMapElemExists and the element with  attr.Keys[*] does not exist in the map",
+			syscall.ENOENT: "attr.Flags specifies BPFMapElemExists and the element with attr.Keys[*] does not exist in the map",
 		}[syserr.Errno]
 		return syserr
 	}
@@ -511,6 +574,11 @@ func MapUpdateBatch(attr *BPFAttrMapBatch) error {
 // errno is syscall.EFAULT, up to attr.Count elements may be been
 // deleted.
 func MapDeleteBatch(attr *BPFAttrMapBatch) error {
+	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapDeleteBatch) {
+		return fmt.Errorf("batch lookup and delete not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_MAP_DELETE_BATCH, attr, int(attr.Size()))
 }
 
