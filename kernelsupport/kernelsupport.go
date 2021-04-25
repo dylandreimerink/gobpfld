@@ -10,11 +10,13 @@ import (
 // KernelFeatures is a set of flagsets which describe the eBPF support of a kernel version.
 // Flags are split amount several sets since the won't all fit in one uint64
 type KernelFeatures struct {
-	Arch ArchSupport
-	Map  MapSupport
-	API  APISupport
-	// TODO program types
-	// TODO attach types
+	// BPF is set to true if eBPF is supported on the current kernel version and arch combo
+	BPF     bool
+	Arch    ArchSupport
+	Map     MapSupport
+	API     APISupport
+	Program ProgramSupport
+	Attach  AttachSupport
 	// TODO helper functions
 	// TODO misc (xdp, sleepable, ect.)
 }
@@ -63,7 +65,43 @@ func GetKernelFeatures() (KernelFeatures, error) {
 			features.Arch = features.Arch | kvf.features.Arch
 			features.Map = features.Map | kvf.features.Map
 			features.API = features.API | kvf.features.API
+			features.Program = features.Program | kvf.features.Program
+			features.Attach = features.Attach | kvf.features.Attach
 		}
+	}
+
+	var machineBytes = make([]byte, len(utsname.Machine))
+	for i, v := range utsname.Machine {
+		if v == 0x00 {
+			machineBytes = machineBytes[:i]
+			break
+		}
+		machineBytes[i] = byte(v)
+	}
+	machine := string(machineBytes)
+
+	// Attempt to match the machine UTS string to an architecture
+	switch machine {
+	case "x86_64":
+		features.BPF = features.Arch.Has(KFeatArchx86_64)
+	case "arm64", "armv8b", "aarch64_be", "aarch64":
+		features.BPF = features.Arch.Has(KFeatArchARM64)
+	case "s309", "s390x":
+		features.BPF = features.Arch.Has(KFeatArchs390)
+	case "ppc64":
+		features.BPF = features.Arch.Has(KFeatArchPP64)
+	case "sparc64":
+		features.BPF = features.Arch.Has(KFeatArchSparc64)
+	case "mips64", "mips32", "mips":
+		features.BPF = features.Arch.Has(KFeatArchMIPS)
+	case "arm", "arm32", "armv8l":
+		features.BPF = features.Arch.Has(KFeatArchARM32)
+	case "i386", "i486", "i586", "i686":
+		features.BPF = features.Arch.Has(KFeatArchx86)
+	case "riscv64":
+		features.BPF = features.Arch.Has(KFeatArchRiscVRV64G)
+	case "riscv32":
+		features.BPF = features.Arch.Has(KFeatArchRiscVRV32G)
 	}
 
 	return features, nil

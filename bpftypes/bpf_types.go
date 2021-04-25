@@ -477,7 +477,7 @@ const (
 	// BPF_XDP_CPUMAP is set in the expectred attach type of a XDP program when it wants to use a BPF_MAP_TYPE_CPUMAP.
 	BPF_XDP_CPUMAP
 	BPF_SK_LOOKUP
-	// BPF_XDP is used to attach a BPF_PROG_TYPE_XDP program to a network interface.
+	// BPF_XDP is used to attach a BPF_PROG_TYPE_XDP program using a link.
 	BPF_XDP
 )
 

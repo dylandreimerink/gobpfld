@@ -10,10 +10,9 @@ type APISupport uint64
 
 // TODO add comments
 const (
-	KFeatAPIMapLookup APISupport = 1 << iota
-	KFeatAPIMapUpdate
-	KFeatAPIMapDelete
-	KFeatAPIMapGetNext
+	// KFeatAPIBasic includes: map create, map lookup, map update, map delete, map getnext
+	// prog load
+	KFeatAPIBasic APISupport = 1 << iota
 	KFeatAPIMapGetNextNull
 	KFeatAPIMapNumaCreate
 	KFeatAPIMapSyscallRW
@@ -28,8 +27,50 @@ const (
 	KFeatAPIMapUpdateBatch
 	KFeatAPIMapDeleteBatch
 	KFeatAPIMapLookupAndDeleteBatch
-
-	// TODO API commands other than map commands like 'get info by fd'
+	// 4.4 OBJ_PIN and OBJ_GET
+	KFeatAPIObjPinGet
+	// 4.10 PROG_ATTACH and PROG_DETACH
+	KFeatAPIProgramAttachDetach
+	// 4.12
+	KFeatAPIProgramTestRun
+	// 4.13
+	KFeatAPIProgramGetNextID
+	// 4.13
+	KFeatAPIMapGetNextID
+	// 4.13
+	KFeatAPIProgramGetFDByID
+	// 4.13
+	KFeatAPIMapGetFDByID
+	// 4.13
+	KFeatAPIObjectGetInfoByFD
+	// 4.15
+	KFeatAPIProgramQuery
+	// 4.17
+	KFeatAPIRawTracepointOpen
+	// 4.18
+	KFeatAPIBTFLoad
+	// 4.18
+	KFeatAPIBTFGetFDByID
+	// 4.18
+	KFeatAPITaskFDQuery
+	// 5.4
+	KFeatAPIBTFGetNextID
+	// 5.7
+	KFeatAPILinkCreate
+	// 5.7
+	KFeatAPILinkUpdate
+	// 5.8
+	KFeatAPILinkGetFDByID
+	// 5.8
+	KFeatAPILinkGetNextID
+	// 5.8
+	KFeatAPIEnableStats
+	// 5.8
+	KFeatAPIIterCreate
+	// 5.9
+	KFeatAPILinkDetach
+	// 5.10
+	KFeatAPIProgBindMap
 
 	// An end marker for enumeration, not an actual feature flag
 	kFeatAPIMax
@@ -41,10 +82,7 @@ func (as APISupport) Has(flags APISupport) bool {
 }
 
 var apiSupportToString = map[APISupport]string{
-	KFeatAPIMapLookup:               "Map lookup",
-	KFeatAPIMapUpdate:               "Map update",
-	KFeatAPIMapDelete:               "Map delete",
-	KFeatAPIMapGetNext:              "Map get next",
+	KFeatAPIBasic:                   "Map create, map lookup, map update, map getnext, prog load",
 	KFeatAPIMapGetNextNull:          "Map get next null",
 	KFeatAPIMapNumaCreate:           "Map NUMA create",
 	KFeatAPIMapSyscallRW:            "Map syscall R/W",
@@ -59,6 +97,28 @@ var apiSupportToString = map[APISupport]string{
 	KFeatAPIMapUpdateBatch:          "Map update batch",
 	KFeatAPIMapDeleteBatch:          "Map delete batch",
 	KFeatAPIMapLookupAndDeleteBatch: "Map lookup and delete batch",
+	KFeatAPIObjPinGet:               "Object pin/get",
+	KFeatAPIProgramAttachDetach:     "Program attach/detach",
+	KFeatAPIProgramTestRun:          "Program test run",
+	KFeatAPIProgramGetNextID:        "Program get next ID",
+	KFeatAPIMapGetNextID:            "Map get next ID",
+	KFeatAPIProgramGetFDByID:        "Program get FD by ID",
+	KFeatAPIMapGetFDByID:            "Map get FD by ID",
+	KFeatAPIObjectGetInfoByFD:       "Object get info by FD",
+	KFeatAPIProgramQuery:            "Program query",
+	KFeatAPIRawTracepointOpen:       "Raw tracepoint open",
+	KFeatAPIBTFLoad:                 "BTF load",
+	KFeatAPIBTFGetFDByID:            "BTF get FD by ID",
+	KFeatAPITaskFDQuery:             "Task FD query",
+	KFeatAPIBTFGetNextID:            "BTF get next ID",
+	KFeatAPILinkCreate:              "Link create",
+	KFeatAPILinkUpdate:              "Link update",
+	KFeatAPILinkGetFDByID:           "Link get FD by ID",
+	KFeatAPILinkGetNextID:           "Link get next ID",
+	KFeatAPIEnableStats:             "Enable stats",
+	KFeatAPIIterCreate:              "Iterator create",
+	KFeatAPILinkDetach:              "Link detach",
+	KFeatAPIProgBindMap:             "Prog bind map",
 }
 
 func (ms APISupport) String() string {

@@ -94,7 +94,7 @@ Features/tasks in this list are cool to have but secondary to the primary goal o
 
 Features/tasks in this list are out of the scope of the project. We have to draw the line somewhere to avoid feature creep.
 
-* cBPF support (cBPF is not even supported by Linux anymore, just converted to eBPF, which you can also to with [tools](https://github.com/cloudflare/cbpfc) for any exiting program)
+* cBPF support (cBPF is not even supported by Linux anymore, just converted to eBPF, which you can also do with [tools](https://github.com/cloudflare/cbpfc) for any exiting program)
 
 ## eBPF troubleshooting and known issues
 

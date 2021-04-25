@@ -42,7 +42,7 @@ func (e *BPFSyscallError) Error() string {
 	return fmt.Sprintf("%s (%s)(%d)", e.Err, errStr, e.Errno)
 }
 
-// BPFfd is an alias of a file descriptor returned by bpf to identify a map or program.
+// BPFfd is an alias of a file descriptor returned by bpf to identify a map, program or link.
 // Since not all the usual file descriptor functions are available to these types of fds.
 //
 // eBPF objects (maps and programs) can be shared between processes.
@@ -80,6 +80,10 @@ func (fd BPFfd) Close() error {
 // Bpf is a wrapper around the BPF syscall, so a very low level function.
 // It is not recommended to use it directly unless you know what you are doing
 func Bpf(cmd bpftypes.BPFCommand, attr BPFAttribute, size int) (fd BPFfd, err error) {
+	if !kernelsupport.CurrentFeatures.BPF {
+		return 0, fmt.Errorf("eBPF is not supported: %w", ErrNotSupported)
+	}
+
 	r0, _, errno := syscall.Syscall(SYS_BPF, uintptr(cmd), uintptr(attr.ToPtr()), uintptr(size))
 	if errno != 0 {
 		err = &BPFSyscallError{
@@ -102,6 +106,10 @@ func bpfNoReturn(cmd bpftypes.BPFCommand, attr BPFAttribute, size int) error {
 //
 // Calling Close on the returned file descriptor will delete the map.
 func MapCreate(attr *BPFAttrMapCreate) (fd BPFfd, err error) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIBasic) {
+		return 0, fmt.Errorf("map create not supported: %w", ErrNotSupported)
+	}
+
 	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
 	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapNumaCreate) {
 		if attr.NumaNode != uint32(0) || attr.MapFlags&bpftypes.BPFMapFlagsNUMANode > 0 {
@@ -145,11 +153,19 @@ func MapCreate(attr *BPFAttrMapCreate) (fd BPFfd, err error) {
 // with the value in the map.
 // For this call, only a 'Flags' value of 0 or BPFMapElemLock is allowed
 func MapLookupElem(attr *BPFAttrMapElem) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIBasic) {
+		return fmt.Errorf("map lookup not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_MAP_LOOKUP_ELEM, attr, int(attr.Size()))
 }
 
 // MapUpdateElem creates or update an element (key/value pair) in a specified map.
 func MapUpdateElem(attr *BPFAttrMapElem) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIBasic) {
+		return fmt.Errorf("map update not supported: %w", ErrNotSupported)
+	}
+
 	err := bpfNoReturn(bpftypes.BPF_MAP_UPDATE_ELEM, attr, int(attr.Size()))
 	if syserr, ok := err.(*BPFSyscallError); ok {
 		syserr.Err = map[syscall.Errno]string{
@@ -164,6 +180,10 @@ func MapUpdateElem(attr *BPFAttrMapElem) error {
 
 // MapDeleteElem looks up and delete an element by key in a specified map.
 func MapDeleteElem(attr *BPFAttrMapElem) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIBasic) {
+		return fmt.Errorf("map delete not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_MAP_DELETE_ELEM, attr, int(attr.Size()))
 }
 
@@ -177,6 +197,10 @@ func MapDeleteElem(attr *BPFAttrMapElem) error {
 //    attr.Value_NextValue pointer to the key of the next element.
 //  * If attr.Key is the last element, an error with errno ENOENT(2) is returned.
 func MapGetNextKey(attr *BPFAttrMapElem) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIBasic) {
+		return fmt.Errorf("map get next key not supported: %w", ErrNotSupported)
+	}
+
 	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapGetNextNull) &&
 		attr.Value_NextKey == uintptr(0) {
 
@@ -199,6 +223,10 @@ func MapGetNextKey(attr *BPFAttrMapElem) error {
 //
 // Calling Close on the returned file descriptor will unload the program.
 func LoadProgram(attr *BPFAttrProgramLoad) (fd BPFfd, err error) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIBasic) {
+		return 0, fmt.Errorf("prog load not supported: %w", ErrNotSupported)
+	}
+
 	return Bpf(bpftypes.BPF_PROG_LOAD, attr, int(attr.Size()))
 }
 
@@ -221,11 +249,19 @@ func LoadProgram(attr *BPFAttrProgramLoad) (fd BPFfd, err error) {
 // The filesystem type for the parent directory of attr.Pathname must
 // be **BPF_FS_MAGIC**. On most systems the /sys/fs/bpf is a BPF_FS_MAGIC directory
 func ObjectPin(attr *BPFAttrObj) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIObjPinGet) {
+		return fmt.Errorf("object pinning not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_OBJ_PIN, attr, int(attr.Size()))
 }
 
 // ObjectGet opens a file descriptor for the eBPF object pinned to the specified attr.Pathname
 func ObjectGet(attr *BPFAttrObj) (fd BPFfd, err error) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIObjPinGet) {
+		return 0, fmt.Errorf("object get not supported: %w", ErrNotSupported)
+	}
+
 	return Bpf(bpftypes.BPF_OBJ_GET, attr, int(attr.Size()))
 }
 
@@ -256,12 +292,67 @@ func ObjectGet(attr *BPFAttrObj) (fd BPFfd, err error) {
 // 	bpftypes.BPF_PROG_TYPE_SK_MSG
 // 		eBPF map of socket type (eg bpftypes.BPF_MAP_TYPE_SOCKHASH).
 func ProgramAttach(attr *BPFAttrProgAttachDetach) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIProgramAttachDetach) {
+		return fmt.Errorf("program attach not supported: %w", ErrNotSupported)
+	}
+
+	if kfeat, found := attachTypeToKFeat[attr.AttachType]; found {
+		if !kernelsupport.CurrentFeatures.Attach.Has(kfeat) {
+			return fmt.Errorf("program attach type '%s' not supported: %w", attr.AttachType, ErrNotSupported)
+		}
+	}
+
 	return bpfNoReturn(bpftypes.BPF_PROG_ATTACH, attr, int(attr.Size()))
+}
+
+var attachTypeToKFeat = map[bpftypes.BPFAttachType]kernelsupport.AttachSupport{
+	bpftypes.BPF_CGROUP_INET_INGRESS:      kernelsupport.KFeatAttachINetIngressEgress,
+	bpftypes.BPF_CGROUP_INET_EGRESS:       kernelsupport.KFeatAttachINetIngressEgress,
+	bpftypes.BPF_CGROUP_INET_SOCK_CREATE:  kernelsupport.KFeatAttachInetSocketCreate,
+	bpftypes.BPF_CGROUP_SOCK_OPS:          kernelsupport.KFeatAttachSocketOps,
+	bpftypes.BPF_SK_SKB_STREAM_PARSER:     kernelsupport.KFeatAttachStreamParserVerdict,
+	bpftypes.BPF_SK_SKB_STREAM_VERDICT:    kernelsupport.KFeatAttachStreamParserVerdict,
+	bpftypes.BPF_CGROUP_DEVICE:            kernelsupport.KFeatAttachCGroupDevice,
+	bpftypes.BPF_SK_MSG_VERDICT:           kernelsupport.KFeatAttachSKMsgVerdict,
+	bpftypes.BPF_CGROUP_INET4_BIND:        kernelsupport.KFeatAttachCGroupInetBind,
+	bpftypes.BPF_CGROUP_INET6_BIND:        kernelsupport.KFeatAttachCGroupInetBind,
+	bpftypes.BPF_CGROUP_INET4_CONNECT:     kernelsupport.KFeatAttachCGroupInetConnect,
+	bpftypes.BPF_CGROUP_INET6_CONNECT:     kernelsupport.KFeatAttachCGroupInetConnect,
+	bpftypes.BPF_CGROUP_INET4_POST_BIND:   kernelsupport.KFeatAttachCGroupInetPostBind,
+	bpftypes.BPF_CGROUP_INET6_POST_BIND:   kernelsupport.KFeatAttachCGroupInetPostBind,
+	bpftypes.BPF_CGROUP_UDP4_SENDMSG:      kernelsupport.KFeatAttachCGroupUDPSendMsg,
+	bpftypes.BPF_CGROUP_UDP6_SENDMSG:      kernelsupport.KFeatAttachCGroupUDPSendMsg,
+	bpftypes.BPF_LIRC_MODE2:               kernelsupport.KFeatAttachLIRCMode2,
+	bpftypes.BPF_FLOW_DISSECTOR:           kernelsupport.KFeatAttachFlowDissector,
+	bpftypes.BPF_CGROUP_SYSCTL:            kernelsupport.KFeatAttachCGroupSysctl,
+	bpftypes.BPF_CGROUP_UDP4_RECVMSG:      kernelsupport.KFeatAttachCGroupUDPRecvMsg,
+	bpftypes.BPF_CGROUP_UDP6_RECVMSG:      kernelsupport.KFeatAttachCGroupUDPRecvMsg,
+	bpftypes.BPF_CGROUP_GETSOCKOPT:        kernelsupport.KFeatAttachCGroupGetSetSocket,
+	bpftypes.BPF_CGROUP_SETSOCKOPT:        kernelsupport.KFeatAttachCGroupGetSetSocket,
+	bpftypes.BPF_TRACE_RAW_TP:             kernelsupport.KFeatAttachTraceRawTP,
+	bpftypes.BPF_TRACE_FENTRY:             kernelsupport.KFeatAttachTraceFentry,
+	bpftypes.BPF_TRACE_FEXIT:              kernelsupport.KFeatAttachTraceFExit,
+	bpftypes.BPF_MODIFY_RETURN:            kernelsupport.KFeatAttachModifyReturn,
+	bpftypes.BPF_LSM_MAC:                  kernelsupport.KFeatAttachLSMMAC,
+	bpftypes.BPF_TRACE_ITER:               kernelsupport.KFeatAttachTraceIter,
+	bpftypes.BPF_CGROUP_INET4_GETPEERNAME: kernelsupport.KFeatAttachCGroupINetGetPeerName,
+	bpftypes.BPF_CGROUP_INET6_GETPEERNAME: kernelsupport.KFeatAttachCGroupINetGetPeerName,
+	bpftypes.BPF_CGROUP_INET4_GETSOCKNAME: kernelsupport.KFeatAttachCGroupINetGetSocketName,
+	bpftypes.BPF_CGROUP_INET6_GETSOCKNAME: kernelsupport.KFeatAttachCGroupINetGetSocketName,
+	bpftypes.BPF_XDP_DEVMAP:               kernelsupport.KFeatAttachXDPDevMap,
+	bpftypes.BPF_CGROUP_INET_SOCK_RELEASE: kernelsupport.KFeatAttachCGroupInetSocketRelease,
+	bpftypes.BPF_XDP_CPUMAP:               kernelsupport.KFeatAttachXDPCPUMap,
+	bpftypes.BPF_SK_LOOKUP:                kernelsupport.KFeatAttachSKLookup,
+	bpftypes.BPF_XDP:                      kernelsupport.KFeatAttachXDP,
 }
 
 // ProgramDetach detaches the eBPF program associated with the attr.TargetFD at the hook specified by *attach_type*.
 // The program must have been previously attached using ProgramAttach.
 func ProgramDetach(attr *BPFAttrProgAttachDetach) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIProgramAttachDetach) {
+		return fmt.Errorf("program detach not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_PROG_DETACH, attr, int(attr.Size()))
 }
 
@@ -269,6 +360,10 @@ func ProgramDetach(attr *BPFAttrProgAttachDetach) error {
 // a provided program context attr.CtxIn and data attr.DataIn, and return the modified program context attr.CtxOut,
 // attr.DataOut (for example, packet data), result of the execution attr.Retval, and attr.Duration of the test run.
 func ProgramTestRun(attr *BPFAttrProgTestRun) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIProgramTestRun) {
+		return fmt.Errorf("program test run not supported: %w", ErrNotSupported)
+	}
+
 	err := bpfNoReturn(bpftypes.BPF_PROG_TEST_RUN, attr, int(attr.Size()))
 	if syserr, ok := err.(*BPFSyscallError); ok {
 		syserr.Err = map[syscall.Errno]string{
@@ -285,6 +380,10 @@ func ProgramTestRun(attr *BPFAttrProgTestRun) error {
 // Looks for the eBPF program with an id greater than attr.ID and updates attr.NextID on success.
 // If no other eBPF programs remain with ids higher than attr.ID, an error with errno ENOENT(2) is returned.
 func ProgramGetNextID(attr *BPFAttrGetID) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIProgramGetNextID) {
+		return fmt.Errorf("program get next id not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_PROG_GET_NEXT_ID, attr, int(attr.Size()))
 }
 
@@ -292,17 +391,29 @@ func ProgramGetNextID(attr *BPFAttrGetID) error {
 // Looks for the eBPF map with an id greater than attr.ID and updates attr.NextID on success.
 // If no other eBPF maps remain with ids higher than attr.ID, an error with errno ENOENT(2) is returned.
 func MapGetNextID(attr *BPFAttrGetID) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapGetNextID) {
+		return fmt.Errorf("map get next id not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_MAP_GET_NEXT_ID, attr, int(attr.Size()))
 }
 
 // ProgramGetFDByID opens a file descriptor for the eBPF program corresponding to attr.ID.
 func ProgramGetFDByID(attr *BPFAttrGetID) (fd BPFfd, err error) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIProgramGetFDByID) {
+		return 0, fmt.Errorf("program get fd by id not supported: %w", ErrNotSupported)
+	}
+
 	return Bpf(bpftypes.BPF_PROG_GET_FD_BY_ID, attr, int(attr.Size()))
 }
 
 // MapGetFDByID queries the kernel for the file descriptor of a map with the given ID.
 // If successful the syscall will return the file descriptor as the first return value
 func MapGetFDByID(attr *BPFAttrGetID) (fd BPFfd, err error) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapGetFDByID) {
+		return 0, fmt.Errorf("map get fd by id not supported: %w", ErrNotSupported)
+	}
+
 	return Bpf(bpftypes.BPF_MAP_GET_FD_BY_ID, attr, int(attr.Size()))
 }
 
@@ -314,6 +425,10 @@ func MapGetFDByID(attr *BPFAttrGetID) (fd BPFfd, err error) {
 //  * struct bpf_btf_info (TODO make go version of struct in bpftypes)
 //  * struct bpf_link_info (TODO make go version of struct in bpftypes)
 func ObjectGetInfoByFD(attr *BPFAttrGetInfoFD) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIObjectGetInfoByFD) {
+		return fmt.Errorf("object get info by fd not supported: %w", ErrNotSupported)
+	}
+
 	_, errno := Bpf(bpftypes.BPF_OBJ_GET_INFO_BY_FD, attr, int(attr.Size()))
 	return errno
 }
@@ -350,6 +465,10 @@ func ObjectGetInfoByFD(attr *BPFAttrGetInfoFD) error {
 //		Only return information regarding programs which are
 //		currently effective at the specified attr.TargetFD.
 func ProgramQuery(attr *BPFAttrProgQuery) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIProgramQuery) {
+		return fmt.Errorf("program query not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_PROG_QUERY, attr, int(attr.Size()))
 }
 
@@ -365,6 +484,10 @@ func ProgramQuery(attr *BPFAttrProgQuery) error {
 // Applying Close to the file descriptor returned by
 // RawTracepointOpen will delete the map.
 func RawTracepointOpen(attr *BPFAttrRawTracepointOpen) (fd BPFfd, err error) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIRawTracepointOpen) {
+		return 0, fmt.Errorf("raw tracepoint open not supported: %w", ErrNotSupported)
+	}
+
 	return Bpf(bpftypes.BPF_RAW_TRACEPOINT_OPEN, attr, int(attr.Size()))
 }
 
@@ -384,11 +507,19 @@ func RawTracepointOpen(attr *BPFAttrRawTracepointOpen) (fd BPFfd, err error) {
 // attr.BTFLogLevel which allow the kernel to return freeform log
 // output regarding the BTF verification process.
 func BTFLoad(attr *BPFAttrBTFLoad) (fd BPFfd, err error) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIBTFLoad) {
+		return 0, fmt.Errorf("BTF load not supported: %w", ErrNotSupported)
+	}
+
 	return Bpf(bpftypes.BPF_BTF_LOAD, attr, int(attr.Size()))
 }
 
 // BTFGetFDByID opens a file descriptor for the BPF Type Format (BTF) corresponding to attr.ID.
 func BTFGetFDByID(attr *BPFAttrGetID) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIBTFGetFDByID) {
+		return fmt.Errorf("BTF get fd by id not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_BTF_GET_FD_BY_ID, attr, int(attr.Size()))
 }
 
@@ -407,6 +538,10 @@ func BTFGetFDByID(attr *BPFAttrGetID) error {
 //	The resulting attr.ProgID may be introspected in deeper detail
 //	using ProgramGetFDByID and ObjectGetInfoByFD.
 func TaskFDQuery(attr *BPFAttrTaskFDQuery) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPITaskFDQuery) {
+		return fmt.Errorf("task fd query not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_TASK_FD_QUERY, attr, int(attr.Size()))
 }
 
@@ -422,6 +557,10 @@ func TaskFDQuery(attr *BPFAttrTaskFDQuery) error {
 //	* bpftypes.BPF_MAP_TYPE_QUEUE
 //	* bpftypes.BPF_MAP_TYPE_STACK
 func MapLookupAndDeleteElement(attr *BPFAttrMapElem) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapLookupAndDelete) {
+		return fmt.Errorf("map lookup and delete element not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_MAP_LOOKUP_AND_DELETE_ELEM, attr, int(attr.Size()))
 }
 
@@ -434,6 +573,10 @@ func MapLookupAndDeleteElement(attr *BPFAttrMapElem) error {
 //
 // Not supported for maps of type bpftypes.BPF_MAP_TYPE_STRUCT_OPS.
 func MapFreeze(attr *BPFAttrMapElem) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapFreeze) {
+		return fmt.Errorf("map freeze not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_MAP_FREEZE, attr, int(attr.Size()))
 }
 
@@ -442,6 +585,10 @@ func MapFreeze(attr *BPFAttrMapElem) error {
 // Looks for the BTF object with an id greater than attr.ID and updates attr.NextID on success.
 // If no other BTF objects remain with ids higher than attr.ID, an error with errno ENOENT(2) is returned.
 func BTFGetNextID(attr *BPFAttrGetID) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIBTFGetNextID) {
+		return fmt.Errorf("BTF next ID not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_BTF_GET_NEXT_ID, attr, int(attr.Size()))
 }
 
@@ -586,16 +733,28 @@ func MapDeleteBatch(attr *BPFAttrMapBatch) error {
 // attr.AttachType hook and return a file descriptor handle for
 // managing the link.
 func LinkCreate(attr *BPFAttrLinkCreate) (fd BPFfd, err error) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPILinkCreate) {
+		return 0, fmt.Errorf("link create not supported: %w", ErrNotSupported)
+	}
+
 	return Bpf(bpftypes.BPF_LINK_CREATE, attr, int(attr.Size()))
 }
 
 // LinkUpdate updates the eBPF program in the specified attr.LinkFD to attr.NewProgFD.
 func LinkUpdate(attr *BPFAttrLinkUpdate) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPILinkUpdate) {
+		return fmt.Errorf("link update not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_LINK_UPDATE, attr, int(attr.Size()))
 }
 
 // LinkGetFDByID opens a file descriptor for the eBPF Link corresponding to attr.LinkID
 func LinkGetFDByID(attr *BPFAttrGetID) (fd BPFfd, err error) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPILinkGetFDByID) {
+		return 0, fmt.Errorf("link get fd by id not supported: %w", ErrNotSupported)
+	}
+
 	return Bpf(bpftypes.BPF_LINK_GET_FD_BY_ID, attr, int(attr.Size()))
 }
 
@@ -603,6 +762,10 @@ func LinkGetFDByID(attr *BPFAttrGetID) (fd BPFfd, err error) {
 // Looks for the eBPF link with an id greater than attr.ID and updates attr.NextID on success.
 // If no other eBPF links remain with ids higher than attr.ID, an error with errno ENOENT(2) is returned.
 func LinkGetNextID(attr *BPFAttrGetID) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPILinkGetNextID) {
+		return fmt.Errorf("link get next id not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_LINK_GET_NEXT_ID, attr, int(attr.Size()))
 }
 
@@ -618,6 +781,10 @@ func LinkGetNextID(attr *BPFAttrGetID) error {
 // disabled system-wide when all outstanding file descriptors
 // returned by prior calls for this subcommand are closed.
 func EnableStats(attr *BPFAttrEnableStats) (fd BPFfd, err error) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIEnableStats) {
+		return 0, fmt.Errorf("enable stats not supported: %w", ErrNotSupported)
+	}
+
 	return Bpf(bpftypes.BPF_ENABLE_STATS, attr, int(attr.Size()))
 }
 
@@ -630,12 +797,20 @@ func EnableStats(attr *BPFAttrEnableStats) (fd BPFfd, err error) {
 // for that path will trigger the iterator to read kernel state
 // using the eBPF program attached to attr.LinkFD.
 func IterCreate(attr *BPFAttrIterCreate) (fd BPFfd, err error) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIIterCreate) {
+		return 0, fmt.Errorf("iter create not supported: %w", ErrNotSupported)
+	}
+
 	return Bpf(bpftypes.BPF_ITER_CREATE, attr, int(attr.Size()))
 }
 
 // LinkDetach forcefully detaches the specified attr.LinkFD from its
 // corresponding attachment point.
 func LinkDetach(attr *BPFAttrLinkDetach) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPILinkDetach) {
+		return fmt.Errorf("link detach not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_LINK_DETACH, attr, int(attr.Size()))
 }
 
@@ -648,5 +823,9 @@ func LinkDetach(attr *BPFAttrLinkDetach) error {
 // references to the map (for example, embedded in the eBPF
 // program instructions).
 func ProgBindMap(attr *BPFAttrProgBindMap) error {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIProgBindMap) {
+		return fmt.Errorf("prog bind map not supported: %w", ErrNotSupported)
+	}
+
 	return bpfNoReturn(bpftypes.BPF_PROG_BIND_MAP, attr, int(attr.Size()))
 }

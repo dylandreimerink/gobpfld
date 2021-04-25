@@ -10,6 +10,7 @@ import (
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"github.com/dylandreimerink/gobpfld/ebpf"
+	"github.com/dylandreimerink/gobpfld/kernelsupport"
 	"github.com/vishvananda/netlink"
 )
 
@@ -62,16 +63,31 @@ type BPFProgramLoadSettings struct {
 }
 
 func (p *BPFProgram) Load(settings BPFProgramLoadSettings) (log string, err error) {
-	// If undefined, use default
-	if settings.VerifierLogSize == 0 {
-		settings.VerifierLogSize = defaultBPFVerifierLogSize
-	}
-
-	verifierLogBytes := make([]byte, settings.VerifierLogSize)
-
 	if settings.ProgramType == bpftypes.BPF_PROG_TYPE_UNSPEC {
 		return "", fmt.Errorf("program type unspecified")
 	}
+
+	// If the given program type is not supported by the current kernel version
+	// return a verbose error instead of a syscall error
+	kProgFeat, found := progTypeToKFeature[settings.ProgramType]
+	// If there is no feature defined for a type, assume it is always supported
+	if found {
+		if !kernelsupport.CurrentFeatures.Program.Has(kProgFeat) {
+			return "", fmt.Errorf(
+				"program type '%s' not supported: %w",
+				settings.ProgramType,
+				bpfsys.ErrNotSupported,
+			)
+		}
+	}
+
+	// TODO validate attach types. In order to use some map types, features or helpers the
+	// proper attach type must be specified at program loadtime, we can attempt to detect this
+	// requirement based on the linked maps and decompiling the program.
+
+	// TODO validate of used attach type is supported by current kernel version
+
+	// TODO check if helper functions used in program are supported by current kernel version
 
 	licenceCStr := StringToCStrBytes(p.Licence)
 
@@ -99,6 +115,13 @@ func (p *BPFProgram) Load(settings BPFProgramLoadSettings) (log string, err erro
 			inst.Imm = int32(bpfMap.GetFD())
 		}
 	}
+
+	// If undefined, use default
+	if settings.VerifierLogSize == 0 {
+		settings.VerifierLogSize = defaultBPFVerifierLogSize
+	}
+
+	verifierLogBytes := make([]byte, settings.VerifierLogSize)
 
 	attr := &bpfsys.BPFAttrProgramLoad{
 		ProgramType:        settings.ProgramType,
@@ -131,6 +154,39 @@ func (p *BPFProgram) Load(settings BPFProgramLoadSettings) (log string, err erro
 	p.programType = settings.ProgramType
 
 	return CStrBytesToString(verifierLogBytes), nil
+}
+
+var progTypeToKFeature = map[bpftypes.BPFProgType]kernelsupport.ProgramSupport{
+	bpftypes.BPF_PROG_TYPE_SOCKET_FILTER:           kernelsupport.KFeatProgSocketFilter,
+	bpftypes.BPF_PROG_TYPE_KPROBE:                  kernelsupport.KFeatProgKProbe,
+	bpftypes.BPF_PROG_TYPE_SCHED_CLS:               kernelsupport.KFeatProgSchedCLS,
+	bpftypes.BPF_PROG_TYPE_SCHED_ACT:               kernelsupport.KFeatProgSchedACT,
+	bpftypes.BPF_PROG_TYPE_TRACEPOINT:              kernelsupport.KFeatProgTracepoint,
+	bpftypes.BPF_PROG_TYPE_XDP:                     kernelsupport.KFeatProgXDP,
+	bpftypes.BPF_PROG_TYPE_PERF_EVENT:              kernelsupport.KFeatProgPerfEvent,
+	bpftypes.BPF_PROG_TYPE_CGROUP_SKB:              kernelsupport.KFeatProgCGroupSKB,
+	bpftypes.BPF_PROG_TYPE_CGROUP_SOCK:             kernelsupport.KFeatProgCGroupSocket,
+	bpftypes.BPF_PROG_TYPE_LWT_IN:                  kernelsupport.KFeatProgLWTIn,
+	bpftypes.BPF_PROG_TYPE_LWT_OUT:                 kernelsupport.KFeatProgLWTOut,
+	bpftypes.BPF_PROG_TYPE_LWT_XMIT:                kernelsupport.KFeatProgLWTXmit,
+	bpftypes.BPF_PROG_TYPE_SOCK_OPS:                kernelsupport.KFeatProgSocketOps,
+	bpftypes.BPF_PROG_TYPE_SK_SKB:                  kernelsupport.KFeatProgSKSKB,
+	bpftypes.BPF_PROG_TYPE_CGROUP_DEVICE:           kernelsupport.KFeatProgCGroupDevice,
+	bpftypes.BPF_PROG_TYPE_SK_MSG:                  kernelsupport.KFeatProgSKMsg,
+	bpftypes.BPF_PROG_TYPE_RAW_TRACEPOINT:          kernelsupport.KFeatProgRawTracepoint,
+	bpftypes.BPF_PROG_TYPE_CGROUP_SOCK_ADDR:        kernelsupport.KFeatProgCGroupSocketAddr,
+	bpftypes.BPF_PROG_TYPE_LWT_SEG6LOCAL:           kernelsupport.KFeatProgLWTSeg6Local,
+	bpftypes.BPF_PROG_TYPE_LIRC_MODE2:              kernelsupport.KFeatProgLIRCMode2,
+	bpftypes.BPF_PROG_TYPE_SK_REUSEPORT:            kernelsupport.KFeatProgSKReusePort,
+	bpftypes.BPF_PROG_TYPE_FLOW_DISSECTOR:          kernelsupport.KFeatProgFlowDissector,
+	bpftypes.BPF_PROG_TYPE_CGROUP_SYSCTL:           kernelsupport.KFeatProgCGroupSysctl,
+	bpftypes.BPF_PROG_TYPE_RAW_TRACEPOINT_WRITABLE: kernelsupport.KFeatProgRawTracepointWritable,
+	bpftypes.BPF_PROG_TYPE_CGROUP_SOCKOPT:          kernelsupport.KFeatProgCgroupSocketOpt,
+	bpftypes.BPF_PROG_TYPE_TRACING:                 kernelsupport.KFeatProgTracing,
+	bpftypes.BPF_PROG_TYPE_STRUCT_OPS:              kernelsupport.KFeatProgStructOps,
+	bpftypes.BPF_PROG_TYPE_EXT:                     kernelsupport.KFeatProgExt,
+	bpftypes.BPF_PROG_TYPE_LSM:                     kernelsupport.KFeatProgLSM,
+	bpftypes.BPF_PROG_TYPE_SK_LOOKUP:               kernelsupport.KFeatProgSKLookup,
 }
 
 type XDPMode int
@@ -175,7 +231,8 @@ var (
 	ErrNetlinkAlreadyHasXDPProgram = errors.New("the netlink already has an XDP program attached")
 )
 
-// XDPLinkAttach attaches a already loaded eBPF XDP program to a network device
+// XDPLinkAttach attaches a already loaded eBPF XDP program to a network device. If attaching fails due to the
+// XDP mode we will automatically attempt to fallback to slower but better supported XDP mode
 func (p *BPFProgram) XDPLinkAttach(settings BPFProgramXDPLinkAttachSettings) error {
 	if !p.loaded {
 		return ErrProgramNotLoaded

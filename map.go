@@ -10,6 +10,7 @@ import (
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
+	"github.com/dylandreimerink/gobpfld/kernelsupport"
 )
 
 type BPFMap interface {
@@ -235,6 +236,12 @@ func (def BPFMapDef) Equal(other BPFMapDef) bool {
 // Validate checks if the map definition is valid, the kernel also does these checks but if the kernel finds an error
 // it doesn't return a nice error message. This give a better user experience.
 func (def BPFMapDef) Validate() error {
+	if kfeat, found := mapTypeToKFeature[def.Type]; found {
+		if !kernelsupport.CurrentFeatures.Map.Has(kfeat) {
+			return fmt.Errorf("map type '%s' not supported: %s", def.Type, bpfsys.ErrNotSupported)
+		}
+	}
+
 	if err := def.validateSizes(); err != nil {
 		return err
 	}
@@ -612,4 +619,36 @@ func (def BPFMapDef) validateSizes() error {
 	}
 
 	return nil
+}
+
+var mapTypeToKFeature = map[bpftypes.BPFMapType]kernelsupport.MapSupport{
+	bpftypes.BPF_MAP_TYPE_HASH:                  kernelsupport.KFeatMapHash,
+	bpftypes.BPF_MAP_TYPE_ARRAY:                 kernelsupport.KFeatMapArray,
+	bpftypes.BPF_MAP_TYPE_PROG_ARRAY:            kernelsupport.KFeatMapTailCall,
+	bpftypes.BPF_MAP_TYPE_PERF_EVENT_ARRAY:      kernelsupport.KFeatMapPerfEvent,
+	bpftypes.BPF_MAP_TYPE_PERCPU_HASH:           kernelsupport.KFeatMapPerCPUHash,
+	bpftypes.BPF_MAP_TYPE_PERCPU_ARRAY:          kernelsupport.KFeatMapPerCPUArray,
+	bpftypes.BPF_MAP_TYPE_STACK_TRACE:           kernelsupport.KFeatMapStackTrace,
+	bpftypes.BPF_MAP_TYPE_CGROUP_ARRAY:          kernelsupport.KFeatMapCGroupArray,
+	bpftypes.BPF_MAP_TYPE_LRU_HASH:              kernelsupport.KFeatMapLRUHash,
+	bpftypes.BPF_MAP_TYPE_LRU_PERCPU_HASH:       kernelsupport.KFeatMapLRUPerCPUHash,
+	bpftypes.BPF_MAP_TYPE_LPM_TRIE:              kernelsupport.KFeatMapLPMTrie,
+	bpftypes.BPF_MAP_TYPE_ARRAY_OF_MAPS:         kernelsupport.KFeatMapArrayOfMaps,
+	bpftypes.BPF_MAP_TYPE_HASH_OF_MAPS:          kernelsupport.KFeatMapHashOfMaps,
+	bpftypes.BPF_MAP_TYPE_DEVMAP:                kernelsupport.KFeatMapNetdevArray,
+	bpftypes.BPF_MAP_TYPE_SOCKMAP:               kernelsupport.KFeatMapSocketArray,
+	bpftypes.BPF_MAP_TYPE_CPUMAP:                kernelsupport.KFeatMapCPU,
+	bpftypes.BPF_MAP_TYPE_XSKMAP:                kernelsupport.KFeatMapAFXDP,
+	bpftypes.BPF_MAP_TYPE_SOCKHASH:              kernelsupport.KFeatMapSocketHash,
+	bpftypes.BPF_MAP_TYPE_CGROUP_STORAGE:        kernelsupport.KFeatMapCGroupStorage,
+	bpftypes.BPF_MAP_TYPE_REUSEPORT_SOCKARRAY:   kernelsupport.KFeatMapReuseportSocketArray,
+	bpftypes.BPF_MAP_TYPE_PERCPU_CGROUP_STORAGE: kernelsupport.KFeatMapPerCPUCGroupStorage,
+	bpftypes.BPF_MAP_TYPE_QUEUE:                 kernelsupport.KFeatMapQueue,
+	bpftypes.BPF_MAP_TYPE_STACK:                 kernelsupport.KFeatMapStack,
+	bpftypes.BPF_MAP_TYPE_SK_STORAGE:            kernelsupport.KFeatMapSocketLocalStorage,
+	bpftypes.BPF_MAP_TYPE_DEVMAP_HASH:           kernelsupport.KFeatMapNetdevHash,
+	bpftypes.BPF_MAP_TYPE_STRUCT_OPS:            kernelsupport.KFeatMapStructOps,
+	bpftypes.BPF_MAP_TYPE_RINGBUF:               kernelsupport.KFeatMapRingBuffer,
+	bpftypes.BPF_MAP_TYPE_INODE_STORAGE:         kernelsupport.KFeatMapINodeStorage,
+	bpftypes.BPF_MAP_TYPE_TASK_STORAGE:          kernelsupport.KFeatMapTaskStorage,
 }

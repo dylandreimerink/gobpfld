@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// MapSupport is a flagset which describes on which map types are supported
+// MapSupport is a flagset that describes which map types are supported
 type MapSupport uint64
 
 // TODO add comments
