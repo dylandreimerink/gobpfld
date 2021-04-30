@@ -29,13 +29,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	programs, err := gobpfld.LoadProgramFromELF(bytes.NewReader(elfFileBytes), gobpfld.ELFParseSettings{})
+	elf, err := gobpfld.LoadProgramFromELF(bytes.NewReader(elfFileBytes), gobpfld.ELFParseSettings{})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error while reading ELF file: %s\n", err.Error())
 		os.Exit(1)
 	}
 
-	program := programs["xdp_stats1"]
+	program := elf.Programs["xdp_stats1"]
 
 	// All maps loaded from elf files are BPFGenericMaps
 	statsMap := program.Maps["xdp_stats_map"].(*gobpfld.BPFGenericMap)

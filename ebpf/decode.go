@@ -846,8 +846,8 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			continue
 		}
 
-		return nil, fmt.Errorf("unable to decode raw instruction, op: %2x, src: %s, dst: %s, off: %4x, imm: %8x",
-			op, src, dst, off, imm)
+		return nil, fmt.Errorf("unable to decode raw instruction, inst: %d, op: %2x, src: %s, dst: %s, off: %4x, imm: %8x",
+			i, op, src, dst, off, imm)
 	}
 
 	return instructions, nil

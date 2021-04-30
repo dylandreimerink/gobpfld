@@ -22,6 +22,24 @@ This eBPF program attaches to the loopback interface of the host and counts the 
 
 This program demonstrates how to pin and unpin maps to the bpf FS using gobpfld.
 
+## bpf_to_bpf
+
+This eBPF program demonstrates [BPF to BPF calls](https://docs.cilium.io/en/stable/bpf/#bpf-to-bpf-calls). It shows that gobpfld can relocate code from the `.text` section of ELF files and recalculate the addresses of call instructions.
+
+The program records traffic usage per IP protocol, UDP destination port and TCP destination port. Since the program support both IPv4 and IPv6 it is a good demo of BPF to BPF since without this feature the `inc_*` functions whould have to be inlined multiple times.
+
+The `handle_ipv4` and `handle_ipv6` functions in turn call the `inc_ip_proto`, `inc_udp`, and `inc_tcp` functions thus showing that multiple calls are possible. The `inc_*` functions access maps which verifies that map FD relocations in the `.text` ELF section are also handled.
+
+During loading the verbose verifier log is dumped which confirms the usage of BPF to BPF calls in the first few lines: ```
+BPF Verifier log:
+func#0 @0
+func#1 @27
+func#2 @59
+func#3 @91
+func#4 @118
+func#5 @147
+```
+
 ## TODO
 
 A list of example/sample programs should be created to demonstrate key features:
