@@ -703,8 +703,16 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			//
 
 		case BPF_JMP | BPF_CALL:
-			inst = &Call{
-				Function: imm,
+
+			if src == PSEUDO_CALL {
+				inst = &CallBPF{
+					Offset: imm,
+				}
+
+			} else {
+				inst = &CallHelper{
+					Function: imm,
+				}
 			}
 
 			//

@@ -79,7 +79,7 @@ func main() {
 			//  where R1 is the pointer to the map in which the lookup should occur
 			//  and where R2 is the pointer to the key to use
 			//  R0 will become a pointer to the value
-			&ebpf.Call{ // call 1
+			&ebpf.CallHelper{ // call 1
 				Function: 1, // 1 = bpf_map_lookup_elem
 			},
 

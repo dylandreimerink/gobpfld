@@ -136,6 +136,10 @@ const (
 	BPF_REG_MAX
 )
 
+// If the source register is 1, it is not a call to a helper function
+// but to another bpf function(bpf to bpf call).
+const PSEUDO_CALL Register = 0x01
+
 func (r Register) String() string {
 	if r < BPF_REG_MAX {
 		return fmt.Sprintf("r%d", r)

@@ -368,19 +368,34 @@ func (p *BPFProgram) DecodeToReader(w io.Writer) error {
 			continue
 		}
 
-		// Ignore call and exit "jumps", they don't need labels
+		// The offset of the jump
+		offset := int(inst.Off)
+
 		op := inst.Op & 0xF0
-		if op == ebpf.BPF_CALL || op == ebpf.BPF_EXIT {
+
+		// Helper function calls don't need labels, but BPF to BPF calls do
+		if op == ebpf.BPF_CALL {
+			if inst.GetSourceReg() != ebpf.PSEUDO_CALL {
+				continue
+			}
+
+			// If we have a BPF to BPF call, the imm is the offset used, not the
+			// actual offset of the instruction
+			offset = int(inst.Imm)
+		}
+
+		// Ignore exit "jumps", they don't need labels
+		if op == ebpf.BPF_EXIT {
 			continue
 		}
 
 		// Multiple jumps can reference the same address
 		// so check if a label already exists for the target address.
-		label := labels[i+int(inst.Off)+1]
+		label := labels[i+offset+1]
 		if label == "" {
 			// If not, create one
 			label = fmt.Sprintf("LBL%d", labelIndex)
-			labels[i+int(inst.Off)+1] = label
+			labels[i+offset+1] = label
 			labelIndex += 1
 		}
 
