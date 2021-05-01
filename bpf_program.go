@@ -189,6 +189,77 @@ var progTypeToKFeature = map[bpftypes.BPFProgType]kernelsupport.ProgramSupport{
 	bpftypes.BPF_PROG_TYPE_SK_LOOKUP:               kernelsupport.KFeatProgSKLookup,
 }
 
+// Pin pins the program to a location in the bpf filesystem, since the file system now also holds a reference
+// to the program, the original creator of the program can terminate without triggering the program to be closed as well.
+// A program can be unpinned from the bpf FS by another process thus transfering it or persisting it across
+// multiple runs of the same program.
+func (p *BPFProgram) Pin(relativePath string) error {
+	if !p.loaded {
+		return fmt.Errorf("can't pin an unloaded program")
+	}
+
+	return PinFD(relativePath, p.fd)
+}
+
+// Unpin captures the file descriptor of the program at the given 'relativePath' from the kernel.
+// If 'deletePin' is true the bpf FS pin will be removed after successfully loading the program, thus transfering
+// ownership of the program in a scenario where the program is not shared between multiple userspace programs.
+// Otherwise the pin will keep existing which will cause the map to not be deleted when this program exits.
+func (p *BPFProgram) Unpin(relativePath string, deletePin bool) error {
+	if p.loaded {
+		return fmt.Errorf("can't unpin an loaded program")
+	}
+
+	var err error
+	p.fd, err = UnpinFD(relativePath, deletePin)
+	if err != nil {
+		return fmt.Errorf("unpin error: %w", err)
+	}
+
+	progInfo, err := GetProgramInfo(p.fd)
+	if err != nil {
+		return fmt.Errorf("get prog info: %w", err)
+	}
+
+	p.Name = progInfo.Name
+
+	p.Licence = "Not GPL compatible"
+	if progInfo.Flags&bpftypes.ProgInfoFlagGPLCompatible > 0 {
+		// This is technically incorrect, but since there is no way to interrogate the kernel for the exact licence
+		// this is the only way to ensure that after reloading the program the kernel recognises the program as
+		// GPL compatible.
+		p.Licence = "GPL"
+	}
+
+	p.Instructions = progInfo.XlatedProgInsns
+
+	p.Maps = make(map[string]BPFMap, len(progInfo.MapIDs))
+	for _, mapID := range progInfo.MapIDs {
+		bpfMap, err := MapFromID(mapID)
+		if err != nil {
+			return fmt.Errorf("map from id: %w", err)
+		}
+		p.Maps[bpfMap.GetName().str] = bpfMap
+	}
+
+	links, err := netlink.LinkList()
+	if err != nil {
+		return fmt.Errorf("get link list: %w", err)
+	}
+	for _, link := range links {
+		attr := link.Attrs()
+
+		if attr.Xdp.ProgId == progInfo.ID {
+			p.AttachedNetlinkIDs = append(p.AttachedNetlinkIDs, attr.Index)
+		}
+	}
+
+	p.loaded = true
+	p.programType = progInfo.Type
+
+	return nil
+}
+
 type XDPMode int
 
 const (

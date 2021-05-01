@@ -2,10 +2,6 @@ package gobpfld
 
 import (
 	"fmt"
-	"io/ioutil"
-	"os"
-	"path"
-	"strings"
 	"unsafe"
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
@@ -20,6 +16,44 @@ type BPFMap interface {
 	GetDefinition() BPFMapDef
 
 	Load() error
+}
+
+// MapFromID creates a BPFMap object from a map that is already loaded into the kernel.
+func MapFromID(id uint32) (BPFMap, error) {
+	fd, err := bpfsys.MapGetFDByID(&bpfsys.BPFAttrGetID{
+		ID: id,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("bpf syscall error: %w", err)
+	}
+
+	mapInfo := bpftypes.BPFMapInfo{}
+	err = bpfsys.ObjectGetInfoByFD(&bpfsys.BPFAttrGetInfoFD{
+		BPFFD:   fd,
+		Info:    uintptr(unsafe.Pointer(&mapInfo)),
+		InfoLen: uint32(bpftypes.BPFMapInfoSize),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("bpf obj get info by fd syscall error: %w", err)
+	}
+
+	return &BPFGenericMap{
+		AbstractMap: AbstractMap{
+			Name: ObjName{
+				cname: mapInfo.Name,
+				str:   CStrBytesToString(mapInfo.Name[:]),
+			},
+			Loaded: true,
+			Fd:     fd,
+			Definition: BPFMapDef{
+				Type:       mapInfo.Type,
+				KeySize:    mapInfo.KeySize,
+				ValueSize:  mapInfo.ValueSize,
+				MaxEntries: mapInfo.MaxEntries,
+				Flags:      bpftypes.BPFMapFlags(mapInfo.MapFlags),
+			},
+		},
+	}, nil
 }
 
 // AbstractMap is a base struct which implements BPFMap however it lacks any features for interacting
@@ -75,9 +109,6 @@ func (m *AbstractMap) Unload() error {
 	return nil
 }
 
-// BPFSysPath is the path to the bpf FS used to pin objects to
-const BPFSysPath = "/sys/fs/bpf/"
-
 // Pin pins the map to a location in the bpf filesystem, since the file system now also holds a reference
 // to the map the original creator of the map can terminate without triggering the map to be closed as well.
 // A map can be unpinned from the bpf FS by another process thus transfering it or persisting it across
@@ -87,25 +118,7 @@ func (m *AbstractMap) Pin(relativePath string) error {
 		return fmt.Errorf("can't pin an unloaded map")
 	}
 
-	sysPath := fmt.Sprint(BPFSysPath, relativePath)
-
-	// Create directories if any are missing
-	err := os.MkdirAll(path.Dir(sysPath), 0644)
-	if err != nil {
-		return fmt.Errorf("error while making directories: %w", err)
-	}
-
-	cPath := StringToCStrBytes(sysPath)
-
-	err = bpfsys.ObjectPin(&bpfsys.BPFAttrObj{
-		BPFfd:    m.Fd,
-		Pathname: uintptr(unsafe.Pointer(&cPath[0])),
-	})
-	if err != nil {
-		return fmt.Errorf("bpf syscall error: %w", err)
-	}
-
-	return nil
+	return PinFD(relativePath, m.Fd)
 }
 
 // Unpin captures the file descriptor of the map at the given 'relativePath' from the kernel.
@@ -119,15 +132,10 @@ func (m *AbstractMap) Unpin(relativePath string, deletePin bool) error {
 		return fmt.Errorf("can't unpin a map since it is already loaded")
 	}
 
-	sysPath := fmt.Sprint(BPFSysPath, relativePath)
-	cpath := StringToCStrBytes(sysPath)
-
 	var err error
-	m.Fd, err = bpfsys.ObjectGet(&bpfsys.BPFAttrObj{
-		Pathname: uintptr(unsafe.Pointer(&cpath[0])),
-	})
+	m.Fd, err = UnpinFD(relativePath, deletePin)
 	if err != nil {
-		return fmt.Errorf("bpf obj get syscall error: %w", err)
+		return fmt.Errorf("unpin error: %w", err)
 	}
 
 	pinnedMapDef := BPFMapDef{}
@@ -159,41 +167,6 @@ func (m *AbstractMap) Unpin(relativePath string, deletePin bool) error {
 	}
 
 	m.Loaded = true
-
-	if deletePin {
-		err = os.Remove(sysPath)
-		if err != nil {
-			return fmt.Errorf("error while deleting pin: %w", err)
-		}
-
-		// Get the directories in the relative path
-		dirs := path.Dir(relativePath)
-		if dirs == "." || dirs == "/" {
-			dirs = ""
-		}
-
-		// get array of dirs
-		relDirs := strings.Split(dirs, string(os.PathSeparator))
-		// If there is at least one directory
-		if relDirs[0] != "" {
-			// Loop over all directories
-			for _, dir := range relDirs {
-				dirPath := fmt.Sprint(BPFSysPath, dir)
-				files, err := ioutil.ReadDir(dirPath)
-				if err != nil {
-					return fmt.Errorf("error while reading dir: %w", err)
-				}
-
-				// If the dir is empty, remove it
-				if len(files) == 0 {
-					err = os.Remove(dirPath)
-					if err != nil {
-						return fmt.Errorf("error while deleting empty dir: %w", err)
-					}
-				}
-			}
-		}
-	}
 
 	return nil
 }

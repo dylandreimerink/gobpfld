@@ -64,7 +64,7 @@ Features/tasks in this list are commonly used/requested because they are used in
 * Tailcall support
 * ~~Map pinning and unpinning~~
 * ~~Bulk map ops~~
-* Program pinning and unpinning
+* ~~Program pinning and unpinning~~
 * ~~BPF2BPF function calls~~
 * Map iterator construct (looping over maps is very common)
 * (partially implemented) Linux kernel version detection (so programs can programmatically decide which features they can use, then error, warn or be backwards compatible)

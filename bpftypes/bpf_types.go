@@ -757,8 +757,11 @@ type BPFProgInfo struct {
 // this value may contain extra flags in the future this custom type was created.
 // This will hopefully allow for more compatibility
 // https://github.com/torvalds/linux/commit/b85fab0e67b162014cd328cb4e2a8e8ae382cb8a
-// TODO make getter/setter for every flag (GPLCompatible)
 type BPFProgInfoFlags uint32
+
+const (
+	ProgInfoFlagGPLCompatible BPFProgInfoFlags = 1 << iota
+)
 
 var BPFMapInfoSize = int(unsafe.Sizeof(BPFMapInfo{}))
 
