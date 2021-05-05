@@ -12,6 +12,7 @@ import (
 	"github.com/dylandreimerink/gobpfld/ebpf"
 	"github.com/dylandreimerink/gobpfld/kernelsupport"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
 
 func NewBPFProgram() *BPFProgram {
@@ -41,6 +42,7 @@ type BPFProgram struct {
 
 	// A list of network interface ids the program is linked to
 	AttachedNetlinkIDs []int
+	AttachedSocketFDs  []int
 }
 
 const defaultBPFVerifierLogSize = 1 * 1024 * 1024 // 1MB
@@ -145,6 +147,9 @@ func (p *BPFProgram) Load(settings BPFProgramLoadSettings) (log string, err erro
 
 			return CStrBytesToString(verifierLogBytes), fmt.Errorf("bpf syscall error: %w", err)
 		}
+
+		// We encountered no error, so stop trying to load the program
+		break
 	}
 	if err != nil {
 		return CStrBytesToString(verifierLogBytes), fmt.Errorf("bpf syscall error: %w", err)
@@ -384,6 +389,7 @@ type BPFProgramXDPLinkDetachSettings struct {
 	All bool
 }
 
+// XDPLinkDetach detaches a XDP program from one or all network interfaces it is attached to.
 func (p *BPFProgram) XDPLinkDetach(settings BPFProgramXDPLinkDetachSettings) error {
 	if settings.All {
 		for _, ifidx := range p.AttachedNetlinkIDs {
@@ -411,6 +417,94 @@ func (p *BPFProgram) XDPLinkDetach(settings BPFProgramXDPLinkDetachSettings) err
 	err = netlink.LinkSetXdpFd(nl, -1)
 	if err != nil {
 		return err
+	}
+
+	for i, ifidx := range p.AttachedNetlinkIDs {
+		if ifidx == nl.Attrs().Index {
+			p.AttachedNetlinkIDs[i] = p.AttachedNetlinkIDs[len(p.AttachedNetlinkIDs)-1]
+			p.AttachedNetlinkIDs = p.AttachedNetlinkIDs[:len(p.AttachedNetlinkIDs)-1]
+			break
+		}
+	}
+
+	return nil
+}
+
+var (
+	ErrProgramNotSocketFilterType = errors.New("the program is not loaded as an socket filter program and thus can't be attached as such")
+)
+
+// SocketAttachControlFunc attaches a "socket filter" program to a network socket. This function is meant to be used
+// as function pointer in net.Dialer.Control or net.ListenConfig.Control.
+func (p *BPFProgram) SocketAttachControlFunc(network, address string, c syscall.RawConn) error {
+	var err error
+	c.Control(func(fd uintptr) {
+		err = p.SocketAttach(fd)
+	})
+
+	if err != nil {
+		return fmt.Errorf("socket attach: %w", err)
+	}
+
+	return nil
+}
+
+// SocketAttach attempts to attach a filter program to the network socket indicated by the given file descriptor.
+// This function can be used if network file descriptors are managed outside of the net package or when using
+// the net.TCPListener.File function to get a duplicate file descriptor.
+func (p *BPFProgram) SocketAttach(fd uintptr) error {
+	if !p.loaded {
+		return ErrProgramNotLoaded
+	}
+
+	if p.programType != bpftypes.BPF_PROG_TYPE_SOCKET_FILTER {
+		return ErrProgramNotSocketFilterType
+	}
+
+	err := syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_ATTACH_BPF, int(p.fd))
+	if err != nil {
+		return fmt.Errorf("syscall setsockopt: %w", err)
+	}
+
+	p.AttachedSocketFDs = append(p.AttachedSocketFDs, int(fd))
+
+	return nil
+}
+
+type BPFProgramSocketFilterDetachSettings struct {
+	// the file descriptor of the network socket from which the program should be detached
+	Fd int
+	// If true, the program will be detached from all network interfaces
+	All bool
+}
+
+// SocketDettach detaches the program from one or all sockets.
+func (p *BPFProgram) SocketDettach(settings BPFProgramSocketFilterDetachSettings) error {
+	if settings.All {
+		for _, fd := range p.AttachedSocketFDs {
+			err := syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_DETACH_BPF, int(p.fd))
+			if err != nil {
+				return fmt.Errorf("syscall setsockopt: %w", err)
+			}
+		}
+
+		// Clear attached socket fd's slice
+		p.AttachedSocketFDs = nil
+		return nil
+	}
+
+	err := syscall.SetsockoptInt(int(settings.Fd), syscall.SOL_SOCKET, unix.SO_DETACH_BPF, int(p.fd))
+	if err != nil {
+		return fmt.Errorf("syscall setsockopt: %w", err)
+	}
+
+	// Delete the FD from the list of attached socket fd's
+	for i, fd := range p.AttachedSocketFDs {
+		if fd == settings.Fd {
+			p.AttachedSocketFDs[i] = p.AttachedSocketFDs[len(p.AttachedSocketFDs)-1]
+			p.AttachedSocketFDs = p.AttachedSocketFDs[:len(p.AttachedSocketFDs)-1]
+			break
+		}
 	}
 
 	return nil

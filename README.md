@@ -56,7 +56,7 @@ As mentioned earlier the first milestone/focus area of this project has been on 
 Features/tasks in this list are commonly used/requested because they are used in common use cases / scenarios.
 
 * Data relocation from ELF files(static global variables)
-* Attach to sockets
+* ~~Attach to sockets~~
 * Attach to kprobes
 * Attach to tc (traffic control)
 * Attach to tracepoints
@@ -80,6 +80,7 @@ Features/tasks in this list are not critical for most users but still important 
 * BTF support (So we have more type info to work with)
 * ARM64 support / testing (ARM is on the rise)
 * ARM32 support / testing (ARM is on the rise)
+* Library testing framework(Unit tests but for BPF functions, in a VM for consistant results(muli kernel tests?))
 
 ### Could have
 

@@ -99,12 +99,13 @@ var _ Instruction = (*LoadSocketBuf)(nil)
 type LoadSocketBuf struct {
 	Src    Register
 	Offset int32
+	Size   Size
 }
 
 func (lm LoadSocketBuf) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{
-			Op:  BPF_IND | uint8(BPF_W) | BPF_LD,
+			Op:  BPF_IND | uint8(lm.Size) | BPF_LD,
 			Reg: NewReg(lm.Src, 0),
 			Imm: lm.Offset,
 		},
@@ -112,12 +113,25 @@ func (lm LoadSocketBuf) Raw() ([]RawInstruction, error) {
 }
 
 func (lm LoadSocketBuf) String() string {
-	sign := "+"
-	offset := lm.Offset
-	if offset < 0 {
-		sign = "-"
-		offset = -offset
-	}
+	return fmt.Sprintf("r0 = ntohl((%s) (((struct sk_buff *) r6)->data[%s%+d]))", lm.Size, lm.Src, lm.Offset)
+}
 
-	return fmt.Sprintf("R0 = ntohl(*(u32 *) (((struct sk_buff *) R6)->data + %s %s %d))", lm.Src, sign, offset)
+var _ Instruction = (*LoadSocketBufConstant)(nil)
+
+type LoadSocketBufConstant struct {
+	Val  int32
+	Size Size
+}
+
+func (lm LoadSocketBufConstant) Raw() ([]RawInstruction, error) {
+	return []RawInstruction{
+		{
+			Op:  BPF_IMM | uint8(lm.Size) | BPF_LD,
+			Imm: lm.Val,
+		},
+	}, nil
+}
+
+func (lm LoadSocketBufConstant) String() string {
+	return fmt.Sprintf("r0 = ntohl((%s) (((struct sk_buff *) r6)->data[%d]))", lm.Size, lm.Val)
 }

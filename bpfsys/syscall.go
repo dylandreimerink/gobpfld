@@ -7,6 +7,7 @@ import (
 
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"github.com/dylandreimerink/gobpfld/kernelsupport"
+	"golang.org/x/sys/unix"
 )
 
 // ENOTSUPP - Operation is not supported
@@ -84,7 +85,7 @@ func Bpf(cmd bpftypes.BPFCommand, attr BPFAttribute, size int) (fd BPFfd, err er
 		return 0, fmt.Errorf("eBPF is not supported: %w", ErrNotSupported)
 	}
 
-	r0, _, errno := syscall.Syscall(SYS_BPF, uintptr(cmd), uintptr(attr.ToPtr()), uintptr(size))
+	r0, _, errno := syscall.Syscall(unix.SYS_BPF, uintptr(cmd), uintptr(attr.ToPtr()), uintptr(size))
 	if errno != 0 {
 		err = &BPFSyscallError{
 			Errno: errno,

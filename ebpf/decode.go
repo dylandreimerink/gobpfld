@@ -39,6 +39,58 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 			i++
 
+		case BPF_LD | BPF_ABS | uint8(BPF_W):
+			inst = &LoadSocketBufConstant{
+				Val:  imm,
+				Size: BPF_W,
+			}
+
+		case BPF_LD | BPF_ABS | uint8(BPF_H):
+			inst = &LoadSocketBufConstant{
+				Val:  imm,
+				Size: BPF_H,
+			}
+
+		case BPF_LD | BPF_ABS | uint8(BPF_B):
+			inst = &LoadSocketBufConstant{
+				Val:  imm,
+				Size: BPF_B,
+			}
+
+		case BPF_LD | BPF_ABS | uint8(BPF_DW):
+			inst = &LoadSocketBufConstant{
+				Val:  imm,
+				Size: BPF_DW,
+			}
+
+		case BPF_LD | BPF_IND | uint8(BPF_W):
+			inst = &LoadSocketBuf{
+				Src:    src,
+				Offset: imm,
+				Size:   BPF_W,
+			}
+
+		case BPF_LD | BPF_IND | uint8(BPF_H):
+			inst = &LoadSocketBuf{
+				Src:    src,
+				Offset: imm,
+				Size:   BPF_H,
+			}
+
+		case BPF_LD | BPF_IND | uint8(BPF_B):
+			inst = &LoadSocketBuf{
+				Src:    src,
+				Offset: imm,
+				Size:   BPF_B,
+			}
+
+		case BPF_LD | BPF_IND | uint8(BPF_DW):
+			inst = &LoadSocketBuf{
+				Src:    src,
+				Offset: imm,
+				Size:   BPF_DW,
+			}
+
 		case BPF_LDX | BPF_IMM:
 			inst = &LoadRegister{
 				Dest: dst,
@@ -55,12 +107,6 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 				Dest:   dst,
 				Offset: off,
 				Size:   Size(op ^ (BPF_LDX | BPF_MEM)),
-			}
-
-		case BPF_IND | uint8(BPF_W) | BPF_LD:
-			inst = &LoadSocketBuf{
-				Src:    src,
-				Offset: imm,
 			}
 
 		case BPF_ST | BPF_MEM | uint8(BPF_W),
