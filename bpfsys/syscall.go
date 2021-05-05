@@ -628,7 +628,14 @@ func MapLookupBatch(attr *BPFAttrMapBatch) error {
 		return fmt.Errorf("batch lookup not supported: %w", ErrNotSupported)
 	}
 
-	return bpfNoReturn(bpftypes.BPF_MAP_LOOKUP_BATCH, attr, int(attr.Size()))
+	err := bpfNoReturn(bpftypes.BPF_MAP_LOOKUP_BATCH, attr, int(attr.Size()))
+	if syserr, ok := err.(*BPFSyscallError); ok {
+		syserr.Err = map[syscall.Errno]string{
+			syscall.ENOENT: "last batch in the map",
+		}[syserr.Errno]
+		return syserr
+	}
+	return err
 }
 
 // MapLookupBatchAndDelete iterates and delete all elements in a map.

@@ -18,6 +18,10 @@ It demonstrates how userspace applications can generate programs dynamically wit
 
 This eBPF program attaches to the loopback interface of the host and counts the amount of packets received per CPU, it stores this information in a `BPF_MAP_TYPE_PERCPU_ARRAY` map. This example demonstrates how to read from and write to a per CPU map type with the `gopbfld.BPFGenericMap`.
 
+## map_batch
+
+This example demonstrates batch operations on maps. Batch operations offer speed improvements over non-batch operations since less syscalls/context switches are required for the same amount of work.
+
 ## map_pinning
 
 This program demonstrates how to pin and unpin maps to the bpf FS using gobpfld.
@@ -48,9 +52,3 @@ This examples creates a raw socket and uses a eBPF program to filter out just IC
 ## udp_socket_filet
 
 This examples creates an udp socket which listens on *:3000 using the stdlib net package. The eBPF program is then attached via the net.ListenConfig.Control callback. Event tho the socket listens on all ip addresses the eBPF program filters all traffic accept those with destination address 127.0.0.1.
-
-## TODO
-
-A list of example/sample programs should be created to demonstrate key features:
-
-- Bulk map operation

@@ -29,8 +29,9 @@ GoBPFLD is a loader/library to make eBPF tool development in Go smoother. It is 
 * Encode eBPF instructions into bytecode (see ebpf.Encode)
 * Loading eBPF maps into the kernel (see BPFMap.Load)
 * Loading eBPF programs into the kernel (see BPFProgram.Load)
-* Interacting with eBPF maps (get and set, more to follow)
-* Attaching eBPF program to network interface as XDP program(see BPFProgram.XDPLinkAttach)
+* Interacting with eBPF maps (lookup, set, delete, batch-lookup, batch-set, and batch-delete)
+* Attaching eBPF programs to network interfaces as XDP programs(see BPFProgram.XDPLinkAttach)
+* Attaching eBPF programs to sockets(see BPFProgram.SocketAttach and BPFProgram.SocketAttachControlFunc)
 * Go wrappers around all bpf syscall commands (see bpfsys package)
 
 ## Examples

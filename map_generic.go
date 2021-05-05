@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"syscall"
 	"unsafe"
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
@@ -279,9 +280,17 @@ func (m *BPFGenericMap) toBatchValuesPtr(values interface{}, maxBatchSize uint32
 	}
 }
 
-func (m *BPFGenericMap) GetBatch(keys interface{}, values interface{}, maxBatchSize uint32) (count int, err error) {
+// GetBatch fills the keys and values array/slice with the keys and values inside the map up to a maximum of
+// maxBatchSize entries. The keys and values array/slice must have at least a length of maxBatchSize.
+// The key and value of an entry is has the same index, so for example the value for keys[2] is in values[2].
+// Count is the amount of entries returnes, full is true if all entries were returned.
+//
+// This function is intended for small maps which can be read into userspace all at once since
+// GetBatch can only read from the beginning of the map. If the map is to large to read all at once
+// a iterator should be used instead of the Get or GetBatch function.
+func (m *BPFGenericMap) GetBatch(keys interface{}, values interface{}, maxBatchSize uint32) (count int, full bool, err error) {
 	if !m.Loaded {
-		return 0, fmt.Errorf("can't read from an unloaded map")
+		return 0, false, fmt.Errorf("can't read from an unloaded map")
 	}
 
 	var batch uint64
@@ -293,20 +302,25 @@ func (m *BPFGenericMap) GetBatch(keys interface{}, values interface{}, maxBatchS
 
 	attr.Keys, err = m.toBatchKeysPtr(keys, maxBatchSize)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 
 	attr.Values, err = m.toBatchValuesPtr(values, maxBatchSize)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 
 	err = bpfsys.MapLookupBatch(attr)
 	if err != nil {
-		return 0, fmt.Errorf("bpf syscall error: %w", err)
+		// A ENOENT is not an acutal error, the kernel uses it to signal there is no more data after this batch
+		if sysErr, ok := err.(*bpfsys.BPFSyscallError); ok && sysErr.Errno == syscall.ENOENT {
+			return int(attr.Count), true, nil
+		}
+
+		return 0, false, fmt.Errorf("bpf syscall error: %w", err)
 	}
 
-	return int(attr.Count), nil
+	return int(attr.Count), false, nil
 }
 
 func (m *BPFGenericMap) Set(key interface{}, value interface{}, flags bpfsys.BPFAttrMapElemFlags) error {
@@ -376,7 +390,7 @@ func (m *BPFGenericMap) SetBatch(
 		return 0, fmt.Errorf("bpf syscall error: %w", err)
 	}
 
-	return 0, nil
+	return int(attr.Count), nil
 }
 
 func (m *BPFGenericMap) Delete(key interface{}) error {
