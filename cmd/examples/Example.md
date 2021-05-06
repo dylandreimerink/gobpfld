@@ -22,6 +22,10 @@ This eBPF program attaches to the loopback interface of the host and counts the 
 
 This example demonstrates batch operations on maps. Batch operations offer speed improvements over non-batch operations since less syscalls/context switches are required for the same amount of work.
 
+## map_iterator
+
+This example demonstrates the usage of map iterators to loop over maps. Iterators provide an easier API than using syscalls directly to loop over maps.
+
 ## map_pinning
 
 This program demonstrates how to pin and unpin maps to the bpf FS using gobpfld.

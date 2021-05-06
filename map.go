@@ -2,6 +2,8 @@ package gobpfld
 
 import (
 	"fmt"
+	"reflect"
+	"runtime"
 	"unsafe"
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
@@ -185,6 +187,114 @@ func (m *AbstractMap) GetFD() bpfsys.BPFfd {
 
 func (m *AbstractMap) GetDefinition() BPFMapDef {
 	return m.Definition
+}
+
+// toKeyPtr checks if 'key' is a pointer to a type which has the same
+// size in memory as the key of the eBPF map.
+func (m *AbstractMap) toKeyPtr(key interface{}) (uintptr, error) {
+	keyType := reflect.TypeOf(key)
+	if keyType.Kind() != reflect.Ptr {
+		return 0, fmt.Errorf("key argument must be a pointer")
+	}
+
+	if keyType.Elem().Size() != uintptr(m.Definition.KeySize) {
+		return 0, fmt.Errorf(
+			"key type size(%d) doesn't match size of bfp key(%d)",
+			keyType.Elem().Size(),
+			m.Definition.KeySize,
+		)
+	}
+
+	return reflect.ValueOf(key).Pointer(), nil
+}
+
+var numCPUs = runtime.NumCPU()
+
+func (m *AbstractMap) isPerCPUMap() bool {
+	return m.Definition.Type == bpftypes.BPF_MAP_TYPE_PERCPU_ARRAY ||
+		m.Definition.Type == bpftypes.BPF_MAP_TYPE_PERCPU_HASH ||
+		m.Definition.Type == bpftypes.BPF_MAP_TYPE_LRU_PERCPU_HASH
+}
+
+func (m *AbstractMap) isArrayMap() bool {
+	return m.Definition.Type == bpftypes.BPF_MAP_TYPE_ARRAY ||
+		m.Definition.Type == bpftypes.BPF_MAP_TYPE_PERCPU_ARRAY
+}
+
+// toValuePtr checks if 'value' is a pointer to a type which has the same
+// size in memory as the value of the eBPF map.
+func (m *AbstractMap) toValuePtr(value interface{}) (uintptr, error) {
+	valueType := reflect.TypeOf(value)
+	if valueType.Kind() != reflect.Ptr {
+		return 0, fmt.Errorf("value argument must be a pointer")
+	}
+
+	elem := valueType.Elem()
+
+	// If the map type is a per CPU map, the value must be an array
+	// or slice with at least as much elements as the system has CPU cores
+	if m.isPerCPUMap() {
+
+		switch elem.Kind() {
+		case reflect.Array:
+			arrayElem := elem.Elem()
+			if arrayElem.Size() != uintptr(m.Definition.ValueSize) {
+				return 0, fmt.Errorf(
+					"value array element type size(%d) doesn't match size of bfp value(%d)",
+					arrayElem.Size(),
+					m.Definition.ValueSize,
+				)
+			}
+
+			if elem.Len() < numCPUs {
+				return 0, fmt.Errorf(
+					"value argument must be a pointer to an array or slice containing at least %d elements"+
+						" given array only has %d elements",
+					numCPUs,
+					elem.Len(),
+				)
+			}
+
+			return reflect.ValueOf(value).Pointer(), nil
+
+		case reflect.Slice:
+			sliceElemType := elem.Elem()
+			if sliceElemType.Size() != uintptr(m.Definition.ValueSize) {
+				return 0, fmt.Errorf(
+					"value slice element type size(%d) doesn't match size of bfp value(%d)",
+					sliceElemType.Size(),
+					m.Definition.ValueSize,
+				)
+			}
+
+			sliceHdr := (*reflect.SliceHeader)(unsafe.Pointer(reflect.ValueOf(value).Pointer()))
+			if sliceHdr.Len < numCPUs {
+				return 0, fmt.Errorf(
+					"value argument must be a pointer to an array or slice containing at least %d elements"+
+						" given slice only has %d elements",
+					numCPUs,
+					sliceHdr.Len,
+				)
+			}
+			return sliceHdr.Data, nil
+
+		default:
+			return 0, fmt.Errorf(
+				"value argument must be a pointer to an array or slice containing at least %d elements",
+				numCPUs,
+			)
+		}
+	}
+
+	if elem.Size() != uintptr(m.Definition.ValueSize) {
+		return 0, fmt.Errorf(
+			"value type size(%d) doesn't match size of bfp value(%d)",
+			elem.Size(),
+			m.Definition.ValueSize,
+		)
+	}
+
+	return reflect.ValueOf(value).Pointer(), nil
 }
 
 var BPFMapDefSize = int(unsafe.Sizeof(BPFMapDef{}))

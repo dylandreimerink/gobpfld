@@ -30,6 +30,7 @@ GoBPFLD is a loader/library to make eBPF tool development in Go smoother. It is 
 * Loading eBPF maps into the kernel (see BPFMap.Load)
 * Loading eBPF programs into the kernel (see BPFProgram.Load)
 * Interacting with eBPF maps (lookup, set, delete, batch-lookup, batch-set, and batch-delete)
+* Map iterators (see GenericMap.Iterator and MapIterator)
 * Attaching eBPF programs to network interfaces as XDP programs(see BPFProgram.XDPLinkAttach)
 * Attaching eBPF programs to sockets(see BPFProgram.SocketAttach and BPFProgram.SocketAttachControlFunc)
 * Go wrappers around all bpf syscall commands (see bpfsys package)
@@ -67,7 +68,7 @@ Features/tasks in this list are commonly used/requested because they are used in
 * ~~Bulk map ops~~
 * ~~Program pinning and unpinning~~
 * ~~BPF2BPF function calls~~
-* Map iterator construct (looping over maps is very common)
+* ~~Map iterator construct (looping over maps is very common)~~
 * (partially implemented) Linux kernel version detection (so programs can programmatically decide which features they can use, then error, warn or be backwards compatible)
 
 ### Should have
