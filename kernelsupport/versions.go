@@ -200,8 +200,9 @@ var featureMinVersion = []kernelFeatureVersion{
 	{
 		version: kernelVersion{major: 5, minor: 4},
 		features: KernelFeatures{
-			Map: KFeatMapNetdevHash,
-			API: KFeatAPIBTFGetNextID,
+			Map:  KFeatMapNetdevHash,
+			API:  KFeatAPIBTFGetNextID,
+			Misc: KFeatMiscXSKRingFlags,
 		},
 	},
 	{

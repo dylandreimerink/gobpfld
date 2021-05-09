@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"syscall"
+	"unsafe"
 
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"github.com/dylandreimerink/gobpfld/kernelsupport"
@@ -836,4 +837,64 @@ func ProgBindMap(attr *BPFAttrProgBindMap) error {
 	}
 
 	return bpfNoReturn(bpftypes.BPF_PROG_BIND_MAP, attr, int(attr.Size()))
+}
+
+type Socklen uint32
+
+// Getsockopt is a public version of the syscall.getsockopt without additional wrappers which allows us to use any
+// value type we want. But does require the usage of unsafe.
+func Getsockopt(s int, level int, name int, val unsafe.Pointer, vallen *Socklen) (err error) {
+	_, _, e1 := syscall.Syscall6(syscall.SYS_GETSOCKOPT, uintptr(s), uintptr(level), uintptr(name), uintptr(val), uintptr(unsafe.Pointer(vallen)), 0)
+	if e1 != 0 {
+		err = &BPFSyscallError{
+			Errno: e1,
+		}
+	}
+	return
+}
+
+// Setsockopt is a public version of the syscall.setsockopt without additional wrappers which allows us to use any
+// value type we want. But does require the usage of unsafe.
+func Setsockopt(s int, level int, name int, val unsafe.Pointer, vallen uintptr) (err error) {
+	_, _, e1 := syscall.Syscall6(syscall.SYS_SETSOCKOPT, uintptr(s), uintptr(level), uintptr(name), uintptr(val), uintptr(vallen), 0)
+	if e1 != 0 {
+		err = &BPFSyscallError{
+			Errno: e1,
+		}
+	}
+	return
+}
+
+// Bind is a public version of the syscall.bind without additional wrappers which allows us to use any
+// value type we want. But does require the usage of unsafe.
+func Bind(s int, addr unsafe.Pointer, addrlen Socklen) (err error) {
+	_, _, e1 := syscall.Syscall(syscall.SYS_BIND, uintptr(s), uintptr(addr), uintptr(addrlen))
+	if e1 != 0 {
+		err = &BPFSyscallError{
+			Errno: e1,
+		}
+	}
+	return
+}
+
+// Single-word zero for use when we need a valid pointer to 0 bytes.
+// See mksyscall.pl.
+var Zero uintptr
+
+// Sendto is a public version of the syscall.sendto without additional wrappers which allows us to use any
+// value type we want. But does require the usage of unsafe.
+func Sendto(s int, buf []byte, flags int, to unsafe.Pointer, addrlen Socklen) (err error) {
+	var _p0 unsafe.Pointer
+	if len(buf) > 0 {
+		_p0 = unsafe.Pointer(&buf[0])
+	} else {
+		_p0 = unsafe.Pointer(&Zero)
+	}
+	_, _, e1 := syscall.Syscall6(syscall.SYS_SENDTO, uintptr(s), uintptr(_p0), uintptr(len(buf)), uintptr(flags), uintptr(to), uintptr(addrlen))
+	if e1 != 0 {
+		err = &BPFSyscallError{
+			Errno: e1,
+		}
+	}
+	return
 }

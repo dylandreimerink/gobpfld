@@ -18,7 +18,7 @@ type KernelFeatures struct {
 	Program ProgramSupport
 	Attach  AttachSupport
 	// TODO helper functions
-	// TODO misc (xdp, sleepable, ect.)
+	Misc MiscSupport
 }
 
 // Check the kernel features at startup since they will not change during program execution.
@@ -67,6 +67,7 @@ func GetKernelFeatures() (KernelFeatures, error) {
 			features.API = features.API | kvf.features.API
 			features.Program = features.Program | kvf.features.Program
 			features.Attach = features.Attach | kvf.features.Attach
+			features.Misc = features.Misc | kvf.features.Misc
 		}
 	}
 
