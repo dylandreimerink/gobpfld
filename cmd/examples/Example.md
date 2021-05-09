@@ -53,6 +53,19 @@ func#5 @147
 
 This examples creates a raw socket and uses a eBPF program to filter out just ICMP traffic. It demonstrates how to write a socket filter program as well as how to attach a eBPF program to a socket using a file descriptor.
 
-## udp_socket_filet
+## udp_socket_filter
 
 This examples creates an udp socket which listens on *:3000 using the stdlib net package. The eBPF program is then attached via the net.ListenConfig.Control callback. Event tho the socket listens on all ip addresses the eBPF program filters all traffic accept those with destination address 127.0.0.1.
+
+## xsk_echo_reply
+
+This examples shows how to implement a ICMP echo reply (ping response) using XSK/[AF_XDP](https://www.kernel.org/doc/html/latest/networking/af_xdp.html). XSK(XDP socket) allows us to perform kernel bypass using XDP. We do this by creating a network socket, much like a normal network socket. Instead of binding it to an port and/or IP we just bind it to a network interface and NIC Queue. A XDP program is attached to the same network interface, this program now has the ability to send frames over this socket directly to the userspace application, thus bypassing the kernel network stack.
+
+We can also transmit to this socket which again bypasses the kernel stack. The technique is quite advanced and requires a lot of work in userspace to use (userspace network stack/packet decoding). However it is also very powerful, applications vary from virtualization to super fast packet capture. A major advantage of XSK is that we can directly read from and write to the same memory buffer the network driver will use to transmit and recieve data. This offers great performance because no memory has to change context (userspace<->kernel).
+
+The example implements manual packet decoding, this is done so this example doesn't cause the whole library to have extra dependencies. But a packet decoding/encoding library like [gopacket](https://github.com/google/gopacket) comes highly recommended.
+
+## TODO
+
+* xsk encapsulation example
+* xsk write lease example
