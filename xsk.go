@@ -14,18 +14,17 @@ import (
 
 var (
 	_ io.Reader = (*XSKSocket)(nil)
+	_ io.Writer = (*XSKSocket)(nil)
 	_ io.Closer = (*XSKSocket)(nil)
 )
+
+// TODO add support for multiple queues
 
 type XSKSocket struct {
 	fd int
 
 	// memory region where frames are exchanged with kernel
-	umem []byte
-	// offset relative to start of umem where rx frames end and tx frames start
-	txOffset int
-	// txAddrs is a buffered channel which is used as a queue for available tx frames
-	txAddrs  chan uint64
+	umem     []byte
 	settings XSKSettings
 
 	rx         xskDescRing
@@ -46,6 +45,8 @@ func (xs *XSKSocket) Read(p []byte) (n int, err error) {
 		return 0, nil
 	}
 
+	// unlike the ReadLease function, we ignore headspace since any benefit is lost
+	// during the copy.
 	len := copy(p, xs.umem[desc.addr:desc.addr+uint64(desc.len)])
 
 	// The addresses we get back have an offset due to headspacing both user configured
@@ -66,7 +67,11 @@ func (xs *XSKSocket) Read(p []byte) (n int, err error) {
 // After a XSKLease is released the underlaying array of Data will be repurposed, to avoid strage bugs
 // users must use Data or sub-slices of Data after the lease has been released.
 type XSKLease struct {
-	Data      []byte
+	Data []byte
+	// The amount of bytes which are prefixed at the start which don't contain frame data.
+	// This headroom can be used to add an extra header(encapsulation) without having to
+	// copy or move the existing packet data.
+	Headroom  int
 	frameAddr uint64
 	sock      *XSKSocket
 }
@@ -84,6 +89,13 @@ func (xl *XSKLease) Release() error {
 	return nil
 }
 
+// TODO make XSKLease.WriteBack which will write the leased data.
+// this will allow for zero copy encaptulation or replies.
+// So instead of enqueueing the address to the fill ring we enqueue a new descriptor to the
+// tx ring with the correct address and length.
+// We then need to dequeue one frame from the completion ring and enqueue it in the fill ring
+// to equalize the amount of frames in circulation between tx and rx
+
 func (xs *XSKSocket) ReadLease() (lease *XSKLease, err error) {
 	desc := xs.rx.Dequeue()
 	if desc == nil {
@@ -91,6 +103,7 @@ func (xs *XSKSocket) ReadLease() (lease *XSKLease, err error) {
 	}
 
 	return &XSKLease{
+		Headroom:  xs.settings.Headroom,
 		Data:      xs.umem[desc.addr-uint64(xs.settings.Headroom) : desc.addr+uint64(desc.len)],
 		frameAddr: (desc.addr / uint64(xs.settings.FrameSize)) * uint64(xs.settings.FrameSize),
 		sock:      xs,
@@ -120,7 +133,7 @@ func (xs *XSKSocket) Write(p []byte) (n int, err error) {
 		return 0, fmt.Errorf("tx enqueue: %w", err)
 	}
 
-	// TODO only use send to if needed
+	// TODO only use send syscall to if needed (when ring has XDP_RING_NEED_WAKEUP)
 	err = bpfsys.Sendto(xs.fd, nil, syscall.MSG_DONTWAIT, unsafe.Pointer(&bpfsys.Zero), bpfsys.Socklen(0))
 	if err != nil {
 		return 0, fmt.Errorf("syscall sendto: %w", err)
@@ -156,6 +169,9 @@ func (dr *xskDescRing) Dequeue() *descriptor {
 	producer := (*uint32)(dr.producer)
 	consumer := (*uint32)(dr.consumer)
 
+	// TODO add epoll/poll/select support
+	// TODO add runtime reconfigurable read timeouts like with package net tcp connections
+
 	if (*producer - *consumer) == 0 {
 		return nil
 	}
@@ -175,6 +191,10 @@ func (dr *xskDescRing) Dequeue() *descriptor {
 func (dr *xskDescRing) Enqueue(desc descriptor) error {
 	producer := (*uint32)(dr.producer)
 	consumer := (*uint32)(dr.consumer)
+
+	// TODO add epoll/poll/select support
+	// TODO add runtime reconfigurable write timeouts like with package net tcp connections
+
 	// If the diff between producer and consumer is larger than the elem count the buffer is full
 	if (*producer - *consumer) == dr.elemCount-1 {
 		return errBufferFull
@@ -205,6 +225,9 @@ func (ar *xskAddrRing) Dequeue() *uint64 {
 	producer := (*uint32)(ar.producer)
 	consumer := (*uint32)(ar.consumer)
 
+	// TODO add epoll/poll/select support
+	// TODO add runtime reconfigurable read timeouts like with package net tcp connections
+
 	if (*producer - *consumer) == 0 {
 		return nil
 	}
@@ -226,6 +249,10 @@ var errBufferFull = errors.New("ring buffer is full")
 func (ar *xskAddrRing) Enqueue(addr uint64) error {
 	producer := (*uint32)(ar.producer)
 	consumer := (*uint32)(ar.consumer)
+
+	// TODO add epoll/poll/select support
+	// TODO add runtime reconfigurable write timeouts like with package net tcp connections
+
 	// If the diff between producer and consumer is larger than the elem count the buffer is full
 	if (*producer - *consumer) == ar.elemCount-1 {
 		return errBufferFull
@@ -433,8 +460,6 @@ func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 		rxCount = 0
 	}
 
-	xskSock.txOffset = rxCount * settings.FrameSize
-
 	// Tell the kernel how large the fill ring should be
 	err = bpfsys.Setsockopt(
 		xskSock.fd,
@@ -488,14 +513,17 @@ func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("mmap completion ring: %w", err)
 	}
+
 	xskSock.completion = xskAddrRing{
 		xskRing: newXskRing(mmap, offsets.cr, uint32(txCount)),
 	}
+
+	txOffset := rxCount * settings.FrameSize
 	// Fill the entire completion queue. Since we consume an address from the completion queue
 	// opon writing we need to initialize the queue this way.
 	// After this the kernel will replenish the queue after the frame has been sent.
 	for i := 0; i < txCount; i++ {
-		xskSock.completion.Enqueue(uint64(xskSock.txOffset + i*settings.FrameSize))
+		xskSock.completion.Enqueue(uint64(txOffset + i*settings.FrameSize))
 	}
 
 	// Tell the kernel how large the rx ring should be
