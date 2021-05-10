@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -14,13 +15,354 @@ import (
 )
 
 var (
+	_ io.Reader = (*XSKMultiSocket)(nil)
+	_ io.Writer = (*XSKMultiSocket)(nil)
+	_ io.Closer = (*XSKMultiSocket)(nil)
+
 	_ io.Reader = (*XSKSocket)(nil)
 	_ io.Writer = (*XSKSocket)(nil)
 	_ io.Closer = (*XSKSocket)(nil)
 )
 
-// TODO add support for multiple queues
+func NewXSKMultiSocket(xskSockets ...*XSKSocket) (*XSKMultiSocket, error) {
+	if len(xskSockets) == 0 {
+		return nil, fmt.Errorf("need at least one socket")
+	}
 
+	for _, sock := range xskSockets {
+		if sock == nil {
+			return nil, fmt.Errorf("socket value can't be nil")
+		}
+	}
+
+	return &XSKMultiSocket{
+		sockets: xskSockets,
+	}, nil
+}
+
+// XSKMultiSocket is a collection of XSKSockets. The multi socket balances reads and writes between all XSKSockets.
+// This is useful for multi queue netdevices since a XSKSocket can only read or write from one rx/tx queue pair
+// at a time. A multi queue allows you to bundle all of these sockets so you get a socket for the whole netdevice.
+//
+// An alternative use for the multi socket is to add sockets from multiple netdevices.
+type XSKMultiSocket struct {
+	sockets []*XSKSocket
+
+	rmu sync.Mutex
+	wmu sync.Mutex
+
+	readIter  int
+	writeIter int
+
+	readTimeout  int
+	writeTimeout int
+}
+
+// SetWriteTimeout sets the timeout for Write and XSKLease.WriteBack calls.
+// If ms == 0 (default), we will never block/wait and error if we can't write at once.
+// If ms == -1, we will block forever until we can write.
+// If ms > 0, we will wait for x miliseconds for an oppurunity to write or error afterwards.
+func (xms *XSKMultiSocket) SetWriteTimeout(ms int) error {
+	if ms < -1 {
+		return fmt.Errorf("timeout must be -1, 0, or positive amount of miliseconds")
+	}
+
+	xms.writeTimeout = ms
+
+	return nil
+}
+
+// SetReadTimeout sets the timeout for Read and ReadLease calls.
+// If ms == 0 (default), we will never block/wait and return no data if there isn't any ready.
+// If ms == -1, we will block forever until we can read.
+// If ms > 0, we will wait for x miliseconds for an oppurunity to read or return no data.
+func (xms *XSKMultiSocket) SetReadTimeout(ms int) error {
+	if ms < -1 {
+		return fmt.Errorf("timeout must be -1, 0, or positive amount of miliseconds")
+	}
+
+	xms.readTimeout = ms
+
+	return nil
+}
+
+func (xms *XSKMultiSocket) Read(p []byte) (n int, err error) {
+	xms.rmu.Lock()
+	defer xms.rmu.Unlock()
+
+	var (
+		desc *descriptor
+		sock *XSKSocket
+	)
+	pollFds := make([]unix.PollFd, len(xms.sockets))
+
+	// Save the current iter value, we need it during poll resolving
+	curItr := xms.readIter
+
+	// Check every socket in case there is a frame ready
+	for i := 0; i < len(xms.sockets); i++ {
+		// Use readIter which keeps it value between calls to Read this ensures that we attempt to read from
+		// all sockets equally
+		sock = xms.sockets[xms.readIter]
+		desc = sock.rx.Dequeue()
+
+		xms.readIter++
+		if xms.readIter >= len(xms.sockets) {
+			xms.readIter = 0
+		}
+
+		if desc != nil {
+			break
+		}
+
+		pollFds[i] = unix.PollFd{
+			Fd:     int32(xms.sockets[xms.readIter].fd),
+			Events: unix.POLLIN,
+		}
+	}
+
+	// If none of the sockets have frames ready at the moment, we poll to wait
+	if desc == nil {
+		n, err := unix.Poll(pollFds, xms.readTimeout)
+		if err != nil {
+			// Somtimes a poll is interupted by a signal, no a real error
+			// lets treat it like a timeout
+			if err == syscall.EINTR {
+				return 0, nil
+			}
+
+			return 0, fmt.Errorf("poll: %w", err)
+		}
+
+		// If n == 0, the timeout was reached
+		if n == 0 {
+			return 0, nil
+		}
+
+		// now that there is at least one socket with a frame, we need to find it
+		for i := 0; i < len(xms.sockets); i++ {
+			if pollFds[i].Revents&unix.POLLIN > 0 {
+				sock = xms.sockets[curItr]
+				desc = sock.rx.Dequeue()
+				if desc != nil {
+					break
+				}
+			}
+
+			curItr++
+			if curItr >= len(xms.sockets) {
+				curItr = 0
+			}
+		}
+
+		// If poll returned n>0 but dequeueing still failed
+		if desc == nil {
+			return 0, nil
+		}
+	}
+
+	len := copy(p, sock.umem[desc.addr:desc.addr+uint64(desc.len)])
+	err = sock.fill.Enqueue(addrToFrameStart(desc.addr, sock.settings.FrameSize))
+	if err != nil {
+		return len, fmt.Errorf("fill enqueue: %w", err)
+	}
+
+	err = sock.wakeupFill()
+	if err != nil {
+		return len, err
+	}
+
+	return len, nil
+}
+
+func (xms *XSKMultiSocket) Write(p []byte) (n int, err error) {
+	xms.wmu.Lock()
+	defer xms.wmu.Unlock()
+
+	pollFds := make([]unix.PollFd, len(xms.sockets))
+
+	// Check every socket in case there is a frame ready
+	for i := 0; i < len(xms.sockets); i++ {
+		pollFds[i] = unix.PollFd{
+			Fd:     int32(xms.sockets[xms.writeIter].fd),
+			Events: unix.POLLOUT,
+		}
+
+		xms.writeIter++
+		if xms.writeIter >= len(xms.sockets) {
+			xms.writeIter = 0
+		}
+	}
+
+	n, err = unix.Poll(pollFds, xms.writeTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("poll: %w", err)
+	}
+
+	if n == 0 {
+		return 0, fmt.Errorf("timeout")
+	}
+
+	var (
+		addr uint64
+		sock *XSKSocket
+	)
+	for i := 0; i < len(xms.sockets); i++ {
+		sock = xms.sockets[xms.writeIter]
+
+		xms.writeIter++
+		if xms.writeIter >= len(xms.sockets) {
+			xms.writeIter = 0
+		}
+
+		if pollFds[i].Revents&unix.POLLOUT > 0 {
+			addr = <-sock.txAddrs
+			break
+		}
+	}
+
+	len := copy(sock.umem[addr:addr+uint64(len(p))], p)
+
+	err = sock.enqueueTx(descriptor{
+		addr: addr,
+		len:  uint32(len),
+	})
+	if err != nil {
+		sock.txAddrs <- addr
+		return 0, err
+	}
+
+	err = sock.wakeupTx()
+	if err != nil {
+		return 0, err
+	}
+
+	return len, nil
+}
+
+func (xms *XSKMultiSocket) Close() error {
+	for _, sock := range xms.sockets {
+		err := sock.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// WriteLease creates a XSKLease which points to a piece of preallocated memory. This memory can be used to
+// build packets for writing. Unlike XSKLeases gotten from ReadLease, write leases have no Headroom.
+// The Data slice of the lease is the full length of the usable frame, this length should not be exceeded.
+// Any memory held by the lease can't be reused until released or written.
+//
+// This function blocks until a frame for transmission is available and is not subject to the write timeout.
+func (xms *XSKMultiSocket) WriteLease() (lease *XSKLease, err error) {
+	sock := xms.sockets[xms.writeIter]
+	xms.writeIter++
+	if xms.writeIter >= len(xms.sockets) {
+		xms.writeIter = 0
+	}
+
+	addr := <-sock.txAddrs
+	return &XSKLease{
+		Headroom: 0,
+		Data:     sock.umem[addr : addr+uint64(sock.settings.FrameSize)],
+		dataAddr: addr,
+		sock:     sock,
+		fromTx:   true,
+	}, nil
+}
+
+// ReadLease reads a frame from the socket and returns its memory in a XSKLease. After reading the contents of the
+// frame it can be released or written, both will allow the memory to be reused. Calling Write on the lease will
+// cause the contents of Data to be written back to the network interface. The contents of Data can be modified
+// before calling Write thus allowing a program to implement zero-copy/zero-allocation encaptulation or
+// request/response protocols.
+func (xms *XSKMultiSocket) ReadLease() (lease *XSKLease, err error) {
+	xms.rmu.Lock()
+	defer xms.rmu.Unlock()
+
+	var (
+		desc *descriptor
+		sock *XSKSocket
+	)
+	pollFds := make([]unix.PollFd, len(xms.sockets))
+
+	// Save the current iter value, we need it during poll resolving
+	curItr := xms.readIter
+
+	// Check every socket in case there is a frame ready
+	for i := 0; i < len(xms.sockets); i++ {
+		// Use readIter which keeps it value between calls to Read this ensures that we attempt to read from
+		// all sockets equally
+		sock = xms.sockets[xms.readIter]
+		desc = sock.rx.Dequeue()
+
+		xms.readIter++
+		if xms.readIter >= len(xms.sockets) {
+			xms.readIter = 0
+		}
+
+		if desc != nil {
+			break
+		}
+
+		pollFds[i] = unix.PollFd{
+			Fd:     int32(xms.sockets[xms.readIter].fd),
+			Events: unix.POLLIN,
+		}
+	}
+
+	// If none of the sockets have frames ready at the moment, we poll to wait
+	if desc == nil {
+		n, err := unix.Poll(pollFds, xms.readTimeout)
+		if err != nil {
+			// Somtimes a poll is interupted by a signal, no a real error
+			// lets treat it like a timeout
+			if err == syscall.EINTR {
+				return nil, nil
+			}
+
+			return nil, fmt.Errorf("poll: %w", err)
+		}
+
+		// If n == 0, the timeout was reached
+		if n == 0 {
+			return nil, nil
+		}
+
+		// now that there is at least one socket with a frame, we need to find it
+		for i := 0; i < len(xms.sockets); i++ {
+			if pollFds[i].Revents&unix.POLLIN > 0 {
+				sock = xms.sockets[curItr]
+				desc = sock.rx.Dequeue()
+				if desc != nil {
+					break
+				}
+			}
+
+			curItr++
+			if curItr >= len(xms.sockets) {
+				curItr = 0
+			}
+		}
+
+		// If poll returned n>0 but dequeueing still failed
+		if desc == nil {
+			return nil, nil
+		}
+	}
+
+	return &XSKLease{
+		Headroom: sock.settings.Headroom,
+		Data:     sock.umem[desc.addr-uint64(sock.settings.Headroom) : desc.addr+uint64(desc.len)],
+		dataAddr: desc.addr,
+		sock:     sock,
+	}, nil
+}
+
+// A XSKSocket can bind to one queue on one netdev
 type XSKSocket struct {
 	fd int
 
@@ -33,14 +375,16 @@ type XSKSocket struct {
 	txAddrs          chan uint64
 	completionTicker *time.Ticker
 
+	rmu sync.Mutex
+	wmu sync.Mutex
+	fmu sync.Mutex
+
 	rx         xskDescRing
 	tx         xskDescRing
 	fill       xskAddrRing
 	completion xskAddrRing
 
-	readTimeout int
-	// poll timeout while writing in miliseconds, if -1 we will never block(skip poll)
-	// if 0, no timeout block-forever. >0 block for x ms if no data can be writen
+	readTimeout  int
 	writeTimeout int
 }
 
@@ -149,6 +493,9 @@ func (xs *XSKSocket) dequeueRx() (*descriptor, error) {
 // Read implements io.Reader, however we have to implement this with a memory copy which is not ideal
 // for efficiency. For zero copy packet access ReadLease should be used.
 func (xs *XSKSocket) Read(p []byte) (n int, err error) {
+	xs.rmu.Lock()
+	defer xs.rmu.Unlock()
+
 	desc, err := xs.dequeueRx()
 	if err != nil {
 		return 0, fmt.Errorf("dequeue rx: %w", err)
@@ -204,6 +551,9 @@ func (xl *XSKLease) Release() error {
 	} else {
 		// else, this lease was a rx lease in which case it must be returned to the fill ring
 
+		xl.sock.fmu.Lock()
+		defer xl.sock.fmu.Unlock()
+
 		// Enqueue the address of the frame on the fill queue so it can be reused
 		err := xl.sock.fill.Enqueue(frameAddr)
 		if err != nil {
@@ -226,6 +576,9 @@ func (xl *XSKLease) Release() error {
 // After Write has been called the lease will be released and the Data slice or its subslices should not
 // be used anymore.
 func (xl *XSKLease) Write() error {
+	xl.sock.wmu.Lock()
+	defer xl.sock.wmu.Unlock()
+
 	if len(xl.Data) > xl.sock.settings.FrameSize {
 		return fmt.Errorf("lease has been expanded beyond framesize, can't transmit")
 	}
@@ -297,6 +650,9 @@ func (xs *XSKSocket) WriteLease() (lease *XSKLease, err error) {
 // before calling Write thus allowing a program to implement zero-copy/zero-allocation encaptulation or
 // request/response protocols.
 func (xs *XSKSocket) ReadLease() (lease *XSKLease, err error) {
+	xs.rmu.Lock()
+	defer xs.rmu.Unlock()
+
 	desc, err := xs.dequeueRx()
 	if err != nil {
 		return nil, fmt.Errorf("dequeue rx: %w", err)
@@ -343,6 +699,9 @@ func (xs *XSKSocket) enqueueTx(desc descriptor) error {
 // Write implements io.Writer. The interface requires us to copy p into umem which is not
 // optimal for speed. For maximum performance use WriteLease instead.
 func (xs *XSKSocket) Write(p []byte) (n int, err error) {
+	xs.wmu.Lock()
+	defer xs.wmu.Unlock()
+
 	if len(p) > xs.settings.FrameSize {
 		return 0, fmt.Errorf("data is larget than frame size of %d", xs.settings.FrameSize)
 	}
@@ -357,6 +716,7 @@ func (xs *XSKSocket) Write(p []byte) (n int, err error) {
 		len:  uint32(len),
 	})
 	if err != nil {
+		xs.txAddrs <- addr
 		return 0, err
 	}
 

@@ -81,7 +81,7 @@ Features/tasks in this list are not critical for most users but still important 
 
 * Map in map support (useful but not widely used)
 * ~~XSK/AF_XDP support (useful for kernel bypass and packet capture)~~
-* XSK multi queue support (have one routine read/write multiple queues or one routine per queue)
+* XSK multiple sockets per netdev,queue pair (currently only one socket per pair is supported)
 * Program testing (Being able to unit test an XDP program would be great)
 * Support for LWT programs (Light weight tunnel)
 * BTF support (So we have more type info to work with)
