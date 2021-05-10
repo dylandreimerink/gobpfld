@@ -1,5 +1,7 @@
 # GoBPFLD
 
+[![GoDoc](https://pkg.go.dev/badge/github.com/dylandreimerink/gobpfld)](https://pkg.go.dev/github.com/dylandreimerink/gobpfld)
+
 GoBPFLD is a pure go eBPF loader/userspace library as an alternative to using [gobpf](https://github.com/iovisor/gobpf) which requires CGO to work. The goal of GoBPFLD is to provide a library for eBPF development which is comparable to libbpf(C library) but without CGO which improves the development experience.
 
 > **WARNING** GoBPFLD is currently not (yet) feature complete, and may lack critical features for some eBPF program types since the main focus for now is on XDP programs.
@@ -91,6 +93,7 @@ Features/tasks in this list are not critical for most users but still important 
 
 Features/tasks in this list are cool to have but secondary to the primary goal of this project.
 
+* Built-in XSK kernel program (like libbpf) (only useful for people intrested in full kernel bypass without additional logic in XDP/eBPF)
 * RISC-V support / testing (RISC-V has promise, would be cool, but not yet widely used)
 * x86_32 support / testing (32 bit is not very popular anymore, but maybe still useful for IOT or raspberry pi like machines)
 * Userspace VM (It would be cool to be able to run eBPF in Go, for testing or as plugin mechanism like LUA and WASM. But not an important feature related to eBPF loading)
