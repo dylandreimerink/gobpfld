@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 
 	"github.com/dylandreimerink/gobpfld"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
@@ -17,8 +18,9 @@ import (
 )
 
 var (
-	ifname = flag.String("ifname", "eth0", "name of the network interface to bind to")
-	ip     = flag.String("ip", "", "the ipv4 ip we will use as ping target")
+	ifname     = flag.String("ifname", "", "name of the network interface to bind to")
+	ip         = flag.String("ip", "", "the ipv4 ip we will use as ping target")
+	concurrent = flag.Bool("concurrent", false, "enable concurrent reading and processing of packets")
 )
 
 func main() {
@@ -48,20 +50,34 @@ func main() {
 	}
 	linkMAC := link.Attrs().HardwareAddr
 
-	// Create an new XSK socket, bound to queue 0.
-	// NOTE this example only works on non-multi queue NIC's
-	xsksock, err := gobpfld.NewXSKSocket(gobpfld.XSKSettings{
-		NetDevIfIndex: link.Attrs().Index,
-		QueueID:       0,
-	})
+	queues, err := gobpfld.GetNetDevQueueCount(linkName)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "new socket: %s\n", err.Error())
+		fmt.Fprintf(os.Stderr, "get link queue count: %s\n", err.Error())
 		os.Exit(1)
 	}
 
-	// Block forever until we can read or write (default behavour is to never block)
-	xsksock.SetReadTimeout(-1)
-	xsksock.SetWriteTimeout(-1)
+	sockets := make([]*gobpfld.XSKSocket, queues)
+
+	for i := 0; i < queues; i++ {
+		xsksock, err := gobpfld.NewXSKSocket(gobpfld.XSKSettings{
+			NetDevIfIndex: link.Attrs().Index,
+			QueueID:       i,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "new socket: %s\n", err.Error())
+			os.Exit(1)
+		}
+
+		// Set the read timeout to 100ms so we can stop the program even if there is nothing to read.
+		// Set the write timeout to infinity since waiting for writes almost never happens(for this example),
+		// and retry logic is harder to implement.
+		// The default behavour is to never block, this allows for busy polling which has lower latency but
+		//  higher CPU usage.
+		xsksock.SetReadTimeout(100)
+		xsksock.SetWriteTimeout(-1)
+
+		sockets[i] = xsksock
+	}
 
 	// Generate a program which will bypass all traffic to userspace
 	program := &gobpfld.BPFProgram{
@@ -75,7 +91,7 @@ func main() {
 						Type:       bpftypes.BPF_MAP_TYPE_XSKMAP,
 						KeySize:    4, // SizeOf(uint32)
 						ValueSize:  4, // SizeOf(uint32)
-						MaxEntries: 5,
+						MaxEntries: uint32(queues),
 					},
 				},
 			},
@@ -137,11 +153,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Set the xsksocket for queue ID 0
-	err = xskmap.Set(0, xsksock)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error while setting xsksock in map: %s\n", err.Error())
-		os.Exit(1)
+	// Add all sockets to the xskmap, index by the queue number.
+	for i := 0; i < queues; i++ {
+		err = xskmap.Set(i, sockets[i])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error while setting xsksock in map: %s\n", err.Error())
+			os.Exit(1)
+		}
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -151,34 +169,101 @@ func main() {
 		InterfaceName: linkName,
 		Replace:       true,
 	})
-
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error while attaching program to loopback device: %s\n", err.Error())
 		os.Exit(1)
 	}
 
-	done := false
-	for !done {
-		select {
-		case <-sigChan:
-			done = true
+	if *concurrent {
+		wg := &sync.WaitGroup{}
+		done := make(chan struct{})
 
-		default:
-			// Seperator to distinguish between frames
-			fmt.Println("------")
-			lease, err := xsksock.ReadLease()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "read lease: %s\n", err.Error())
-				break
-			}
+		// In concurrent mode we just create a routine for every queue we have. This offers beter performance over
+		// the MultiWriter because on a multi core processor multiple frames can be handled at the same time.
+		// It also requires more setup and manual TX balancing.
+		//
+		// The 'ethtool' utility can be used to configure NIC's to stear traffic to specific RX queues based on
+		// rules. Even tho we have an XDP program which uses a map to select a XSK, the kernel will not allow
+		// the XDP program to pick a socket which is not bound to that specific queue. The NIC/driver is leading.
+		for i := 0; i < queues; i++ {
+			fmt.Println("scheduled listener for queue ", i)
 
-			if lease == nil {
-				break
-			}
+			wg.Add(1)
+			go func(queue int, wg *sync.WaitGroup) {
+				defer wg.Done()
 
-			err = HandleFrame(lease, linkMAC, linkip)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "echo reply: %s", err.Error())
+				for {
+					select {
+					case <-sigChan:
+						close(done)
+						return
+					case <-done:
+						return
+					default:
+						sock := sockets[queue]
+						lease, err := sock.ReadLease()
+						if err != nil {
+							fmt.Fprintf(os.Stderr, "read lease: %s", err.Error())
+						}
+
+						if lease == nil {
+							continue
+						}
+
+						// Seperator to distinguish between frames
+						fmt.Println("------")
+						fmt.Printf("received frame on queue: %d\n", queue)
+
+						err = HandleFrame(lease, linkMAC, linkip)
+						if err != nil {
+							fmt.Fprintf(os.Stderr, "echo reply: %s", err.Error())
+						}
+					}
+				}
+			}(i, wg)
+		}
+
+		// Wait for all routines to stop before exiting the program
+		wg.Wait()
+	} else {
+		// If we will not be using multiple goroutines, we need to bundle the socket for every queue into one
+		// using a multi socket. A multi socket has the same functions available but balances between all
+		// sockets.
+
+		multiSock, err := gobpfld.NewXSKMultiSocket(sockets...)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "new xsk multi socket: %s\n", err.Error())
+		} else {
+			// We have to do this for the multi sock since it's timeout overrules that of any
+			// underlaying socket.
+			// Read the comments at xsksock.Set{Read|Write}Timeout for an explination of the values.
+			multiSock.SetReadTimeout(100)
+			multiSock.SetWriteTimeout(-1)
+
+			done := false
+			for !done {
+				select {
+				case <-sigChan:
+					done = true
+
+				default:
+					// Seperator to distinguish between frames
+					fmt.Println("------")
+					lease, err := multiSock.ReadLease()
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "read lease: %s\n", err.Error())
+						continue
+					}
+
+					if lease == nil {
+						continue
+					}
+
+					err = HandleFrame(lease, linkMAC, linkip)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "echo reply: %s", err.Error())
+					}
+				}
 			}
 		}
 	}

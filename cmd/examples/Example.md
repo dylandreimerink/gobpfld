@@ -65,8 +65,17 @@ We can also transmit to this socket which again bypasses the kernel stack. The t
 
 The example implements manual packet decoding, this is done so this example doesn't cause the whole library to have extra dependencies. But a packet decoding/encoding library like [gopacket](https://github.com/google/gopacket) comes highly recommended.
 
+## xsk_multi_sock
+
+This example is a variation on the xsk_echo_reply example. The main difference is that this example works on multi queue NIC's. On systems with multi queue NIC's incomming traffic is distribured amoung all RX queues based on flow(different fields depending on the protocol stack). Using the [ethtool](https://linux.die.net/man/8/ethtool) utility this behavour can be changed.
+
+So by default, in order to use XSK on a whole network device you need to bind a XSK to every RX/TX queue. Since a XSK can only be bound to 1 queue at a time it means you will have to manage a number of them. At first it might seem possible to redirect all frames to one socket since you can pick which socket to use in the XDP program. Unfortunately this doesn't work, XDP is only allowed to redirect to sockets bound on the same queue as where the frame enters. The XSK map is only meant for situations where there is more than one socket bound per queue(not yet supported by GoBPFLD).
+
+To make interacting with multiple sockets easier GoBPFLD provides the `XSKMultiSocket` which can be created using the `NewXSKMultiSocket` function. This multi socket has same functions as the `XSKSocket` except it balances reads and writes between all sockets contained in it. Using the multi socket does mean that reading and writing to the socket is limited to one goroutine. The `XSKMultiSocket` like the `XSKSocket` is not concurrent, only one goroutine can read or write to it at a time. Thus if latency or throughput is important it is recommended to not use the `XSKMultiSocket` and instead start a seperate goroutine for each `XSKSocket`. Do keep in mind that when not using the `XSKMultiSocket` you are responsible for balancing outgoing(TX) packages across the sockets.
+
+The example contains both aproaches which can be selected using a flag.
+
 ## TODO
 
 * xsk encapsulation example
 * xsk write lease example
-* xsk multi queue example (single rountine and multi routine)

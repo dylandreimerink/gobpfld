@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -473,6 +475,12 @@ func (xs *XSKSocket) dequeueRx() (*descriptor, error) {
 
 		n, err := unix.Poll([]unix.PollFd{{Fd: int32(xs.fd), Events: unix.POLLIN}}, xs.readTimeout)
 		if err != nil {
+			// Somtimes a poll is interupted by a signal, no a real error
+			// lets treat it like a timeout
+			if err == syscall.EINTR {
+				return nil, nil
+			}
+
 			return nil, fmt.Errorf("poll: %w", err)
 		}
 
@@ -1333,4 +1341,27 @@ func getMMapOffsetsNoFlags(fd int) (offsets [4]ringOffsetNoFlags, err error) {
 
 func isPowerOfTwo(x int) bool {
 	return (x != 0) && ((x & (x - 1)) == 0)
+}
+
+// GetNetDevQueueCount uses the /sys/class/net/<dev>/queues/ directory to figure out how many queues a network
+// device has. Knowing the number of queues is critical when binding XSK sockets to a network device.
+func GetNetDevQueueCount(netdev string) (int, error) {
+	if strings.ContainsAny(netdev, "/") {
+		return 0, fmt.Errorf("network device name should not contain slashes")
+	}
+
+	entries, err := os.ReadDir(fmt.Sprintf("/sys/class/net/%s/queues", netdev))
+	if err != nil {
+		return 0, fmt.Errorf("os.Lstat: %w", err)
+	}
+
+	// Just count the RX queues, we can assume there are as much TX queues as RX queues
+	count := 0
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "rx-") {
+			count++
+		}
+	}
+
+	return count, nil
 }
