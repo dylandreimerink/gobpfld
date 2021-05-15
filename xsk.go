@@ -16,31 +16,32 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var (
-	_ io.Reader = (*XSKMultiSocket)(nil)
-	_ io.Writer = (*XSKMultiSocket)(nil)
-	_ io.Closer = (*XSKMultiSocket)(nil)
-
-	_ io.Reader = (*XSKSocket)(nil)
-	_ io.Writer = (*XSKSocket)(nil)
-	_ io.Closer = (*XSKSocket)(nil)
-)
-
-func NewXSKMultiSocket(xskSockets ...*XSKSocket) (*XSKMultiSocket, error) {
-	if len(xskSockets) == 0 {
-		return nil, fmt.Errorf("need at least one socket")
-	}
-
-	for _, sock := range xskSockets {
-		if sock == nil {
-			return nil, fmt.Errorf("socket value can't be nil")
-		}
-	}
-
-	return &XSKMultiSocket{
-		sockets: xskSockets,
-	}, nil
+// A FrameReader can read whole or partial ethernet frames. Every time ReadFrame is called, p will be filled with up
+// to len(p) bytes from a single frame. These bytes include both the header and body of the ethernet frame.
+// If p to small to fit the whole frame, the remaining bytes of the frame are discarded. The next call to ReadFrame
+// will start at the next frame.
+//
+// n will be set to the number of bytes read from the the frame. err is non nil if any error has occured during the
+// process. If both n is 0 and err is nil nothing was read for an expected reason like a timout or external interupt.
+type FrameReader interface {
+	ReadFrame(p []byte) (n int, err error)
 }
+
+type FrameWriter interface {
+	WriteFrame(p []byte) (n int, err error)
+}
+
+type FrameLeaser interface {
+	ReadLease() (*XSKLease, error)
+	WriteLease() (*XSKLease, error)
+}
+
+var (
+	_ FrameReader = (*XSKMultiSocket)(nil)
+	_ FrameWriter = (*XSKMultiSocket)(nil)
+	_ FrameLeaser = (*XSKMultiSocket)(nil)
+	_ io.Closer   = (*XSKMultiSocket)(nil)
+)
 
 // XSKMultiSocket is a collection of XSKSockets. The multi socket balances reads and writes between all XSKSockets.
 // This is useful for multi queue netdevices since a XSKSocket can only read or write from one rx/tx queue pair
@@ -58,6 +59,22 @@ type XSKMultiSocket struct {
 
 	readTimeout  int
 	writeTimeout int
+}
+
+func NewXSKMultiSocket(xskSockets ...*XSKSocket) (*XSKMultiSocket, error) {
+	if len(xskSockets) == 0 {
+		return nil, fmt.Errorf("need at least one socket")
+	}
+
+	for _, sock := range xskSockets {
+		if sock == nil {
+			return nil, fmt.Errorf("socket value can't be nil")
+		}
+	}
+
+	return &XSKMultiSocket{
+		sockets: xskSockets,
+	}, nil
 }
 
 // SetWriteTimeout sets the timeout for Write and XSKLease.WriteBack calls.
@@ -88,7 +105,7 @@ func (xms *XSKMultiSocket) SetReadTimeout(ms int) error {
 	return nil
 }
 
-func (xms *XSKMultiSocket) Read(p []byte) (n int, err error) {
+func (xms *XSKMultiSocket) ReadFrame(p []byte) (n int, err error) {
 	xms.rmu.Lock()
 	defer xms.rmu.Unlock()
 
@@ -177,7 +194,7 @@ func (xms *XSKMultiSocket) Read(p []byte) (n int, err error) {
 	return len, nil
 }
 
-func (xms *XSKMultiSocket) Write(p []byte) (n int, err error) {
+func (xms *XSKMultiSocket) WriteFrame(p []byte) (n int, err error) {
 	xms.wmu.Lock()
 	defer xms.wmu.Unlock()
 
@@ -364,171 +381,6 @@ func (xms *XSKMultiSocket) ReadLease() (lease *XSKLease, err error) {
 	}, nil
 }
 
-// A XSKSocket can bind to one queue on one netdev
-type XSKSocket struct {
-	fd int
-
-	// memory region where frames are exchanged with kernel
-	umem     []byte
-	settings XSKSettings
-
-	// Buffered channel containing addresses frames which can be used
-	// for transmission
-	txAddrs          chan uint64
-	completionTicker *time.Ticker
-
-	rmu sync.Mutex
-	wmu sync.Mutex
-	fmu sync.Mutex
-
-	rx         xskDescRing
-	tx         xskDescRing
-	fill       xskAddrRing
-	completion xskAddrRing
-
-	readTimeout  int
-	writeTimeout int
-}
-
-// Fd returns the file descriptor of the socket.
-func (xs *XSKSocket) Fd() int {
-	return xs.fd
-}
-
-// SetWriteTimeout sets the timeout for Write and XSKLease.WriteBack calls.
-// If ms == 0 (default), we will never block/wait and error if we can't write at once.
-// If ms == -1, we will block forever until we can write.
-// If ms > 0, we will wait for x miliseconds for an oppurunity to write or error afterwards.
-func (xs *XSKSocket) SetWriteTimeout(ms int) error {
-	if ms < -1 {
-		return fmt.Errorf("timeout must be -1, 0, or positive amount of miliseconds")
-	}
-
-	xs.writeTimeout = ms
-
-	return nil
-}
-
-// SetReadTimeout sets the timeout for Read and ReadLease calls.
-// If ms == 0 (default), we will never block/wait and return no data if there isn't any ready.
-// If ms == -1, we will block forever until we can read.
-// If ms > 0, we will wait for x miliseconds for an oppurunity to read or return no data.
-func (xs *XSKSocket) SetReadTimeout(ms int) error {
-	if ms < -1 {
-		return fmt.Errorf("timeout must be -1, 0, or positive amount of miliseconds")
-	}
-
-	xs.readTimeout = ms
-
-	return nil
-}
-
-// If the need wakeup flag is set on the ring the kernel requests that we
-// wakeup the fill ring with a poll syscall
-// https://patchwork.ozlabs.org/project/netdev/patch/1560411450-29121-3-git-send-email-magnus.karlsson@intel.com/
-func (xs *XSKSocket) wakeupFill() error {
-	if *(*uint32)(xs.fill.flags)&unix.XDP_RING_NEED_WAKEUP == 1 {
-		_, err := unix.Poll([]unix.PollFd{{Fd: int32(xs.fd), Events: unix.POLLOUT}}, 0)
-		if err != nil {
-			return fmt.Errorf("poll fill: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// If the need wakeup flag is set on the ring the kernel requests that we
-// wakeup the fill ring with a poll syscall
-// https://patchwork.ozlabs.org/project/netdev/patch/1560411450-29121-3-git-send-email-magnus.karlsson@intel.com/
-func (xs *XSKSocket) wakeupTx() error {
-	if *(*uint32)(xs.tx.flags)&unix.XDP_RING_NEED_WAKEUP == 1 {
-		err := bpfsys.Sendto(xs.fd, nil, syscall.MSG_DONTWAIT, unsafe.Pointer(&bpfsys.Zero), bpfsys.Socklen(0))
-		if err != nil {
-			if sysErr, ok := err.(*bpfsys.BPFSyscallError); ok {
-				switch sysErr.Errno {
-				// These errors occur regulairly when load is high, ignore these errors, the next time
-				// wakeupTx is called it will trigger the kernel to read the full ring anyway.
-				// https://github.com/torvalds/linux/blob/b741596468b010af2846b75f5e75a842ce344a6e/samples/bpf/xdpsock_user.c#L1095
-				case syscall.EBUSY,
-					syscall.EAGAIN,
-					syscall.ENOBUFS,
-					syscall.ENETDOWN:
-					return nil
-				}
-			}
-
-			return fmt.Errorf("syscall sendto: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func (xs *XSKSocket) dequeueRx() (*descriptor, error) {
-	desc := xs.rx.Dequeue()
-	// there is nothing to dequeue
-	if desc == nil {
-		// Return at once if blocking is disabled
-		if xs.readTimeout == 0 {
-			return nil, nil
-		}
-
-		n, err := unix.Poll([]unix.PollFd{{Fd: int32(xs.fd), Events: unix.POLLIN}}, xs.readTimeout)
-		if err != nil {
-			// Somtimes a poll is interupted by a signal, no a real error
-			// lets treat it like a timeout
-			if err == syscall.EINTR {
-				return nil, nil
-			}
-
-			return nil, fmt.Errorf("poll: %w", err)
-		}
-
-		// If n == 0, the timeout was reached
-		if n == 0 {
-			return nil, nil
-		}
-
-		desc = xs.rx.Dequeue()
-		if desc == nil {
-			return desc, fmt.Errorf("no desc after poll")
-		}
-	}
-
-	return desc, nil
-}
-
-// Read implements io.Reader, however we have to implement this with a memory copy which is not ideal
-// for efficiency. For zero copy packet access ReadLease should be used.
-func (xs *XSKSocket) Read(p []byte) (n int, err error) {
-	xs.rmu.Lock()
-	defer xs.rmu.Unlock()
-
-	desc, err := xs.dequeueRx()
-	if err != nil {
-		return 0, fmt.Errorf("dequeue rx: %w", err)
-	}
-	if desc == nil {
-		return 0, nil
-	}
-
-	// unlike the ReadLease function, we ignore headspace since any benefit is lost
-	// during the copy.
-	len := copy(p, xs.umem[desc.addr:desc.addr+uint64(desc.len)])
-
-	err = xs.fill.Enqueue(addrToFrameStart(desc.addr, xs.settings.FrameSize))
-	if err != nil {
-		return len, fmt.Errorf("fill enqueue: %w", err)
-	}
-
-	err = xs.wakeupFill()
-	if err != nil {
-		return len, err
-	}
-
-	return len, nil
-}
-
 // XSKLease is used to "lease" a piece of buffer memory from the socket and return it after the user
 // is done using it. This allows us to implement true zero copy packet access.
 // After a XSKLease is released or written the underlaying array of Data will be repurposed, to avoid strage bugs
@@ -633,166 +485,6 @@ func (xl *XSKLease) Write() error {
 	xl.Data = nil
 
 	return nil
-}
-
-// WriteLease creates a XSKLease which points to a piece of preallocated memory. This memory can be used to
-// build packets for writing. Unlike XSKLeases gotten from ReadLease, write leases have no Headroom.
-// The Data slice of the lease is the full length of the usable frame, this length should not be exceeded.
-// Any memory held by the lease can't be reused until released or written.
-//
-// This function blocks until a frame for transmission is available and is not subject to the write timeout.
-func (xs *XSKSocket) WriteLease() (lease *XSKLease, err error) {
-	addr := <-xs.txAddrs
-	return &XSKLease{
-		Headroom: 0,
-		Data:     xs.umem[addr : addr+uint64(xs.settings.FrameSize)],
-		dataAddr: addr,
-		sock:     xs,
-		fromTx:   true,
-	}, nil
-}
-
-// ReadLease reads a frame from the socket and returns its memory in a XSKLease. After reading the contents of the
-// frame it can be released or written, both will allow the memory to be reused. Calling Write on the lease will
-// cause the contents of Data to be written back to the network interface. The contents of Data can be modified
-// before calling Write thus allowing a program to implement zero-copy/zero-allocation encaptulation or
-// request/response protocols.
-func (xs *XSKSocket) ReadLease() (lease *XSKLease, err error) {
-	xs.rmu.Lock()
-	defer xs.rmu.Unlock()
-
-	desc, err := xs.dequeueRx()
-	if err != nil {
-		return nil, fmt.Errorf("dequeue rx: %w", err)
-	}
-	if desc == nil {
-		return nil, nil
-	}
-
-	return &XSKLease{
-		Headroom: xs.settings.Headroom,
-		Data:     xs.umem[desc.addr-uint64(xs.settings.Headroom) : desc.addr+uint64(desc.len)],
-		dataAddr: desc.addr,
-		sock:     xs,
-	}, nil
-}
-
-func (xs *XSKSocket) enqueueTx(desc descriptor) error {
-	err := xs.tx.Enqueue(desc)
-	if err != nil {
-		if err != errBufferFull {
-			// Put the frame address back in the chan so we don't lose it
-			xs.txAddrs <- desc.addr
-
-			return fmt.Errorf("tx enqueue: %w", err)
-		}
-
-		_, err := unix.Poll([]unix.PollFd{{Fd: int32(xs.fd), Events: unix.POLLOUT}}, xs.writeTimeout)
-		if err != nil {
-			return fmt.Errorf("poll: %w", err)
-		}
-
-		err = xs.tx.Enqueue(desc)
-		if err != nil {
-			// Put the frame address back in the chan so we don't lose it
-			xs.txAddrs <- desc.addr
-
-			return fmt.Errorf("tx enqueue: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// Write implements io.Writer. The interface requires us to copy p into umem which is not
-// optimal for speed. For maximum performance use WriteLease instead.
-func (xs *XSKSocket) Write(p []byte) (n int, err error) {
-	xs.wmu.Lock()
-	defer xs.wmu.Unlock()
-
-	if len(p) > xs.settings.FrameSize {
-		return 0, fmt.Errorf("data is larget than frame size of %d", xs.settings.FrameSize)
-	}
-
-	// We assume we will never be blocking here for long
-	addr := <-xs.txAddrs
-
-	len := copy(xs.umem[addr:addr+uint64(len(p))], p)
-
-	err = xs.enqueueTx(descriptor{
-		addr: addr,
-		len:  uint32(len),
-	})
-	if err != nil {
-		xs.txAddrs <- addr
-		return 0, err
-	}
-
-	err = xs.wakeupTx()
-	if err != nil {
-		return 0, err
-	}
-
-	return len, nil
-}
-
-func (xs *XSKSocket) Close() error {
-	err := xs.rx.Close()
-	if err != nil {
-		return fmt.Errorf("rx close: %w", err)
-	}
-
-	err = xs.tx.Close()
-	if err != nil {
-		return fmt.Errorf("tx close: %w", err)
-	}
-
-	err = xs.fill.Close()
-	if err != nil {
-		return fmt.Errorf("fill close: %w", err)
-	}
-
-	if xs.completionTicker != nil {
-		xs.completionTicker.Stop()
-	}
-
-	err = xs.completion.Close()
-	if err != nil {
-		return fmt.Errorf("completion close: %w", err)
-	}
-
-	if xs.fd != 0 {
-		err = syscall.Close(xs.fd)
-		if err != nil {
-			return fmt.Errorf("socket close: %w", err)
-		}
-
-		xs.fd = 0
-	}
-
-	return nil
-}
-
-// completionWorker is started when a socket is created and is responsible for dequeueing the completion ring
-// and transfering the free address to the txAddrs chan so they can be re-used
-func (xs *XSKSocket) completionWorker() {
-	// As long as the completion ring still is mapped
-	for xs.completion.mmap != nil {
-		// Every tick of the completion ticket, dequeue the whole completion queue
-		// and put the frame addrsses on the txAddrs list
-		for xs.completion.mmap != nil {
-			addr := xs.completion.Dequeue()
-			if addr == nil {
-				break
-			}
-
-			xs.txAddrs <- addrToFrameStart(*addr, xs.settings.FrameSize)
-		}
-
-		// TODO auto ajust completion ticket / give control to user to tune it
-
-		<-xs.completionTicker.C
-	}
 }
 
 // The addresses we get back from the rx ring have offsets due to headspacing, both user configured
@@ -1039,6 +731,13 @@ type XSKSettings struct {
 	ForceZeroCopy bool
 	// If true, copy mode is always used and zero copy mode never attempted.
 	ForceCopy bool
+	// The minimum time between two checks of the completion queue. A lower value allows for more transmitted
+	// packets per seconds at the cost of higher CPU usage, even when not transmitting.
+	// By default this value is 10ms which seems a sane value, it means that there is a theorethical max TX rate of
+	// (1000/10) * (tx ring size) which is 100 * 2048 = 204,800 packets per second when DisableRx = false
+	// or 100 * 4096 = 409,600 when DisableRx = true at the default FrameCount of 4096.
+	// Setting this setting to 0 will cause one goroutine to busy poll(use 100% CPU) per socket.
+	CQConsumeInterval *time.Duration
 }
 
 // Same defaults as libbpf https://elixir.bootlin.com/linux/latest/source/tools/lib/bpf/xsk.h#L192
@@ -1046,6 +745,39 @@ const (
 	defaultFrameCount = 4096
 	defaultFrameSize  = 4096
 )
+
+var (
+	_ FrameReader = (*XSKSocket)(nil)
+	_ FrameWriter = (*XSKSocket)(nil)
+	_ FrameLeaser = (*XSKSocket)(nil)
+	_ io.Closer   = (*XSKSocket)(nil)
+)
+
+// A XSKSocket can bind to one queue on one netdev
+type XSKSocket struct {
+	fd int
+
+	// memory region where frames are exchanged with kernel
+	umem     []byte
+	settings XSKSettings
+
+	// Buffered channel containing addresses frames which can be used
+	// for transmission
+	txAddrs          chan uint64
+	completionTicker *time.Ticker
+
+	rmu sync.Mutex
+	wmu sync.Mutex
+	fmu sync.Mutex
+
+	rx         xskDescRing
+	tx         xskDescRing
+	fill       xskAddrRing
+	completion xskAddrRing
+
+	readTimeout  int
+	writeTimeout int
+}
 
 func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 	if settings.FrameCount == 0 {
@@ -1187,7 +919,16 @@ func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 	for i := 0; i < txCount; i++ {
 		xskSock.txAddrs <- uint64(txOffset + i*settings.FrameSize)
 	}
-	xskSock.completionTicker = time.NewTicker(10 * time.Millisecond)
+
+	// TODO allow for completion worker pooling (having one worker check multiple sockets)
+	//  this would allow a user to dedicate 1 or 2 CPU cores to busy polling all sockets of a
+	//  particular netdev or even the whole host.
+
+	interval := 10 * time.Millisecond
+	if settings.CQConsumeInterval != nil {
+		interval = *settings.CQConsumeInterval
+	}
+	xskSock.completionTicker = time.NewTicker(interval)
 	go xskSock.completionWorker()
 
 	// Tell the kernel how large the rx ring should be
@@ -1278,6 +1019,305 @@ func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 	// NOTE Tx frames are enqueued after they have been filled as a signal to transmit them
 
 	return xskSock, nil
+}
+
+// Fd returns the file descriptor of the socket.
+func (xs *XSKSocket) Fd() int {
+	return xs.fd
+}
+
+// SetWriteTimeout sets the timeout for Write and XSKLease.WriteBack calls.
+// If ms == 0 (default), we will never block/wait and error if we can't write at once.
+// If ms == -1, we will block forever until we can write.
+// If ms > 0, we will wait for x miliseconds for an oppurunity to write or error afterwards.
+func (xs *XSKSocket) SetWriteTimeout(ms int) error {
+	if ms < -1 {
+		return fmt.Errorf("timeout must be -1, 0, or positive amount of miliseconds")
+	}
+
+	xs.writeTimeout = ms
+
+	return nil
+}
+
+// SetReadTimeout sets the timeout for Read and ReadLease calls.
+// If ms == 0 (default), we will never block/wait and return no data if there isn't any ready.
+// If ms == -1, we will block forever until we can read.
+// If ms > 0, we will wait for x miliseconds for an oppurunity to read or return no data.
+func (xs *XSKSocket) SetReadTimeout(ms int) error {
+	if ms < -1 {
+		return fmt.Errorf("timeout must be -1, 0, or positive amount of miliseconds")
+	}
+
+	xs.readTimeout = ms
+
+	return nil
+}
+
+// If the need wakeup flag is set on the ring the kernel requests that we
+// wakeup the fill ring with a poll syscall
+// https://patchwork.ozlabs.org/project/netdev/patch/1560411450-29121-3-git-send-email-magnus.karlsson@intel.com/
+func (xs *XSKSocket) wakeupFill() error {
+	if *(*uint32)(xs.fill.flags)&unix.XDP_RING_NEED_WAKEUP == 1 {
+		_, err := unix.Poll([]unix.PollFd{{Fd: int32(xs.fd), Events: unix.POLLOUT}}, 0)
+		if err != nil {
+			return fmt.Errorf("poll fill: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// If the need wakeup flag is set on the ring the kernel requests that we
+// wakeup the fill ring with a poll syscall
+// https://patchwork.ozlabs.org/project/netdev/patch/1560411450-29121-3-git-send-email-magnus.karlsson@intel.com/
+func (xs *XSKSocket) wakeupTx() error {
+	if *(*uint32)(xs.tx.flags)&unix.XDP_RING_NEED_WAKEUP == 1 {
+		err := bpfsys.Sendto(xs.fd, nil, syscall.MSG_DONTWAIT, unsafe.Pointer(&bpfsys.Zero), bpfsys.Socklen(0))
+		if err != nil {
+			if sysErr, ok := err.(*bpfsys.BPFSyscallError); ok {
+				switch sysErr.Errno {
+				// These errors occur regulairly when load is high, ignore these errors, the next time
+				// wakeupTx is called it will trigger the kernel to read the full ring anyway.
+				// https://github.com/torvalds/linux/blob/b741596468b010af2846b75f5e75a842ce344a6e/samples/bpf/xdpsock_user.c#L1095
+				case syscall.EBUSY,
+					syscall.EAGAIN,
+					syscall.ENOBUFS,
+					syscall.ENETDOWN:
+					return nil
+				}
+			}
+
+			return fmt.Errorf("syscall sendto: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (xs *XSKSocket) dequeueRx() (*descriptor, error) {
+	desc := xs.rx.Dequeue()
+	// there is nothing to dequeue
+	if desc == nil {
+		// Return at once if blocking is disabled
+		if xs.readTimeout == 0 {
+			return nil, nil
+		}
+
+		n, err := unix.Poll([]unix.PollFd{{Fd: int32(xs.fd), Events: unix.POLLIN}}, xs.readTimeout)
+		if err != nil {
+			// Somtimes a poll is interupted by a signal, no a real error
+			// lets treat it like a timeout
+			if err == syscall.EINTR {
+				return nil, nil
+			}
+
+			return nil, fmt.Errorf("poll: %w", err)
+		}
+
+		// If n == 0, the timeout was reached
+		if n == 0 {
+			return nil, nil
+		}
+
+		desc = xs.rx.Dequeue()
+		if desc == nil {
+			return desc, fmt.Errorf("no desc after poll")
+		}
+	}
+
+	return desc, nil
+}
+
+// ReadFrame implements FrameReader, however we have to implement this with a memory copy which is not ideal
+// for efficiency. For zero copy packet access ReadLease should be used.
+func (xs *XSKSocket) ReadFrame(p []byte) (n int, err error) {
+	xs.rmu.Lock()
+	defer xs.rmu.Unlock()
+
+	desc, err := xs.dequeueRx()
+	if err != nil {
+		return 0, fmt.Errorf("dequeue rx: %w", err)
+	}
+	if desc == nil {
+		return 0, nil
+	}
+
+	// unlike the ReadLease function, we ignore headspace since any benefit is lost
+	// during the copy.
+	len := copy(p, xs.umem[desc.addr:desc.addr+uint64(desc.len)])
+
+	err = xs.fill.Enqueue(addrToFrameStart(desc.addr, xs.settings.FrameSize))
+	if err != nil {
+		return len, fmt.Errorf("fill enqueue: %w", err)
+	}
+
+	err = xs.wakeupFill()
+	if err != nil {
+		return len, err
+	}
+
+	return len, nil
+}
+
+// WriteLease creates a XSKLease which points to a piece of preallocated memory. This memory can be used to
+// build packets for writing. Unlike XSKLeases gotten from ReadLease, write leases have no Headroom.
+// The Data slice of the lease is the full length of the usable frame, this length should not be exceeded.
+// Any memory held by the lease can't be reused until released or written.
+//
+// This function blocks until a frame for transmission is available and is not subject to the write timeout.
+func (xs *XSKSocket) WriteLease() (lease *XSKLease, err error) {
+	addr := <-xs.txAddrs
+	return &XSKLease{
+		Headroom: 0,
+		Data:     xs.umem[addr : addr+uint64(xs.settings.FrameSize)],
+		dataAddr: addr,
+		sock:     xs,
+		fromTx:   true,
+	}, nil
+}
+
+// ReadLease reads a frame from the socket and returns its memory in a XSKLease. After reading the contents of the
+// frame it can be released or written, both will allow the memory to be reused. Calling Write on the lease will
+// cause the contents of Data to be written back to the network interface. The contents of Data can be modified
+// before calling Write thus allowing a program to implement zero-copy/zero-allocation encaptulation or
+// request/response protocols.
+func (xs *XSKSocket) ReadLease() (lease *XSKLease, err error) {
+	xs.rmu.Lock()
+	defer xs.rmu.Unlock()
+
+	desc, err := xs.dequeueRx()
+	if err != nil {
+		return nil, fmt.Errorf("dequeue rx: %w", err)
+	}
+	if desc == nil {
+		return nil, nil
+	}
+
+	return &XSKLease{
+		Headroom: xs.settings.Headroom,
+		Data:     xs.umem[desc.addr-uint64(xs.settings.Headroom) : desc.addr+uint64(desc.len)],
+		dataAddr: desc.addr,
+		sock:     xs,
+	}, nil
+}
+
+func (xs *XSKSocket) enqueueTx(desc descriptor) error {
+	err := xs.tx.Enqueue(desc)
+	if err != nil {
+		if err != errBufferFull {
+			// Put the frame address back in the chan so we don't lose it
+			xs.txAddrs <- desc.addr
+
+			return fmt.Errorf("tx enqueue: %w", err)
+		}
+
+		_, err := unix.Poll([]unix.PollFd{{Fd: int32(xs.fd), Events: unix.POLLOUT}}, xs.writeTimeout)
+		if err != nil {
+			return fmt.Errorf("poll: %w", err)
+		}
+
+		err = xs.tx.Enqueue(desc)
+		if err != nil {
+			// Put the frame address back in the chan so we don't lose it
+			xs.txAddrs <- desc.addr
+
+			return fmt.Errorf("tx enqueue: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// WriteFrame implements FrameWriter. The interface requires us to copy p into umem which is not
+// optimal for speed. For maximum performance use WriteLease instead.
+func (xs *XSKSocket) WriteFrame(p []byte) (n int, err error) {
+	xs.wmu.Lock()
+	defer xs.wmu.Unlock()
+
+	if len(p) > xs.settings.FrameSize {
+		return 0, fmt.Errorf("data is larget than frame size of %d", xs.settings.FrameSize)
+	}
+
+	// We assume we will never be blocking here for long
+	addr := <-xs.txAddrs
+
+	len := copy(xs.umem[addr:addr+uint64(len(p))], p)
+
+	err = xs.enqueueTx(descriptor{
+		addr: addr,
+		len:  uint32(len),
+	})
+	if err != nil {
+		xs.txAddrs <- addr
+		return 0, err
+	}
+
+	err = xs.wakeupTx()
+	if err != nil {
+		return 0, err
+	}
+
+	return len, nil
+}
+
+func (xs *XSKSocket) Close() error {
+	err := xs.rx.Close()
+	if err != nil {
+		return fmt.Errorf("rx close: %w", err)
+	}
+
+	err = xs.tx.Close()
+	if err != nil {
+		return fmt.Errorf("tx close: %w", err)
+	}
+
+	err = xs.fill.Close()
+	if err != nil {
+		return fmt.Errorf("fill close: %w", err)
+	}
+
+	if xs.completionTicker != nil {
+		xs.completionTicker.Stop()
+	}
+
+	err = xs.completion.Close()
+	if err != nil {
+		return fmt.Errorf("completion close: %w", err)
+	}
+
+	if xs.fd != 0 {
+		err = syscall.Close(xs.fd)
+		if err != nil {
+			return fmt.Errorf("socket close: %w", err)
+		}
+
+		xs.fd = 0
+	}
+
+	return nil
+}
+
+// completionWorker is started when a socket is created and is responsible for dequeueing the completion ring
+// and transfering the free address to the txAddrs chan so they can be re-used
+func (xs *XSKSocket) completionWorker() {
+	// As long as the completion ring still is mapped
+	for xs.completion.mmap != nil {
+		// Every tick of the completion ticket, dequeue the whole completion queue
+		// and put the frame addrsses on the txAddrs list
+		for xs.completion.mmap != nil {
+			addr := xs.completion.Dequeue()
+			if addr == nil {
+				break
+			}
+
+			xs.txAddrs <- addrToFrameStart(*addr, xs.settings.FrameSize)
+		}
+
+		// TODO auto ajust completion ticker (slow down using idle time and speed up during high tx rate)
+
+		<-xs.completionTicker.C
+	}
 }
 
 func getMMapOffsets(fd int) (offsets mmapOffsets, err error) {
