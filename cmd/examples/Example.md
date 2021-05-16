@@ -49,6 +49,19 @@ func#4 @118
 func#5 @147
 ```
 
+## tailcall
+
+This eBPF program demonstrates [Tail calls](https://docs.cilium.io/en/stable/bpf/#tail-calls). It is functionally identiacal to the BPF to BPF example except the functions for the different protocols are implemented as seperate programs linked together using tail calls.
+
+When tail calling another program the called program fully takes over and never returns back to the original program. This feature has a number of useful use cases, but does require some setup. For example tail calls allows multiple, seperatly compiled programs to cooperate. A security team can write a tool for network auditing and a networking team another program for forwarding, by sticking a small program enfront of both which can make the decition on which program should be called these two programs from different maintainers can run on the same network device. And since they are not the same program they can be seperatly upgraded and have seperate userspace applications to manage both (assuming the userspace programs can coordinate the loading/unloading sequence).
+
+Another usecase for a/b testing one or multiple variations of a eBPF program. Yet another is for using multiple generated XDP programs on the same network device. The posibilities are endless realy.
+
+However one must also keep the folloing limitations in mind:
+ * Tail calls have a limited depth(max 16 tail calls)
+ * Tail calls have no arguments, any data must be passed via the program specific context or via per-cpu maps(because all tail calls will be executed on the same CPU without interuptions between them, per cpu maps can be safely used as scratch buffers)
+ * Programs can only tail call to other programs of the same type and both must JIT'ed or both interperted, can't mix JIT and interperted eBPF programs.
+
 ## icmp_pcap
 
 This examples creates a raw socket and uses a eBPF program to filter out just ICMP traffic. It demonstrates how to write a socket filter program as well as how to attach a eBPF program to a socket using a file descriptor.

@@ -39,7 +39,7 @@ func main() {
 
 	program := elf.Programs["percpumap"]
 
-	// All maps loaded from elf files are BPFGenericMaps
+	// Since the map type is an per cpu array type, the elf package will return a generic map
 	counterMap := program.Maps["cnt_map"].(*gobpfld.BPFGenericMap)
 
 	log, err := program.Load(gobpfld.BPFProgramLoadSettings{

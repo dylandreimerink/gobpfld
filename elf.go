@@ -22,7 +22,7 @@ type BPFELF struct {
 	// Programs contained within the ELF
 	Programs map[string]*BPFProgram
 	// Maps defined in the ELF
-	Maps map[string]*BPFGenericMap
+	Maps map[string]BPFMap
 
 	// eBPF code found in the .text section, often called "sub programs".
 	// Used for library code and code shared by multiple programs by way of BPF to BPF calls
@@ -218,7 +218,7 @@ func parseElf(
 ) {
 	bpfElf = BPFELF{
 		Programs:  map[string]*BPFProgram{},
-		Maps:      map[string]*BPFGenericMap{},
+		Maps:      map[string]BPFMap{},
 		relTables: map[string]ELFRelocTable{},
 	}
 
@@ -260,15 +260,13 @@ func parseElf(
 				}
 
 				for i := 0; i < len(data); i += BPFMapDefSize {
-					bpfMap := &BPFGenericMap{
-						AbstractMap: AbstractMap{
-							Definition: BPFMapDef{
-								Type:       bpftypes.BPFMapType(elfFile.ByteOrder.Uint32(data[i : i+4])),
-								KeySize:    elfFile.ByteOrder.Uint32(data[i+4 : i+8]),
-								ValueSize:  elfFile.ByteOrder.Uint32(data[i+8 : i+12]),
-								MaxEntries: elfFile.ByteOrder.Uint32(data[i+12 : i+16]),
-								Flags:      bpftypes.BPFMapFlags(elfFile.ByteOrder.Uint32(data[i+16 : i+20])),
-							},
+					abstractMap := AbstractMap{
+						Definition: BPFMapDef{
+							Type:       bpftypes.BPFMapType(elfFile.ByteOrder.Uint32(data[i : i+4])),
+							KeySize:    elfFile.ByteOrder.Uint32(data[i+4 : i+8]),
+							ValueSize:  elfFile.ByteOrder.Uint32(data[i+8 : i+12]),
+							MaxEntries: elfFile.ByteOrder.Uint32(data[i+12 : i+16]),
+							Flags:      bpftypes.BPFMapFlags(elfFile.ByteOrder.Uint32(data[i+16 : i+20])),
 						},
 					}
 
@@ -283,10 +281,10 @@ func parseElf(
 							continue
 						}
 
-						err = bpfMap.Name.SetString(symbol.Name)
+						err = abstractMap.Name.SetString(symbol.Name)
 						if err != nil {
 							if settings.TruncateNames && errors.Is(err, ErrObjNameToLarge) {
-								err = bpfMap.Name.SetString(symbol.Name[:bpftypes.BPF_OBJ_NAME_LEN-1])
+								err = abstractMap.Name.SetString(symbol.Name[:bpftypes.BPF_OBJ_NAME_LEN-1])
 								if err != nil {
 									return bpfElf, fmt.Errorf("failed to truncate map name: %w", err)
 								}
@@ -298,7 +296,7 @@ func parseElf(
 						break
 					}
 
-					if bpfMap.Name.String() == "" {
+					if abstractMap.Name.String() == "" {
 						return bpfElf, fmt.Errorf(
 							"unable to find name in symbol table for map at index %d in section '%s'",
 							i,
@@ -308,7 +306,23 @@ func parseElf(
 
 					// TODO map name duplicate check
 
-					bpfElf.Maps[bpfMap.Name.String()] = bpfMap
+					var bpfMap BPFMap
+					switch abstractMap.Definition.Type {
+					case bpftypes.BPF_MAP_TYPE_PROG_ARRAY:
+						bpfMap = &ProgArrayMap{
+							AbstractMap: abstractMap,
+						}
+					case bpftypes.BPF_MAP_TYPE_XSKMAP:
+						bpfMap = &XSKMap{
+							AbstractMap: abstractMap,
+						}
+					default:
+						bpfMap = &BPFGenericMap{
+							AbstractMap: abstractMap,
+						}
+					}
+
+					bpfElf.Maps[abstractMap.Name.String()] = bpfMap
 				}
 
 				continue

@@ -64,6 +64,14 @@ type BPFProgramLoadSettings struct {
 	VerifierLogSize  int
 }
 
+func (p *BPFProgram) Fd() (bpfsys.BPFfd, error) {
+	if !p.loaded {
+		return 0, fmt.Errorf("program is not loaded")
+	}
+
+	return p.fd, nil
+}
+
 func (p *BPFProgram) Load(settings BPFProgramLoadSettings) (log string, err error) {
 	if settings.ProgramType == bpftypes.BPF_PROG_TYPE_UNSPEC {
 		return "", fmt.Errorf("program type unspecified")

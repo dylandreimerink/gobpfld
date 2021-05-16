@@ -67,7 +67,7 @@ Features/tasks in this list are commonly used/requested because they are used in
 * Attach to tc (traffic control)
 * Attach to tracepoints
 * Attack to perf events
-* Tailcall support
+* ~~Tailcall support~~
 * ~~Map pinning and unpinning~~
 * ~~Bulk map ops~~
 * ~~Program pinning and unpinning~~
@@ -83,6 +83,7 @@ Features/tasks in this list are not critical for most users but still important 
 * ~~XSK/AF_XDP support (useful for kernel bypass and packet capture)~~
 * XSK multiple sockets per netdev,queue pair (currently only one socket per pair is supported)
 * Program testing (Being able to unit test an XDP program would be great)
+* Ringbuffer map support
 * Support for LWT programs (Light weight tunnel)
 * BTF support (So we have more type info to work with)
 * ARM64 support / testing (ARM is on the rise)

@@ -415,16 +415,22 @@ func (m *BPFGenericMap) GetAndDeleteBatch(keys interface{}, values interface{}, 
 }
 
 func (m *BPFGenericMap) Iterator() MapIterator {
-	// If the kernel has support for batch lookup use the feature
+	// If the kernel doesn't have support for batch lookup, use single lookup
 	if kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapLookupBatch) {
-		return &BatchLookupIterator{
+		return &SingleLookupIterator{
 			BPFMap: m,
 		}
 	}
 
-	// otherwise fallback to the single lookup iterator
+	// The linux kernel (5.11) doesn't support batch lookup for per-cpu maps
+	if m.isPerCPUMap() {
+		return &SingleLookupIterator{
+			BPFMap: m,
+		}
+	}
 
-	return &SingleLookupIterator{
+	// If there is no reason not to use the batch lookup iterator, use it
+	return &BatchLookupIterator{
 		BPFMap: m,
 	}
 }

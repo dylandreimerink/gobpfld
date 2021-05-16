@@ -48,6 +48,16 @@ var (
 // at a time. A multi queue allows you to bundle all of these sockets so you get a socket for the whole netdevice.
 //
 // An alternative use for the multi socket is to add sockets from multiple netdevices.
+//
+// TODO look into using epoll for multi sockets. Using poll for single sockets still makes sense since there is always
+//  1 fd, but for multi sockets we can have much more. For high-end NICs with ~40 rx/tx queues(mallanox for example)
+//  it makes sense to start using epoll since it is supposed to scale better. Should make it configurable when adding
+//  support in case freeBSD or other unix-like os adds XSK support since epoll is non-POSIX
+//
+// TODO dynamic socket adding/removing. Should not be to hard, the main edge case to solve is dealing with
+//  pending/blocking syscalls for read/write. But presumably epoll can allow us to dynamically add/remove
+//  fds without interupting the reads/writes. Otherwise adding/removing sockets will have to request both the
+//  rmu and wmu.
 type XSKMultiSocket struct {
 	sockets []*XSKSocket
 

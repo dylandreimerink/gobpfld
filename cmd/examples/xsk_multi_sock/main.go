@@ -154,7 +154,7 @@ func main() {
 	}
 
 	// Add all sockets to the xskmap, index by the queue number.
-	for i := 0; i < queues; i++ {
+	for i := uint32(0); i < uint32(queues); i++ {
 		err = xskmap.Set(i, sockets[i])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error while setting xsksock in map: %s\n", err.Error())
