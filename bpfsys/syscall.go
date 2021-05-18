@@ -12,7 +12,7 @@ import (
 )
 
 // ENOTSUPP - Operation is not supported
-var ENOTSUPP = syscall.Errno(524)
+const ENOTSUPP = syscall.Errno(524)
 
 // a map of string translations for syscall errors which are no included in the standard library
 var nonStdErrors = map[syscall.Errno]string{
@@ -24,11 +24,11 @@ var nonStdErrors = map[syscall.Errno]string{
 var ErrNotSupported = errors.New("feature not supported by kernel version")
 
 type BPFSyscallError struct {
-	// The underlaying syscall error number
-	Errno syscall.Errno
 	// Context specific error information since the same code can have different
 	// meaning depending on context
 	Err string
+	// The underlaying syscall error number
+	Errno syscall.Errno
 }
 
 func (e *BPFSyscallError) Error() string {
@@ -171,9 +171,12 @@ func MapUpdateElem(attr *BPFAttrMapElem) error {
 	err := bpfNoReturn(bpftypes.BPF_MAP_UPDATE_ELEM, attr, int(attr.Size()))
 	if syserr, ok := err.(*BPFSyscallError); ok {
 		syserr.Err = map[syscall.Errno]string{
-			syscall.E2BIG:  "The number of elements in the map reached the *max_entries* limit specified at map creation time.",
-			syscall.EEXIST: "attr.Flags specifies BPFMapElemNoExists and the element with attr.Key already exists in the map.",
-			syscall.ENOENT: "attr.Flags specifies BPFMapElemExists and the element with attr.Key does not exist in the map",
+			syscall.E2BIG: "The number of elements in the map reached the *max_entries* limit specified at map " +
+				"creation time.",
+			syscall.EEXIST: "attr.Flags specifies BPFMapElemNoExists and the element with attr.Key already exists " +
+				"in the map.",
+			syscall.ENOENT: "attr.Flags specifies BPFMapElemExists and the element with attr.Key does not exist " +
+				"in the map",
 		}[syserr.Errno]
 		return syserr
 	}
@@ -370,7 +373,8 @@ func ProgramTestRun(attr *BPFAttrProgTestRun) error {
 	if syserr, ok := err.(*BPFSyscallError); ok {
 		syserr.Err = map[syscall.Errno]string{
 			syscall.ENOSPC: "Either attr.DataSizeOut or attr.CtxSizeOut is too small",
-			ENOTSUPP:       "This command is not supported by the program type of the program referred to by attr.ProgFD",
+			ENOTSUPP: "This command is not supported by the program type of the program referred to " +
+				"by attr.ProgFD",
 		}[syserr.Errno]
 		return syserr
 	}
@@ -695,9 +699,12 @@ func MapUpdateBatch(attr *BPFAttrMapBatch) error {
 	err := bpfNoReturn(bpftypes.BPF_MAP_UPDATE_BATCH, attr, int(attr.Size()))
 	if syserr, ok := err.(*BPFSyscallError); ok {
 		syserr.Err = map[syscall.Errno]string{
-			syscall.E2BIG:  "the number of elements in the map reached the *max_entries* limit specified at map creation time",
-			syscall.EEXIST: "attr.Flags specifies BPFMapElemNoExists and the element with attr.Keys[*] already exists in the map",
-			syscall.ENOENT: "attr.Flags specifies BPFMapElemExists and the element with attr.Keys[*] does not exist in the map",
+			syscall.E2BIG: "the number of elements in the map reached the *max_entries* limit specified at map " +
+				"creation time",
+			syscall.EEXIST: "attr.Flags specifies BPFMapElemNoExists and the element with attr.Keys[*] already " +
+				"exists in the map",
+			syscall.ENOENT: "attr.Flags specifies BPFMapElemExists and the element with attr.Keys[*] does not " +
+				"exist in the map",
 		}[syserr.Errno]
 		return syserr
 	}
@@ -844,7 +851,15 @@ type Socklen uint32
 // Getsockopt is a public version of the syscall.getsockopt without additional wrappers which allows us to use any
 // value type we want. But does require the usage of unsafe.
 func Getsockopt(s int, level int, name int, val unsafe.Pointer, vallen *Socklen) (err error) {
-	_, _, e1 := syscall.Syscall6(syscall.SYS_GETSOCKOPT, uintptr(s), uintptr(level), uintptr(name), uintptr(val), uintptr(unsafe.Pointer(vallen)), 0)
+	_, _, e1 := syscall.Syscall6(
+		syscall.SYS_GETSOCKOPT,
+		uintptr(s),
+		uintptr(level),
+		uintptr(name),
+		uintptr(val),
+		uintptr(unsafe.Pointer(vallen)),
+		0,
+	)
 	if e1 != 0 {
 		err = &BPFSyscallError{
 			Errno: e1,
@@ -856,7 +871,15 @@ func Getsockopt(s int, level int, name int, val unsafe.Pointer, vallen *Socklen)
 // Setsockopt is a public version of the syscall.setsockopt without additional wrappers which allows us to use any
 // value type we want. But does require the usage of unsafe.
 func Setsockopt(s int, level int, name int, val unsafe.Pointer, vallen uintptr) (err error) {
-	_, _, e1 := syscall.Syscall6(syscall.SYS_SETSOCKOPT, uintptr(s), uintptr(level), uintptr(name), uintptr(val), uintptr(vallen), 0)
+	_, _, e1 := syscall.Syscall6(
+		syscall.SYS_SETSOCKOPT,
+		uintptr(s),
+		uintptr(level),
+		uintptr(name),
+		uintptr(val),
+		vallen,
+		0,
+	)
 	if e1 != 0 {
 		err = &BPFSyscallError{
 			Errno: e1,
@@ -877,7 +900,7 @@ func Bind(s int, addr unsafe.Pointer, addrlen Socklen) (err error) {
 	return
 }
 
-// Single-word zero for use when we need a valid pointer to 0 bytes.
+// Zero single-word zero for use when we need a valid pointer to 0 bytes.
 // See mksyscall.pl.
 var Zero uintptr
 
@@ -890,7 +913,15 @@ func Sendto(s int, buf []byte, flags int, to unsafe.Pointer, addrlen Socklen) (e
 	} else {
 		_p0 = unsafe.Pointer(&Zero)
 	}
-	_, _, e1 := syscall.Syscall6(syscall.SYS_SENDTO, uintptr(s), uintptr(_p0), uintptr(len(buf)), uintptr(flags), uintptr(to), uintptr(addrlen))
+	_, _, e1 := syscall.Syscall6(
+		syscall.SYS_SENDTO,
+		uintptr(s),
+		uintptr(_p0),
+		uintptr(len(buf)),
+		uintptr(flags),
+		uintptr(to),
+		uintptr(addrlen),
+	)
 	if e1 != 0 {
 		err = &BPFSyscallError{
 			Errno: e1,

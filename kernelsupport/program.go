@@ -70,7 +70,7 @@ const (
 	KFeatProgSKLookup
 
 	// An end marker for enumeration, not an actual feature flag
-	kFeatProgMax
+	kFeatProgMax //nolint:revive // leading k is used to stay consistent with exported vars
 )
 
 // Has returns true if 'ps' has all the specified flags

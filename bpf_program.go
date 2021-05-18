@@ -25,7 +25,7 @@ func NewBPFProgram() *BPFProgram {
 type BPFProgram struct {
 	// Name of the program
 	Name    ObjName
-	Licence string
+	License string
 	// The actual instructions of the program
 	Instructions []ebpf.RawInstruction
 	// Locations where map fds need to be inserted into the
@@ -48,7 +48,7 @@ type BPFProgram struct {
 const defaultBPFVerifierLogSize = 1 * 1024 * 1024 // 1MB
 
 type BPFProgramLoadSettings struct {
-	// The type of eBPF program, this determins how the program will be verified and to which
+	// The type of eBPF program, this determines how the program will be verified and to which
 	// attach point it can attach.
 	ProgramType bpftypes.BPFProgType
 	// A hint to the verifier about where you are going to attach the program.
@@ -79,10 +79,10 @@ func (p *BPFProgram) Load(settings BPFProgramLoadSettings) (log string, err erro
 
 	// If the given program type is not supported by the current kernel version
 	// return a verbose error instead of a syscall error
-	kProgFeat, found := progTypeToKFeature[settings.ProgramType]
+	kernProgFeat, found := progTypeToKFeature[settings.ProgramType]
 	// If there is no feature defined for a type, assume it is always supported
 	if found {
-		if !kernelsupport.CurrentFeatures.Program.Has(kProgFeat) {
+		if !kernelsupport.CurrentFeatures.Program.Has(kernProgFeat) {
 			return "", fmt.Errorf(
 				"program type '%s' not supported: %w",
 				settings.ProgramType,
@@ -99,7 +99,7 @@ func (p *BPFProgram) Load(settings BPFProgramLoadSettings) (log string, err erro
 
 	// TODO check if helper functions used in program are supported by current kernel version
 
-	licenceCStr := StringToCStrBytes(p.Licence)
+	licenseCStr := StringToCStrBytes(p.License)
 
 	// Rewrite / patch instructions with map fds
 	for mapName, offsets := range p.MapFDLocations {
@@ -121,7 +121,7 @@ func (p *BPFProgram) Load(settings BPFProgramLoadSettings) (log string, err erro
 			instIndex := offset / uint64(ebpf.BPFInstSize)
 			inst := &p.Instructions[instIndex]
 
-			inst.SetSourceReg(BPFInstSrcRegHashMapFD)
+			inst.SetSourceReg(ebpf.BPF_PSEUDO_MAP_FD)
 			inst.Imm = int32(bpfMap.GetFD())
 		}
 	}
@@ -137,7 +137,7 @@ func (p *BPFProgram) Load(settings BPFProgramLoadSettings) (log string, err erro
 		ProgramType:        settings.ProgramType,
 		InsnCnt:            uint32(len(p.Instructions)),
 		Insns:              uintptr(unsafe.Pointer(&p.Instructions[0])),
-		License:            uintptr(unsafe.Pointer(&licenceCStr[0])),
+		License:            uintptr(unsafe.Pointer(&licenseCStr[0])),
 		LogLevel:           settings.VerifierLogLevel,
 		LogSize:            uint32(settings.VerifierLogSize),
 		LogBuf:             uintptr(unsafe.Pointer(&verifierLogBytes[0])),
@@ -203,9 +203,9 @@ var progTypeToKFeature = map[bpftypes.BPFProgType]kernelsupport.ProgramSupport{
 }
 
 // Pin pins the program to a location in the bpf filesystem, since the file system now also holds a reference
-// to the program, the original creator of the program can terminate without triggering the program to be closed as well.
-// A program can be unpinned from the bpf FS by another process thus transfering it or persisting it across
-// multiple runs of the same program.
+// to the program, the original creator of the program can terminate without triggering the program to be
+// closed as well. A program can be unpinned from the bpf FS by another process thus transferring it or persisting
+// it across multiple runs of the same program.
 func (p *BPFProgram) Pin(relativePath string) error {
 	if !p.loaded {
 		return fmt.Errorf("can't pin an unloaded program")
@@ -215,7 +215,7 @@ func (p *BPFProgram) Pin(relativePath string) error {
 }
 
 // Unpin captures the file descriptor of the program at the given 'relativePath' from the kernel.
-// If 'deletePin' is true the bpf FS pin will be removed after successfully loading the program, thus transfering
+// If 'deletePin' is true the bpf FS pin will be removed after successfully loading the program, thus transferring
 // ownership of the program in a scenario where the program is not shared between multiple userspace programs.
 // Otherwise the pin will keep existing which will cause the map to not be deleted when this program exits.
 func (p *BPFProgram) Unpin(relativePath string, deletePin bool) error {
@@ -236,12 +236,12 @@ func (p *BPFProgram) Unpin(relativePath string, deletePin bool) error {
 
 	p.Name = progInfo.Name
 
-	p.Licence = "Not GPL compatible"
+	p.License = "Not GPL compatible"
 	if progInfo.Flags&bpftypes.ProgInfoFlagGPLCompatible > 0 {
-		// This is technically incorrect, but since there is no way to interrogate the kernel for the exact licence
-		// this is the only way to ensure that after reloading the program the kernel recognises the program as
+		// This is technically incorrect, but since there is no way to interrogate the kernel for the exact license
+		// this is the only way to ensure that after reloading the program the kernel recognizes the program as
 		// GPL compatible.
-		p.Licence = "GPL"
+		p.License = "GPL"
 	}
 
 	p.Instructions = progInfo.XlatedProgInsns
@@ -290,11 +290,12 @@ const (
 const (
 	// If set asks the netlink to only attach the program if there is non at the moment.
 	// If unset, the existing XDP program will be replaced
-	XDP_FLAGS_UPDATE_IF_NOEXIST = 1 << iota
-	XDP_FLAGS_SKB_MODE
-	XDP_FLAGS_DRV_MODE
-	XDP_FLAGS_HW_MODE
-	XDP_FLAGS_REPLACE
+	_XDP_FLAGS_UPDATE_IF_NOEXIST = 1 << iota
+	_XDP_FLAGS_SKB_MODE
+	_XDP_FLAGS_DRV_MODE
+	_XDP_FLAGS_HW_MODE
+	// TODO add support for explicit program replacement https://www.spinics.net/lists/netdev/msg640357.html
+	_XDP_FLAGS_REPLACE //nolint:deadcode,varcheck // reserved for future use
 )
 
 type BPFProgramXDPLinkAttachSettings struct {
@@ -310,8 +311,13 @@ type BPFProgramXDPLinkAttachSettings struct {
 }
 
 var (
-	ErrProgramNotLoaded            = errors.New("the program is not yet loaded and thus can't be attached")
-	ErrProgramNotXDPType           = errors.New("the program is not loaded as an XDP program and thus can't be attached as such")
+	// ErrProgramNotLoaded is returned when attempting to attach a non-loaded program
+	ErrProgramNotLoaded = errors.New("the program is not yet loaded and thus can't be attached")
+	// ErrProgramNotXDPType is returned when attempting to attach a non-XDP program to a netdev
+	ErrProgramNotXDPType = errors.New("the program is not loaded as an XDP program and thus can't be " +
+		"attached as such")
+	// ErrNetlinkAlreadyHasXDPProgram is returned when attempting to attach a program to an
+	// netdev that already has an XDP program attached
 	ErrNetlinkAlreadyHasXDPProgram = errors.New("the netlink already has an XDP program attached")
 )
 
@@ -334,16 +340,16 @@ func (p *BPFProgram) XDPLinkAttach(settings BPFProgramXDPLinkAttachSettings) err
 	flags := 0
 	if !settings.Replace {
 		//
-		flags |= XDP_FLAGS_UPDATE_IF_NOEXIST
+		flags |= _XDP_FLAGS_UPDATE_IF_NOEXIST
 	}
 
 	switch settings.XDPMode {
 	case XDPModeSKB:
-		flags |= XDP_FLAGS_SKB_MODE
+		flags |= _XDP_FLAGS_SKB_MODE
 	case XDPModeDRV:
-		flags |= XDP_FLAGS_DRV_MODE
+		flags |= _XDP_FLAGS_DRV_MODE
 	case XDPModeHW:
-		flags |= XDP_FLAGS_HW_MODE
+		flags |= _XDP_FLAGS_HW_MODE
 	}
 
 	for i := 0; i < 3; i++ {
@@ -357,21 +363,21 @@ func (p *BPFProgram) XDPLinkAttach(settings BPFProgramXDPLinkAttachSettings) err
 				}
 
 				// If mode == hardware
-				if flags&XDP_FLAGS_HW_MODE > 0 {
+				if flags&_XDP_FLAGS_HW_MODE > 0 {
 					// Remove hardware flag
-					flags = flags ^ XDP_FLAGS_HW_MODE
+					flags = flags ^ _XDP_FLAGS_HW_MODE
 					// Try driver mode
-					flags |= XDP_FLAGS_DRV_MODE
+					flags |= _XDP_FLAGS_DRV_MODE
 
 					continue
 				}
 
 				// If mode == driver
-				if flags&XDP_FLAGS_DRV_MODE > 0 {
+				if flags&_XDP_FLAGS_DRV_MODE > 0 {
 					// Remove hardware flag
-					flags = flags ^ XDP_FLAGS_DRV_MODE
+					flags = flags ^ _XDP_FLAGS_DRV_MODE
 					// Try SKB mode
-					flags |= XDP_FLAGS_SKB_MODE
+					flags |= _XDP_FLAGS_SKB_MODE
 
 					continue
 				}
@@ -438,20 +444,22 @@ func (p *BPFProgram) XDPLinkDetach(settings BPFProgramXDPLinkDetachSettings) err
 	return nil
 }
 
-var (
-	ErrProgramNotSocketFilterType = errors.New("the program is not loaded as an socket filter program and thus can't be attached as such")
-)
+// ErrProgramNotSocketFilterType is returned when attempting to attach a non-socket filter program to a socket.
+var ErrProgramNotSocketFilterType = errors.New("the program is not loaded as an socket filter program and " +
+	"thus can't be attached as such")
 
 // SocketAttachControlFunc attaches a "socket filter" program to a network socket. This function is meant to be used
 // as function pointer in net.Dialer.Control or net.ListenConfig.Control.
 func (p *BPFProgram) SocketAttachControlFunc(network, address string, c syscall.RawConn) error {
 	var err error
-	c.Control(func(fd uintptr) {
+	cerr := c.Control(func(fd uintptr) {
 		err = p.SocketAttach(fd)
 	})
-
 	if err != nil {
 		return fmt.Errorf("socket attach: %w", err)
+	}
+	if cerr != nil {
+		return fmt.Errorf("socket attach: %w", cerr)
 	}
 
 	return nil
@@ -490,7 +498,7 @@ type BPFProgramSocketFilterDetachSettings struct {
 func (p *BPFProgram) SocketDettach(settings BPFProgramSocketFilterDetachSettings) error {
 	if settings.All {
 		for _, fd := range p.AttachedSocketFDs {
-			err := syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_DETACH_BPF, int(p.fd))
+			err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, unix.SO_DETACH_BPF, int(p.fd))
 			if err != nil {
 				return fmt.Errorf("syscall setsockopt: %w", err)
 			}
@@ -501,7 +509,7 @@ func (p *BPFProgram) SocketDettach(settings BPFProgramSocketFilterDetachSettings
 		return nil
 	}
 
-	err := syscall.SetsockoptInt(int(settings.Fd), syscall.SOL_SOCKET, unix.SO_DETACH_BPF, int(p.fd))
+	err := syscall.SetsockoptInt(settings.Fd, syscall.SOL_SOCKET, unix.SO_DETACH_BPF, int(p.fd))
 	if err != nil {
 		return fmt.Errorf("syscall setsockopt: %w", err)
 	}
@@ -527,7 +535,7 @@ func (p *BPFProgram) DecodeToReader(w io.Writer) error {
 	}
 
 	// The eBPF program has no lables, just offsets within the program.
-	// Since those are hard to interpert over long distance jumps we add
+	// Since those are hard to interpret over long distance jumps we add
 	// fake labels called LBLxx, since jumps can occur backwards we will
 	// first need to loop over the program to calculate labels and label
 	// references.
@@ -569,7 +577,7 @@ func (p *BPFProgram) DecodeToReader(w io.Writer) error {
 			// If not, create one
 			label = fmt.Sprintf("LBL%d", labelIndex)
 			labels[i+offset+1] = label
-			labelIndex += 1
+			labelIndex++
 		}
 
 		labelRefs[i] = label
@@ -632,11 +640,18 @@ func NewObjName(initialName string) (*ObjName, error) {
 	return on, on.SetString(initialName)
 }
 
+// ErrObjNameToLarge is returned when a given string or byte slice is to large.
+// The kernel limits names to 15 usable bytes plus a null-termination char
 var ErrObjNameToLarge = errors.New("object name to large")
 
 func (on *ObjName) SetBytes(strBytes []byte) error {
 	if len(strBytes) > bpftypes.BPF_OBJ_NAME_LEN-1 {
-		return fmt.Errorf("%w: limit is %d bytes, length: %d", ErrObjNameToLarge, bpftypes.BPF_OBJ_NAME_LEN-1, len(strBytes))
+		return fmt.Errorf(
+			"%w: limit is %d bytes, length: %d",
+			ErrObjNameToLarge,
+			bpftypes.BPF_OBJ_NAME_LEN-1,
+			len(strBytes),
+		)
 	}
 
 	on.str = string(strBytes)
@@ -654,7 +669,12 @@ func (on *ObjName) SetBytes(strBytes []byte) error {
 func (on *ObjName) SetString(str string) error {
 	strBytes := []byte(str)
 	if len(strBytes) > bpftypes.BPF_OBJ_NAME_LEN-1 {
-		return fmt.Errorf("%w: limit is %d bytes, length: %d", ErrObjNameToLarge, bpftypes.BPF_OBJ_NAME_LEN-1, len(strBytes))
+		return fmt.Errorf(
+			"%w: limit is %d bytes, length: %d",
+			ErrObjNameToLarge,
+			bpftypes.BPF_OBJ_NAME_LEN-1,
+			len(strBytes),
+		)
 	}
 
 	on.str = str
@@ -676,9 +696,3 @@ func (on *ObjName) GetCstr() [bpftypes.BPF_OBJ_NAME_LEN]byte {
 func (on *ObjName) String() string {
 	return on.str
 }
-
-const (
-	// If BPFInstSrcRegHashMapFD is the value of a instruction source register, it indicates that the value
-	// in K refers to a BPF map file descriptor
-	BPFInstSrcRegHashMapFD = 0x01
-)

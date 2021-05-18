@@ -113,7 +113,7 @@ func (m *AbstractMap) Unload() error {
 
 // Pin pins the map to a location in the bpf filesystem, since the file system now also holds a reference
 // to the map the original creator of the map can terminate without triggering the map to be closed as well.
-// A map can be unpinned from the bpf FS by another process thus transfering it or persisting it across
+// A map can be unpinned from the bpf FS by another process thus transferring it or persisting it across
 // multiple runs of the same program.
 func (m *AbstractMap) Pin(relativePath string) error {
 	if !m.Loaded {
@@ -126,7 +126,7 @@ func (m *AbstractMap) Pin(relativePath string) error {
 // Unpin captures the file descriptor of the map at the given 'relativePath' from the kernel.
 // The definition in this map must match the definition of the pinned map, otherwise this function
 // will return an error since mismatched definitions might cause seemingly unrelated bugs in other functions.
-// If 'deletePin' is true the bpf FS pin will be removed after successfully loading the map, thus transfering
+// If 'deletePin' is true the bpf FS pin will be removed after successfully loading the map, thus transferring
 // ownership of the map in a scenario where the map is not shared between multiple programs.
 // Otherwise the pin will keep existing which will cause the map to not be deleted when this program exits.
 func (m *AbstractMap) Unpin(relativePath string, deletePin bool) error {
@@ -162,7 +162,8 @@ func (m *AbstractMap) Unpin(relativePath string, deletePin bool) error {
 		// not be using it. If we leak the FD the map will never close.
 		fdErr := m.Fd.Close()
 		if fdErr != nil {
-			return fmt.Errorf("pinned map definition doesn't match definition of current map, new fd wasn't closed: %w", err)
+			return fmt.Errorf("pinned map definition doesn't match definition of current map, "+
+				"new fd wasn't closed: %w", err)
 		}
 
 		return fmt.Errorf("pinned map definition doesn't match definition of current map")
@@ -234,7 +235,6 @@ func (m *AbstractMap) toValuePtr(value interface{}) (uintptr, error) {
 	// If the map type is a per CPU map, the value must be an array
 	// or slice with at least as much elements as the system has CPU cores
 	if m.isPerCPUMap() {
-
 		switch elem.Kind() {
 		case reflect.Array:
 			arrayElem := elem.Elem()
@@ -297,6 +297,7 @@ func (m *AbstractMap) toValuePtr(value interface{}) (uintptr, error) {
 	return reflect.ValueOf(value).Pointer(), nil
 }
 
+// BPFMapDefSize is the size of BPFMapDef in bytes
 var BPFMapDefSize = int(unsafe.Sizeof(BPFMapDef{}))
 
 type BPFMapDef struct {
@@ -359,7 +360,6 @@ func (def BPFMapDef) Validate() error {
 }
 
 func (def BPFMapDef) validateFlags() error {
-
 	requiredFlags := map[bpftypes.BPFMapType][]bpftypes.BPFMapFlags{
 		bpftypes.BPF_MAP_TYPE_LPM_TRIE: {
 			bpftypes.BPFMapFlagsNoPreAlloc,

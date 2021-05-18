@@ -2,8 +2,7 @@ package ebpf
 
 var _ Instruction = (*Exit)(nil)
 
-type Exit struct {
-}
+type Exit struct{}
 
 func (e Exit) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{

@@ -68,7 +68,7 @@ const (
 	KFeatAttachXDP
 
 	// An end marker for enumeration, not an actual feature flag
-	kFeatAttachMax
+	kFeatAttachMax //nolint:revive // leading k is used to stay consistent with exported vars
 )
 
 // Has returns true if 'as' has all the specified flags

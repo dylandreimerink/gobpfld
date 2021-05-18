@@ -21,7 +21,7 @@ import (
 func main() {
 	program := &gobpfld.BPFProgram{
 		Name:    gobpfld.MustNewObjName("xdp_stats1"),
-		Licence: "GPL",
+		License: "GPL",
 		Maps: map[string]gobpfld.BPFMap{
 			"xdp_stats_map": &gobpfld.BPFGenericMap{
 				AbstractMap: gobpfld.AbstractMap{

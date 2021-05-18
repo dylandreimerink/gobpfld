@@ -4,6 +4,18 @@ import "fmt"
 
 var _ Instruction = (*LoadConstant)(nil)
 
+const (
+	// BPF_PSEUDO_MAP_FD is used in the SRC register to mark the imm value as a map file descriptor
+	// https://elixir.bootlin.com/linux/v5.12.4/source/include/uapi/linux/bpf.h#L376
+	BPF_PSEUDO_MAP_FD = 1
+	// BPF_PSEUDO_MAP_FD_VALUE is used in the SRC register to mark the imm value as a map value
+	// https://elixir.bootlin.com/linux/v5.12.4/source/include/uapi/linux/bpf.h#L385
+	BPF_PSEUDO_MAP_FD_VALUE = 2
+	// BPF_PSEUDO_BTF_ID is used in the SRC register to mark the imm value as BTF ID
+	// https://elixir.bootlin.com/linux/v5.12.4/source/include/uapi/linux/bpf.h#L376
+	BPF_PSEUDO_BTF_ID = 3
+)
+
 type LoadConstant struct {
 	Dest Register
 	Val  int32
@@ -36,11 +48,11 @@ func (lc LoadConstant64bit) Raw() ([]RawInstruction, error) {
 }
 
 func (lc LoadConstant64bit) String() string {
-	if lc.Src == 1 {
+	if lc.Src == BPF_PSEUDO_MAP_FD {
 		return fmt.Sprintf("%s = map fd#%d", lc.Dest, lc.Val1)
 	}
 
-	if lc.Src == 2 {
+	if lc.Src == BPF_PSEUDO_MAP_FD_VALUE {
 		return fmt.Sprintf("%s = map value#%d[%d]", lc.Dest, lc.Val1, lc.Val2)
 	}
 
@@ -98,8 +110,8 @@ var _ Instruction = (*LoadSocketBuf)(nil)
 
 type LoadSocketBuf struct {
 	Src    Register
-	Offset int32
 	Size   Size
+	Offset int32
 }
 
 func (lm LoadSocketBuf) Raw() ([]RawInstruction, error) {

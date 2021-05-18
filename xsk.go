@@ -21,8 +21,8 @@ import (
 // If p to small to fit the whole frame, the remaining bytes of the frame are discarded. The next call to ReadFrame
 // will start at the next frame.
 //
-// n will be set to the number of bytes read from the the frame. err is non nil if any error has occured during the
-// process. If both n is 0 and err is nil nothing was read for an expected reason like a timout or external interupt.
+// n will be set to the number of bytes read from the the frame. err is non nil if any error has occurred during the
+// process. If both n is 0 and err is nil nothing was read for an expected reason like a timout or external interrupt.
 type FrameReader interface {
 	ReadFrame(p []byte) (n int, err error)
 }
@@ -56,7 +56,7 @@ var (
 //
 // TODO dynamic socket adding/removing. Should not be to hard, the main edge case to solve is dealing with
 //  pending/blocking syscalls for read/write. But presumably epoll can allow us to dynamically add/remove
-//  fds without interupting the reads/writes. Otherwise adding/removing sockets will have to request both the
+//  fds without interrupting the reads/writes. Otherwise adding/removing sockets will have to request both the
 //  rmu and wmu.
 type XSKMultiSocket struct {
 	sockets []*XSKSocket
@@ -154,7 +154,7 @@ func (xms *XSKMultiSocket) ReadFrame(p []byte) (n int, err error) {
 	if desc == nil {
 		n, err := unix.Poll(pollFds, xms.readTimeout)
 		if err != nil {
-			// Somtimes a poll is interupted by a signal, no a real error
+			// Sometimes a poll is interrupted by a signal, no a real error
 			// lets treat it like a timeout
 			if err == syscall.EINTR {
 				return 0, nil
@@ -347,7 +347,7 @@ func (xms *XSKMultiSocket) ReadLease() (lease *XSKLease, err error) {
 	if desc == nil {
 		n, err := unix.Poll(pollFds, xms.readTimeout)
 		if err != nil {
-			// Somtimes a poll is interupted by a signal, no a real error
+			// Sometimes a poll is interrupted by a signal, no a real error
 			// lets treat it like a timeout
 			if err == syscall.EINTR {
 				return nil, nil
@@ -521,7 +521,7 @@ func (dr *xskDescRing) Dequeue() *descriptor {
 	// The linux kernel uses the wraparound of an integer to reset the consumer and
 	// producer. And since ring buffers are always a factor of 2 we can just throw away
 	// all bits which fall outsize of this size to get a always increasing offset
-	// beteen 0 and dr.elemCount
+	// between 0 and dr.elemCount
 	off := *consumer & (dr.elemCount - 1)
 	desc := (*descriptor)(unsafe.Pointer(uintptr(dr.ring) + uintptr(off)*descSize))
 
@@ -542,7 +542,7 @@ func (dr *xskDescRing) Enqueue(desc descriptor) error {
 	// The linux kernel uses the wraparound of an integer to reset the consumer and
 	// producer. And since ring buffers are always a factor of 2 we can just throw away
 	// all bits which fall outsize of this size to get a always increasing offset
-	// beteen 0 and dr.elemCount
+	// between 0 and dr.elemCount
 	off := *producer & (dr.elemCount - 1)
 
 	// Write the address to the current producer pos
@@ -571,7 +571,7 @@ func (ar *xskAddrRing) Dequeue() *uint64 {
 	// The linux kernel uses the wraparound of an integer to reset the consumer and
 	// producer. And since ring buffers are always a factor of 2 we can just throw away
 	// all bits which fall outsize of this size to get a always increasing offset
-	// beteen 0 and ar.elemCount
+	// between 0 and ar.elemCount
 	off := *consumer & (ar.elemCount - 1)
 	addr := (*uint64)(unsafe.Pointer(uintptr(ar.ring) + uintptr(off)*addrSize))
 
@@ -594,7 +594,7 @@ func (ar *xskAddrRing) Enqueue(addr uint64) error {
 	// The linux kernel uses the wraparound of an integer to reset the consumer and
 	// producer. And since ring buffers are always a factor of 2 we can just throw away
 	// all bits which fall outsize of this size to get a always increasing offset
-	// beteen 0 and dr.elemCount
+	// between 0 and dr.elemCount
 	off := *producer & (ar.elemCount - 1)
 
 	// Write the address to the current producer pos
@@ -652,7 +652,7 @@ type umemReg struct {
 	len       uint64
 	chunkSize uint32
 	headroom  uint32
-	flags     uint32
+	flags     uint32 //nolint:structcheck // unused reserved for future use
 }
 
 // struct xdp_ring_offset {
@@ -697,7 +697,7 @@ type descriptor struct {
 	len  uint32
 	// options is reserved and not used, setting it to anything other than 0 is invalid in 5.12.2
 	// https://elixir.bootlin.com/linux/v5.12.2/source/net/xdp/xsk_queue.h#L141
-	options uint32
+	options uint32 //nolint:structcheck // not used but reserved for future use (also for descSize)
 }
 
 var descSize = unsafe.Sizeof(descriptor{})
@@ -803,7 +803,7 @@ func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 	}
 
 	if settings.FrameSize != 2048 && settings.FrameSize != 4096 {
-		// TODO allow frame sizes which are not alligned to 2k but enable
+		// TODO allow frame sizes which are not aligned to 2k but enable
 		// XDP_UMEM_UNALIGNED_CHUNK_FLAG when this happens
 		return nil, fmt.Errorf("frame size must be 2048 or 4096")
 	}
@@ -1020,7 +1020,10 @@ func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 
 	// Give all Rx frames to the kernel
 	for i := 0; i < rxCount; i++ {
-		xskSock.fill.Enqueue(uint64(i * settings.FrameSize))
+		err = xskSock.fill.Enqueue(uint64(i * settings.FrameSize))
+		if err != nil {
+			return nil, fmt.Errorf("fill enqueue: %w", err)
+		}
 	}
 	err = xskSock.wakeupFill()
 	if err != nil {
@@ -1090,6 +1093,7 @@ func (xs *XSKSocket) wakeupTx() error {
 				// These errors occur regulairly when load is high, ignore these errors, the next time
 				// wakeupTx is called it will trigger the kernel to read the full ring anyway.
 				// https://github.com/torvalds/linux/blob/b741596468b010af2846b75f5e75a842ce344a6e/samples/bpf/xdpsock_user.c#L1095
+				//nolint:lll
 				case syscall.EBUSY,
 					syscall.EAGAIN,
 					syscall.ENOBUFS,
@@ -1116,7 +1120,7 @@ func (xs *XSKSocket) dequeueRx() (*descriptor, error) {
 
 		n, err := unix.Poll([]unix.PollFd{{Fd: int32(xs.fd), Events: unix.POLLIN}}, xs.readTimeout)
 		if err != nil {
-			// Somtimes a poll is interupted by a signal, no a real error
+			// Sometimes a poll is interrupted by a signal, no a real error
 			// lets treat it like a timeout
 			if err == syscall.EINTR {
 				return nil, nil
@@ -1309,7 +1313,7 @@ func (xs *XSKSocket) Close() error {
 }
 
 // completionWorker is started when a socket is created and is responsible for dequeueing the completion ring
-// and transfering the free address to the txAddrs chan so they can be re-used
+// and transferring the free address to the txAddrs chan so they can be re-used
 func (xs *XSKSocket) completionWorker() {
 	// As long as the completion ring still is mapped
 	for xs.completion.mmap != nil {

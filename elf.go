@@ -84,7 +84,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 			}
 		}
 
-		// Handle relocation entries which can incluse:
+		// Handle relocation entries which can includes:
 		//  - Map references(need to be resolved at load time)
 		//  - BPF to BPF function calls (can be resolved here)
 		for _, relocEntry := range progRelocTable {
@@ -356,7 +356,7 @@ func parseElf(
 				continue
 			}
 
-			// For other sections, create it as a seperate program
+			// For other sections, create it as a separate program
 
 			program := NewBPFProgram()
 			program.Instructions = instructions
@@ -396,7 +396,10 @@ func parseElf(
 				}
 				symNum := elf.R_SYM64(entry.Info)
 				if uint32(len(symbols)) < symNum {
-					return bpfElf, fmt.Errorf("symbol number in relocation table '%s' does not exist in symbol table", section.Name)
+					return bpfElf, fmt.Errorf(
+						"symbol number in relocation table '%s' does not exist in symbol table",
+						section.Name,
+					)
 				}
 
 				entry.Symbol = &symbols[symNum-1]
@@ -409,10 +412,10 @@ func parseElf(
 		}
 	}
 
-	// Since the licence section may come after a program section, set the license for each program after all sections
+	// Since the license section may come after a program section, set the license for each program after all sections
 	// are parsed.
 	for _, program := range bpfElf.Programs {
-		program.Licence = license
+		program.License = license
 	}
 
 	return bpfElf, nil
@@ -420,13 +423,17 @@ func parseElf(
 
 type ELFRelocTable []ELFRelocEntry
 
-// The BPF ELF reloc types for BPF.
+// ELF_R_BPF The BPF ELF reloc types for BPF.
 // https://github.com/llvm/llvm-project/blob/74d9a76ad3f55c16982ceaa8b6b4a6b7744109b1/llvm/include/llvm/BinaryFormat/ELFRelocs/BPF.def
+//nolint:lll
 type ELF_R_BPF int
 
 const (
-	R_BPF_NONE  ELF_R_BPF = 0
+	// R_BPF_NONE is an invalid relocation type
+	R_BPF_NONE ELF_R_BPF = 0
+	// R_BPF_64_64 indicates that 32 bits should be relocated
 	R_BPF_64_64 ELF_R_BPF = 1
+	// R_BPF_64_32 insicates that 64 bits should be relocated
 	R_BPF_64_32 ELF_R_BPF = 10
 )
 
@@ -440,11 +447,12 @@ type ELFRelocEntry struct {
 func (e *ELFRelocEntry) AbsoluteOffset() (uint64, error) {
 	switch e.Type {
 	case R_BPF_64_64:
-		// Just the absolute offset from the begining of the program section
+		// Just the absolute offset from the beginning of the program section
 		return e.Off, nil
 	case R_BPF_64_32:
-		// Just the absolute offset from the begining of the program section truncated to 32 bits
-		return e.Off & 0x00000000FFFFFFFF, nil
+		// Just the absolute offset from the beginning of the program section truncated to 32 bits
+		const _32bitMask = 0x00000000FFFFFFFF
+		return e.Off & _32bitMask, nil
 	}
 
 	return 0, fmt.Errorf("reloc type not implemented: '%d'", e.Type)

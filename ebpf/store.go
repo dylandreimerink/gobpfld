@@ -6,8 +6,8 @@ var _ Instruction = (*StoreMemoryConstant)(nil)
 
 type StoreMemoryConstant struct {
 	Dest   Register
-	Offset int16
 	Size   Size
+	Offset int16
 	Val    int32
 }
 
@@ -191,15 +191,15 @@ func (ax AtomicXor) Raw() ([]RawInstruction, error) {
 	}, nil
 }
 
-func (ao AtomicXor) String() string {
+func (ax AtomicXor) String() string {
 	sign := "+"
-	offset := ao.Offset
+	offset := ax.Offset
 	if offset < 0 {
 		sign = "-"
 		offset = -offset
 	}
 
-	return fmt.Sprintf("lock *(%s *)(%s %s %d) ^= %s", ao.Size, ao.Dest, sign, offset, ao.Src)
+	return fmt.Sprintf("lock *(%s *)(%s %s %d) ^= %s", ax.Size, ax.Dest, sign, offset, ax.Src)
 }
 
 var _ Instruction = (*AtomicExchange)(nil)
@@ -261,5 +261,8 @@ func (chg AtomicCompareAndWrite) String() string {
 		offset = -offset
 	}
 
-	return fmt.Sprintf("lock if r0 == *(%s *)(%s %s %d): %s = r0; r0 = %s", chg.Size, chg.Dest, sign, offset, chg.Src, chg.Src)
+	return fmt.Sprintf(
+		"lock if r0 == *(%s *)(%s %s %d): %s = r0; r0 = %s",
+		chg.Size, chg.Dest, sign, offset, chg.Src, chg.Src,
+	)
 }

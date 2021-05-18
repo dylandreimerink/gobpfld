@@ -51,15 +51,15 @@ func#5 @147
 
 ## tailcall
 
-This eBPF program demonstrates [Tail calls](https://docs.cilium.io/en/stable/bpf/#tail-calls). It is functionally identiacal to the BPF to BPF example except the functions for the different protocols are implemented as seperate programs linked together using tail calls.
+This eBPF program demonstrates [Tail calls](https://docs.cilium.io/en/stable/bpf/#tail-calls). It is functionally identiacal to the BPF to BPF example except the functions for the different protocols are implemented as separate programs linked together using tail calls.
 
-When tail calling another program the called program fully takes over and never returns back to the original program. This feature has a number of useful use cases, but does require some setup. For example tail calls allows multiple, seperatly compiled programs to cooperate. A security team can write a tool for network auditing and a networking team another program for forwarding, by sticking a small program enfront of both which can make the decition on which program should be called these two programs from different maintainers can run on the same network device. And since they are not the same program they can be seperatly upgraded and have seperate userspace applications to manage both (assuming the userspace programs can coordinate the loading/unloading sequence).
+When tail calling another program the called program fully takes over and never returns back to the original program. This feature has a number of useful use cases, but does require some setup. For example tail calls allows multiple, seperatly compiled programs to cooperate. A security team can write a tool for network auditing and a networking team another program for forwarding, by sticking a small program enfront of both which can make the decition on which program should be called these two programs from different maintainers can run on the same network device. And since they are not the same program they can be seperatly upgraded and have separate userspace applications to manage both (assuming the userspace programs can coordinate the loading/unloading sequence).
 
 Another usecase for a/b testing one or multiple variations of a eBPF program. Yet another is for using multiple generated XDP programs on the same network device. The posibilities are endless realy.
 
 However one must also keep the folloing limitations in mind:
  * Tail calls have a limited depth(max 16 tail calls)
- * Tail calls have no arguments, any data must be passed via the program specific context or via per-cpu maps(because all tail calls will be executed on the same CPU without interuptions between them, per cpu maps can be safely used as scratch buffers)
+ * Tail calls have no arguments, any data must be passed via the program specific context or via per-cpu maps(because all tail calls will be executed on the same CPU without interruptions between them, per cpu maps can be safely used as scratch buffers)
  * Programs can only tail call to other programs of the same type and both must JIT'ed or both interperted, can't mix JIT and interperted eBPF programs.
 
 ## icmp_pcap
@@ -84,7 +84,7 @@ This example is a variation on the xsk_echo_reply example. The main difference i
 
 So by default, in order to use XSK on a whole network device you need to bind a XSK to every RX/TX queue. Since a XSK can only be bound to 1 queue at a time it means you will have to manage a number of them. At first it might seem possible to redirect all frames to one socket since you can pick which socket to use in the XDP program. Unfortunately this doesn't work, XDP is only allowed to redirect to sockets bound on the same queue as where the frame enters. The XSK map is only meant for situations where there is more than one socket bound per queue(not yet supported by GoBPFLD).
 
-To make interacting with multiple sockets easier GoBPFLD provides the `XSKMultiSocket` which can be created using the `NewXSKMultiSocket` function. This multi socket has same functions as the `XSKSocket` except it balances reads and writes between all sockets contained in it. Using the multi socket does mean that reading and writing to the socket is limited to one goroutine. The `XSKMultiSocket` like the `XSKSocket` is not concurrent, only one goroutine can read or write to it at a time. Thus if latency or throughput is important it is recommended to not use the `XSKMultiSocket` and instead start a seperate goroutine for each `XSKSocket`. Do keep in mind that when not using the `XSKMultiSocket` you are responsible for balancing outgoing(TX) packages across the sockets.
+To make interacting with multiple sockets easier GoBPFLD provides the `XSKMultiSocket` which can be created using the `NewXSKMultiSocket` function. This multi socket has same functions as the `XSKSocket` except it balances reads and writes between all sockets contained in it. Using the multi socket does mean that reading and writing to the socket is limited to one goroutine. The `XSKMultiSocket` like the `XSKSocket` is not concurrent, only one goroutine can read or write to it at a time. Thus if latency or throughput is important it is recommended to not use the `XSKMultiSocket` and instead start a separate goroutine for each `XSKSocket`. Do keep in mind that when not using the `XSKMultiSocket` you are responsible for balancing outgoing(TX) packages across the sockets.
 
 The example contains both aproaches which can be selected using a flag.
 

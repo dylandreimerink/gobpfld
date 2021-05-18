@@ -12,7 +12,7 @@ const (
 	// KFeatMiscXSKRingFlags indicates that the kernel version has flags in AF_XDP rings
 	// https://github.com/torvalds/linux/commit/77cd0d7b3f257fd0e3096b4fdcff1a7d38e99e10
 	KFeatMiscXSKRingFlags MiscSupport = iota
-	kFeatMiscMax
+	kFeatMiscMax                      //nolint:revive // leading k is used to stay consistent with exported vars
 )
 
 // Has returns true if 'as' has all the specified flags

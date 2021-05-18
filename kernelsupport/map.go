@@ -42,7 +42,7 @@ const (
 	KFeatMapTaskStorage
 
 	// An end marker for enumeration, not an actual feature flag
-	kFeatMapMax
+	kFeatMapMax //nolint:revive // leading k is used to stay consistent with exported vars
 )
 
 // Has returns true if 'ms' has all the specified flags

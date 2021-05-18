@@ -73,7 +73,7 @@ const (
 	KFeatAPIProgBindMap
 
 	// An end marker for enumeration, not an actual feature flag
-	kFeatAPIMax
+	kFeatAPIMax //nolint:revive // leading k is used to stay consistent with exported vars
 )
 
 // Has returns true if 'as' has all the specified flags
@@ -121,11 +121,11 @@ var apiSupportToString = map[APISupport]string{
 	KFeatAPIProgBindMap:             "Prog bind map",
 }
 
-func (ms APISupport) String() string {
+func (as APISupport) String() string {
 	var apis []string
 	for i := APISupport(1); i < kFeatAPIMax; i = i << 1 {
 		// If this flag is set
-		if ms&i > 0 {
+		if as&i > 0 {
 			apiStr := apiSupportToString[i]
 			if apiStr == "" {
 				apiStr = fmt.Sprintf("missing api str(%d)", i)

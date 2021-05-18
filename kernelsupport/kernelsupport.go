@@ -21,9 +21,8 @@ type KernelFeatures struct {
 	Misc MiscSupport
 }
 
-// Check the kernel features at startup since they will not change during program execution.
-// This singleton should be used rather than constantly calling GetKernelFeatures or
-// MustGetKernelFeatures to improve performance.
+// CurrentFeatures is a singleton containing the result of MustGetKernelFeatures. Assuming kernel features don't
+// change during the lifetime. Using this singleton saves a lot of performance.
 var CurrentFeatures = MustGetKernelFeatures()
 
 // MustGetKernelFeatures runs GetKernelFeatures but panics if any error is detected
@@ -44,7 +43,7 @@ func GetKernelFeatures() (KernelFeatures, error) {
 		return KernelFeatures{}, fmt.Errorf("error while calling syscall.Uname: %w", err)
 	}
 
-	var releaseBytes = make([]byte, len(utsname.Release))
+	releaseBytes := make([]byte, len(utsname.Release))
 	for i, v := range utsname.Release {
 		if v == 0x00 {
 			releaseBytes = releaseBytes[:i]
@@ -71,7 +70,7 @@ func GetKernelFeatures() (KernelFeatures, error) {
 		}
 	}
 
-	var machineBytes = make([]byte, len(utsname.Machine))
+	machineBytes := make([]byte, len(utsname.Machine))
 	for i, v := range utsname.Machine {
 		if v == 0x00 {
 			machineBytes = machineBytes[:i]

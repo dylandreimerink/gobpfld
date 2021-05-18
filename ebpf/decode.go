@@ -2,7 +2,7 @@ package ebpf
 
 import "fmt"
 
-// Decode decodes a slice of raw instructions into interperted instructions
+// Decode decodes a slice of raw instructions into interpreted instructions
 func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 	instructions := make([]Instruction, 0, len(rawIns))
 	for i := 0; i < len(rawIns); i++ {
@@ -754,7 +754,6 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 				inst = &CallBPF{
 					Offset: imm,
 				}
-
 			} else {
 				inst = &CallHelper{
 					Function: imm,
@@ -892,8 +891,10 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			continue
 		}
 
-		return nil, fmt.Errorf("unable to decode raw instruction, inst: %d, op: %2x, src: %s, dst: %s, off: %4x, imm: %8x",
-			i, op, src, dst, off, imm)
+		return nil, fmt.Errorf(
+			"unable to decode raw instruction, inst: %d, op: %2x, src: %s, dst: %s, off: %4x, imm: %8x",
+			i, op, src, dst, off, imm,
+		)
 	}
 
 	return instructions, nil

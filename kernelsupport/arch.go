@@ -31,7 +31,7 @@ const (
 	KFeatArchRiscVRV32G
 
 	// An end marker for enumeration, not an actual feature flag
-	kFeatArchMax
+	kFeatArchMax //nolint:revive // leading k is used to stay consistent with exported vars
 )
 
 // Has returns true if 'as' has all the specified flags
@@ -52,11 +52,11 @@ var archSupportToString = map[ArchSupport]string{
 	KFeatArchRiscVRV32G: "RISC-V RV32G",
 }
 
-func (kf ArchSupport) String() string {
+func (as ArchSupport) String() string {
 	var archs []string
 	for i := ArchSupport(1); i < kFeatArchMax; i = i << 1 {
 		// If this flag is set
-		if kf&i > 0 {
+		if as&i > 0 {
 			archStr := archSupportToString[i]
 			if archStr == "" {
 				archStr = fmt.Sprintf("missing arch str(%d)", i)

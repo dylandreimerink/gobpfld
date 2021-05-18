@@ -18,6 +18,8 @@ func (c CallHelper) String() string {
 	return fmt.Sprintf("call %s#%d", BPFHelperFuncNumToStr[c.Function], c.Function)
 }
 
+// BPFHelperFuncNumToStr is a translation tables from the helper function ids/numbers to their string form.
+// These are based on https://github.com/libbpf/libbpf/blob/master/src/bpf_helper_defs.h
 var BPFHelperFuncNumToStr = map[int32]string{
 	1:   "bpf_map_lookup_elem",
 	2:   "bpf_map_update_elem",

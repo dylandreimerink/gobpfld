@@ -64,7 +64,6 @@ func MapIterForEach(iter MapIterator, key, value interface{}, callback func(key,
 	}
 
 	return nil
-
 }
 
 var _ MapIterator = (*SingleLookupIterator)(nil)
@@ -113,6 +112,10 @@ func (sli *SingleLookupIterator) Init(key, value interface{}) error {
 	return nil
 }
 
+// Next gets the key and value at the current location and writes them to the pointers given to the iterator
+// during initialization. It then advances the internal pointer to the next key and value.
+// If the iterator can't get the key and value at the current location since we are done iterating or an error
+// was encountered 'updated' is false.
 func (sli *SingleLookupIterator) Next() (updated bool, err error) {
 	if sli.am == nil {
 		return false, fmt.Errorf("iterator not initialized")
@@ -247,6 +250,10 @@ func (bli *BatchLookupIterator) Init(key, value interface{}) error {
 	return nil
 }
 
+// Next gets the key and value at the current location and writes them to the pointers given to the iterator
+// during initialization. It then advances the internal pointer to the next key and value.
+// If the iterator can't get the key and value at the current location since we are done iterating or an error
+// was encountered 'updated' is false.
 func (bli *BatchLookupIterator) Next() (updated bool, err error) {
 	if bli.am == nil {
 		return false, fmt.Errorf("iterator not initialized")

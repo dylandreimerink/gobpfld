@@ -179,7 +179,15 @@ func (m *BPFGenericMap) toBatchValuesPtr(values interface{}, maxBatchSize uint32
 // This function is intended for small maps which can be read into userspace all at once since
 // GetBatch can only read from the beginning of the map. If the map is to large to read all at once
 // a iterator should be used instead of the Get or GetBatch function.
-func (m *BPFGenericMap) GetBatch(keys interface{}, values interface{}, maxBatchSize uint32) (count int, full bool, err error) {
+func (m *BPFGenericMap) GetBatch(
+	keys interface{},
+	values interface{},
+	maxBatchSize uint32,
+) (
+	count int,
+	full bool,
+	err error,
+) {
 	if !m.Loaded {
 		return 0, false, fmt.Errorf("can't read from an unloaded map")
 	}
@@ -263,7 +271,7 @@ func (m *BPFGenericMap) SetBatch(
 		OutBatch: uintptr(unsafe.Pointer(&batch)),
 		Count:    maxBatchSize,
 		Flags:    flags,
-		// TODO ElemFlags is only used for the spinlock flag, for which we will add suport later
+		// TODO ElemFlags is only used for the spinlock flag, for which we will add support later
 	}
 
 	attr.Keys, err = m.toBatchKeysPtr(keys, maxBatchSize)
@@ -380,7 +388,14 @@ func (m *BPFGenericMap) GetAndDelete(key interface{}, value interface{}) error {
 	return nil
 }
 
-func (m *BPFGenericMap) GetAndDeleteBatch(keys interface{}, values interface{}, maxBatchSize uint32) (count int, err error) {
+func (m *BPFGenericMap) GetAndDeleteBatch(
+	keys interface{},
+	values interface{},
+	maxBatchSize uint32,
+) (
+	count int,
+	err error,
+) {
 	if !m.Loaded {
 		return 0, fmt.Errorf("can't read from an unloaded map")
 	}

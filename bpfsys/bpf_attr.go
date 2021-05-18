@@ -11,7 +11,7 @@ type BPFAttribute interface {
 	Size() uintptr
 }
 
-// struct used by BPF_MAP_CREATE command
+// BPFAttrMapCreate is the attribute for the BPF_MAP_CREATE command
 type BPFAttrMapCreate struct {
 	MapType               bpftypes.BPFMapType  // one of enum bpf_map_type
 	KeySize               uint32               // size of key in bytes
@@ -36,11 +36,12 @@ func (amc *BPFAttrMapCreate) Size() uintptr {
 	return unsafe.Sizeof(*amc)
 }
 
-// struct used by BPF_MAP_*_ELEM commands
+// BPFAttrMapElem is used as attribute for the BPF_MAP_*_ELEM commands
 type BPFAttrMapElem struct {
-	MapFD         BPFfd
-	Key           uintptr // Pointer to the key value
-	Value_NextKey uintptr // In the kernel this is a union, so depending on context this field is pointer to "Value" or "NextKey"
+	MapFD BPFfd
+	Key   uintptr // Pointer to the key value
+	// In the kernel this is a union, so depending on context this field is pointer to "Value" or "NextKey"
+	Value_NextKey uintptr
 	Flags         BPFAttrMapElemFlags
 }
 
@@ -71,7 +72,7 @@ const (
 	BPFMapElemLock
 )
 
-//  struct used by BPF_MAP_*_BATCH commands
+// BPFAttrMapBatch is used as attribute for the BPF_MAP_*_BATCH commands
 type BPFAttrMapBatch struct {
 	InBatch   uintptr // start batch, NULL to start from beginning
 	OutBatch  uintptr // output: next start batch
@@ -95,7 +96,7 @@ type BPFAttrProgramLoad struct {
 	ProgramType   bpftypes.BPFProgType // one of enum bpf_prog_type
 	InsnCnt       uint32               // the amount of bpf instruction in program
 	Insns         uintptr              // pointer to the bpf instructions
-	License       uintptr              // Pointer to string containing the licence
+	License       uintptr              // Pointer to string containing the license
 	LogLevel      bpftypes.BPFLogLevel // verbosity level of verifier
 	LogSize       uint32               // size of user buffer
 	LogBuf        uintptr              // pointer to buffer where verifier log will be written to
@@ -119,7 +120,8 @@ type BPFAttrProgramLoad struct {
 	// LineInfo                    uint64  // line info
 	// LineInfoCnt                 uint32  // number of bpf_line_info records
 	// AttachBTFID                 uint32  // in-kernel BTF type id to attach to
-	// AttachProgFD_AttachBTFObjFD uint32  // valid prog_fd to attach to bpf prog or valid module BTF object fd or 0 to attach to vmlinux
+	// valid prog_fd to attach to bpf prog or valid module BTF object fd or 0 to attach to vmlinux
+	// AttachProgFD_AttachBTFObjFD uint32
 }
 
 func (amb *BPFAttrProgramLoad) ToPtr() unsafe.Pointer {
@@ -130,7 +132,7 @@ func (amb *BPFAttrProgramLoad) Size() uintptr {
 	return unsafe.Sizeof(*amb)
 }
 
-// struct used by BPF_OBJ_* commands
+// BPFAttrObj is used as attribute in the BPF_OBJ_* commands
 type BPFAttrObj struct {
 	Pathname  uintptr // pointer to cstring
 	BPFfd     BPFfd
@@ -145,7 +147,7 @@ func (ao *BPFAttrObj) Size() uintptr {
 	return unsafe.Sizeof(*ao)
 }
 
-// struct used by BPF_PROG_ATTACH/DETACH commands
+// BPFAttrProgAttachDetach is used as attribute in the BPF_PROG_ATTACH/DETACH commands
 type BPFAttrProgAttachDetach struct {
 	TargetFD     uint32 // container object to attach to
 	AttachBPFFD  BPFfd  // eBPF program to attach
@@ -162,7 +164,7 @@ func (apa *BPFAttrProgAttachDetach) Size() uintptr {
 	return unsafe.Sizeof(*apa)
 }
 
-// struct used by BPF_PROG_TEST_RUN command
+// BPFAttrProgTestRun is the attribute for the BPF_PROG_TEST_RUN command
 type BPFAttrProgTestRun struct {
 	ProgFD      BPFfd
 	Retval      uint32
@@ -188,7 +190,7 @@ func (apt *BPFAttrProgTestRun) Size() uintptr {
 	return unsafe.Sizeof(*apt)
 }
 
-// struct used by BPF_*_GET_*_ID
+// BPFAttrGetID is used as attribute in the BPF_*_GET_*_ID commands
 type BPFAttrGetID struct {
 	ID        uint32
 	NextID    uint32
@@ -203,7 +205,7 @@ func (agi *BPFAttrGetID) Size() uintptr {
 	return unsafe.Sizeof(*agi)
 }
 
-// struct used by BPF_OBJ_GET_INFO_BY_FD
+// BPFAttrGetInfoFD is used as attribute in the BPF_OBJ_GET_INFO_BY_FD command
 type BPFAttrGetInfoFD struct {
 	BPFFD   BPFfd
 	InfoLen uint32  // Length of the info buffer
@@ -218,7 +220,7 @@ func (agi *BPFAttrGetInfoFD) Size() uintptr {
 	return unsafe.Sizeof(*agi)
 }
 
-// struct used by BPF_PROG_QUERY command
+// BPFAttrProgQuery is used as attribute in the BPF_PROG_QUERY command
 type BPFAttrProgQuery struct {
 	TargetFD    uint32
 	AttachType  bpftypes.BPFAttachType
@@ -245,7 +247,7 @@ func (apq *BPFAttrProgQuery) Size() uintptr {
 	return unsafe.Sizeof(*apq)
 }
 
-// struct used by BPF_RAW_TRACEPOINT_OPEN command
+// BPFAttrRawTracepointOpen is used as attribute in the BPF_RAW_TRACEPOINT_OPEN command
 type BPFAttrRawTracepointOpen struct {
 	Name   uintptr
 	ProgFD BPFfd
@@ -259,7 +261,7 @@ func (art *BPFAttrRawTracepointOpen) Size() uintptr {
 	return unsafe.Sizeof(*art)
 }
 
-// struct for BPF_BTF_LOAD
+// BPFAttrBTFLoad is the attribute for the BPF_BTF_LOAD command
 type BPFAttrBTFLoad struct {
 	BTF         uintptr
 	BTFLogBuf   uintptr
@@ -296,7 +298,7 @@ func (atq *BPFAttrTaskFDQuery) Size() uintptr {
 	return unsafe.Sizeof(*atq)
 }
 
-// struct used by BPF_LINK_CREATE command
+// BPFAttrLinkCreate is used by BPF_LINK_CREATE command
 type BPFAttrLinkCreate struct {
 	ProgFD                 BPFfd
 	TargetFD_TargetIFIndex uint32
@@ -321,7 +323,7 @@ func (alc *BPFAttrLinkCreate) Size() uintptr {
 	return unsafe.Sizeof(*alc)
 }
 
-// struct used by BPF_LINK_UPDATE command
+// BPFAttrLinkUpdate is used by BPF_LINK_UPDATE command
 type BPFAttrLinkUpdate struct {
 	LinkFD    uint32
 	NewProgFD BPFfd
@@ -349,7 +351,7 @@ func (ald *BPFAttrLinkDetach) Size() uintptr {
 	return unsafe.Sizeof(*ald)
 }
 
-// struct used by BPF_ENABLE_STATS command
+// BPFAttrEnableStats is used by BPF_ENABLE_STATS command
 type BPFAttrEnableStats struct {
 	Type uint32
 }
@@ -362,7 +364,7 @@ func (aes *BPFAttrEnableStats) Size() uintptr {
 	return unsafe.Sizeof(*aes)
 }
 
-// struct used by BPF_ITER_CREATE command
+// BPFAttrIterCreate is used by BPF_ITER_CREATE command
 type BPFAttrIterCreate struct {
 	LinkFD uint32
 	Flags  uint32
@@ -376,7 +378,7 @@ func (aic *BPFAttrIterCreate) Size() uintptr {
 	return unsafe.Sizeof(*aic)
 }
 
-// struct used by BPF_PROG_BIND_MAP command
+// BPFAttrProgBindMap is uses as attribute for the BPF_PROG_BIND_MAP command
 type BPFAttrProgBindMap struct {
 	ProgID uint32
 	MapFD  BPFfd

@@ -115,8 +115,12 @@ func (xi *XSKIterator) Init(key, value interface{}) error {
 	return nil
 }
 
-// TODO change iterator so we do use the next_key syscall but lookup the value using the userspace map
+// Next gets the key and value at the current location and writes them to the pointers given to the iterator
+// during initialization. It then advances the internal pointer to the next key and value.
+// If the iterator can't get the key and value at the current location since we are done iterating or an error
+// was encountered 'updated' is false.
 func (xi *XSKIterator) Next() (updated bool, err error) {
+	// TODO change iterator so we do use the next_key syscall but lookup the value using the userspace map
 	if xi.done {
 		return false, fmt.Errorf("iterator is done")
 	}

@@ -62,7 +62,7 @@ func main() {
 	// Generate a program which will bypass all traffic to userspace
 	program := &gobpfld.BPFProgram{
 		Name:    gobpfld.MustNewObjName("xsk_bypass"),
-		Licence: "GPL",
+		License: "GPL",
 		Maps: map[string]gobpfld.BPFMap{
 			"xskmap": &gobpfld.XSKMap{
 				AbstractMap: gobpfld.AbstractMap{
