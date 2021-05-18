@@ -1,0 +1,17 @@
+name: Code standards and common bugs linters
+on:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - "master"
+  pull_request:
+jobs:
+  run-golangci-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          version: 1.40.1
