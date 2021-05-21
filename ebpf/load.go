@@ -59,23 +59,6 @@ func (lc LoadConstant64bit) String() string {
 	return fmt.Sprintf("%s = %d ll", lc.Dest, int64(lc.Val1)<<32+int64(lc.Val2))
 }
 
-var _ Instruction = (*LoadRegister)(nil)
-
-type LoadRegister struct {
-	Dest Register
-	Src  Register
-}
-
-func (lr LoadRegister) Raw() ([]RawInstruction, error) {
-	return []RawInstruction{
-		{Op: BPF_LDX | BPF_IMM, Reg: NewReg(lr.Src, lr.Dest)},
-	}, nil
-}
-
-func (lr LoadRegister) String() string {
-	return fmt.Sprintf("%s = %s", lr.Dest, lr.Src)
-}
-
 var _ Instruction = (*LoadMemory)(nil)
 
 type LoadMemory struct {

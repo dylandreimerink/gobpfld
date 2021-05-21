@@ -91,12 +91,6 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 				Size:   BPF_DW,
 			}
 
-		case BPF_LDX | BPF_IMM:
-			inst = &LoadRegister{
-				Dest: dst,
-				Src:  src,
-			}
-
 		case BPF_LDX | BPF_MEM | uint8(BPF_W),
 			BPF_LDX | BPF_MEM | uint8(BPF_H),
 			BPF_LDX | BPF_MEM | uint8(BPF_B),
