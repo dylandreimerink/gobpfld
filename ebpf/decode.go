@@ -572,14 +572,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			inst = &JumpGreaterThan{
 				Dest:   dst,
 				Offset: off,
-				Value:  uint32(imm),
+				Value:  imm,
 			}
 
 		case BPF_JMP32 | BPF_K | BPF_JGT:
 			inst = &JumpGreaterThan32{
 				Dest:   dst,
 				Offset: off,
-				Value:  uint32(imm),
+				Value:  imm,
 			}
 
 		case BPF_JMP | BPF_X | BPF_JGT:
@@ -602,14 +602,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			inst = &JumpGreaterThanEqual{
 				Dest:   dst,
 				Offset: off,
-				Value:  uint32(imm),
+				Value:  imm,
 			}
 
 		case BPF_JMP32 | BPF_K | BPF_JGE:
 			inst = &JumpGreaterThanEqual32{
 				Dest:   dst,
 				Offset: off,
-				Value:  uint32(imm),
+				Value:  imm,
 			}
 
 		case BPF_JMP | BPF_X | BPF_JGE:
@@ -771,14 +771,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			inst = &JumpSmallerThan{
 				Dest:   dst,
 				Offset: off,
-				Value:  uint32(imm),
+				Value:  imm,
 			}
 
 		case BPF_JMP32 | BPF_K | BPF_JLT:
 			inst = &JumpSmallerThan32{
 				Dest:   dst,
 				Offset: off,
-				Value:  uint32(imm),
+				Value:  imm,
 			}
 
 		case BPF_JMP | BPF_X | BPF_JLT:
@@ -801,14 +801,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			inst = &JumpSmallerThanEqual{
 				Dest:   dst,
 				Offset: off,
-				Value:  uint32(imm),
+				Value:  imm,
 			}
 
 		case BPF_JMP32 | BPF_K | BPF_JLE:
 			inst = &JumpSmallerThanEqual32{
 				Dest:   dst,
 				Offset: off,
-				Value:  uint32(imm),
+				Value:  imm,
 			}
 
 		case BPF_JMP | BPF_X | BPF_JLE:
@@ -831,14 +831,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			inst = &JumpSignedSmallerThan{
 				Dest:   dst,
 				Offset: off,
-				Value:  uint32(imm),
+				Value:  imm,
 			}
 
 		case BPF_JMP32 | BPF_K | BPF_JSLT:
 			inst = &JumpSignedSmallerThan32{
 				Dest:   dst,
 				Offset: off,
-				Value:  uint32(imm),
+				Value:  imm,
 			}
 
 		case BPF_JMP | BPF_X | BPF_JSLT:
@@ -861,14 +861,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			inst = &JumpSignedSmallerThanOrEqual{
 				Dest:   dst,
 				Offset: off,
-				Value:  uint32(imm),
+				Value:  imm,
 			}
 
 		case BPF_JMP32 | BPF_K | BPF_JSLE:
 			inst = &JumpSignedSmallerThanOrEqual32{
 				Dest:   dst,
 				Offset: off,
-				Value:  uint32(imm),
+				Value:  imm,
 			}
 
 		case BPF_JMP | BPF_X | BPF_JSLE:

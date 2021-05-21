@@ -2,7 +2,11 @@ package ebpf
 
 import "fmt"
 
-var _ Instruction = (*JumpEqual)(nil)
+var (
+	_ Instruction = (*JumpEqual)(nil)
+	_ Jumper      = (*JumpEqual)(nil)
+	_ Valuer      = (*JumpEqual)(nil)
+)
 
 type JumpEqual struct {
 	Dest   Register
@@ -20,7 +24,19 @@ func (a JumpEqual) String() string {
 	return fmt.Sprintf("if %s == %d: goto pc%+d", a.Dest, a.Value, a.Offset)
 }
 
-var _ Instruction = (*JumpEqual32)(nil)
+func (a *JumpEqual) SetJumpTarget(relAddr int16) {
+	a.Offset = relAddr
+}
+
+func (a *JumpEqual) SetValue(value int32) {
+	a.Value = value
+}
+
+var (
+	_ Instruction = (*JumpEqual32)(nil)
+	_ Jumper      = (*JumpEqual32)(nil)
+	_ Valuer      = (*JumpEqual32)(nil)
+)
 
 type JumpEqual32 struct {
 	Dest   Register
@@ -38,7 +54,18 @@ func (a JumpEqual32) String() string {
 	return fmt.Sprintf("if %s == %d: goto pc%+d", a.Dest, a.Value, a.Offset)
 }
 
-var _ Instruction = (*JumpEqualRegister)(nil)
+func (a *JumpEqual32) SetJumpTarget(relAddr int16) {
+	a.Offset = relAddr
+}
+
+func (a *JumpEqual32) SetValue(value int32) {
+	a.Value = value
+}
+
+var (
+	_ Instruction = (*JumpEqualRegister)(nil)
+	_ Jumper      = (*JumpEqualRegister)(nil)
+)
 
 type JumpEqualRegister struct {
 	Dest   Register
@@ -56,7 +83,14 @@ func (a JumpEqualRegister) String() string {
 	return fmt.Sprintf("if %s == %s: goto pc%+d", a.Dest, a.Src, a.Offset)
 }
 
-var _ Instruction = (*JumpEqualRegister32)(nil)
+func (a *JumpEqualRegister) SetJumpTarget(relAddr int16) {
+	a.Offset = relAddr
+}
+
+var (
+	_ Instruction = (*JumpEqualRegister32)(nil)
+	_ Jumper      = (*JumpEqualRegister32)(nil)
+)
 
 type JumpEqualRegister32 struct {
 	Dest   Register
@@ -72,4 +106,8 @@ func (a JumpEqualRegister32) Raw() ([]RawInstruction, error) {
 
 func (a JumpEqualRegister32) String() string {
 	return fmt.Sprintf("if %s == %s: goto pc%+d", a.Dest, a.Src, a.Offset)
+}
+
+func (a *JumpEqualRegister32) SetJumpTarget(relAddr int16) {
+	a.Offset = relAddr
 }

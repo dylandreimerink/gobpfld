@@ -12,6 +12,16 @@ type Instruction interface {
 	Raw() ([]RawInstruction, error)
 }
 
+// Jumper is any instruction that can jump to another piece of code using an 16-bit address
+type Jumper interface {
+	SetJumpTarget(relAddr int16)
+}
+
+// Valuer is any instruction for which a constant value can be set
+type Valuer interface {
+	SetValue(value int32)
+}
+
 // Nop does not exist in the eBPF definition, it is a filler instruction this package
 // adds to decoded programs so the index numbers of the slice stay the same as
 // the index numbers of the raw instructions, even when the LoadConstant64bit op is used.
@@ -124,19 +134,46 @@ func (s Size) String() string {
 // See section 'BPF kernel internals' of https://www.kernel.org/doc/Documentation/networking/filter.rst
 type Register uint8
 
-//nolint:revive // speaks for itself
 const (
+	// BPF_REG_0 aka R0 is the return value of the eBPF program, it is also used by helper functions and BPF to BPF
+	// calls for return values.
 	BPF_REG_0 Register = iota
+	// BPF_REG_1 aka R1 is the first argument of a helper function or BPF to BPF call, it is set at the start of
+	// a eBPF program to different values depending on the program type (typically a pointer to a struct).
+	// After calling a helper function or BPF function one should assume the constents will be changed.
 	BPF_REG_1
+	// BPF_REG_2 aka R2 is the second argument of a helper function or BPF to BPF call, it can be set at the start
+	// of the program depending on the program type but is typically not used.
+	// After calling a helper function or BPF function one should assume the constents will be changed.
 	BPF_REG_2
+	// BPF_REG_3 aka R3 is the third argument of a helper function or BPF to BPF call, it can be set at the start
+	// of the program depending on the program type but is typically not used.
+	// After calling a helper function or BPF function one should assume the constents will be changed.
 	BPF_REG_3
+	// BPF_REG_4 aka R4 is the forth argument of a helper function or BPF to BPF call, it can be set at the start
+	// of the program depending on the program type but is typically not used.
+	// After calling a helper function or BPF function one should assume the constents will be changed.
 	BPF_REG_4
+	// BPF_REG_5 aka R5 is the fifth argument of a helper function or BPF to BPF call, it can be set at the start
+	// of the program depending on the program type but is typically not used.
+	// After calling a helper function or BPF function one should assume the constents will be changed.
 	BPF_REG_5
+	// BPF_REG_6 aka R6 is a callee saved register for helper functions, meaning the contents will not be changed
+	// by the helper function.
 	BPF_REG_6
+	// BPF_REG_7 aka R7 is a callee saved register for helper functions, meaning the contents will not be changed
+	// by the helper function.
 	BPF_REG_7
+	// BPF_REG_8 aka R8 is a callee saved register for helper functions, meaning the contents will not be changed
+	// by the helper function.
 	BPF_REG_8
+	// BPF_REG_9 aka R9 is a callee saved register for helper functions, meaning the contents will not be changed
+	// by the helper function.
 	BPF_REG_9
+	// BPF_REG_10 aka R10 is a read-only register containing the frame pointer. It is a pointer to the start of
+	// the stack data reserved for this program. Each program/bpf to bpf function has its own stack.
 	BPF_REG_10
+	// BPF_REG_MAX is an invalid register, it is used for enumeration over registers.
 	BPF_REG_MAX
 )
 

@@ -2,7 +2,11 @@ package ebpf
 
 import "fmt"
 
-var _ Instruction = (*JumpIfNotEqual)(nil)
+var (
+	_ Instruction = (*JumpIfNotEqual)(nil)
+	_ Jumper      = (*JumpIfNotEqual)(nil)
+	_ Valuer      = (*JumpIfNotEqual)(nil)
+)
 
 type JumpIfNotEqual struct {
 	Dest   Register
@@ -20,7 +24,19 @@ func (a JumpIfNotEqual) String() string {
 	return fmt.Sprintf("if %s != %d: goto pc%+d", a.Dest, a.Value, a.Offset)
 }
 
-var _ Instruction = (*JumpIfNotEqual32)(nil)
+func (a *JumpIfNotEqual) SetJumpTarget(relAddr int16) {
+	a.Offset = relAddr
+}
+
+func (a *JumpIfNotEqual) SetValue(value int32) {
+	a.Value = value
+}
+
+var (
+	_ Instruction = (*JumpIfNotEqual32)(nil)
+	_ Jumper      = (*JumpIfNotEqual32)(nil)
+	_ Valuer      = (*JumpIfNotEqual32)(nil)
+)
 
 type JumpIfNotEqual32 struct {
 	Dest   Register
@@ -38,7 +54,18 @@ func (a JumpIfNotEqual32) String() string {
 	return fmt.Sprintf("if %s != %d: goto pc%+d", a.Dest, a.Value, a.Offset)
 }
 
-var _ Instruction = (*JumpIfNotEqualRegister)(nil)
+func (a *JumpIfNotEqual32) SetJumpTarget(relAddr int16) {
+	a.Offset = relAddr
+}
+
+func (a *JumpIfNotEqual32) SetValue(value int32) {
+	a.Value = value
+}
+
+var (
+	_ Instruction = (*JumpIfNotEqualRegister)(nil)
+	_ Jumper      = (*JumpIfNotEqualRegister)(nil)
+)
 
 type JumpIfNotEqualRegister struct {
 	Dest   Register
@@ -56,7 +83,14 @@ func (a JumpIfNotEqualRegister) String() string {
 	return fmt.Sprintf("if %s != %s: goto pc%+d", a.Dest, a.Src, a.Offset)
 }
 
-var _ Instruction = (*JumpIfNotEqualRegister32)(nil)
+func (a *JumpIfNotEqualRegister) SetJumpTarget(relAddr int16) {
+	a.Offset = relAddr
+}
+
+var (
+	_ Instruction = (*JumpIfNotEqualRegister32)(nil)
+	_ Jumper      = (*JumpIfNotEqualRegister32)(nil)
+)
 
 type JumpIfNotEqualRegister32 struct {
 	Dest   Register
@@ -72,4 +106,8 @@ func (a JumpIfNotEqualRegister32) Raw() ([]RawInstruction, error) {
 
 func (a JumpIfNotEqualRegister32) String() string {
 	return fmt.Sprintf("if %s != %s: goto pc%+d", a.Dest, a.Src, a.Offset)
+}
+
+func (a *JumpIfNotEqualRegister32) SetJumpTarget(relAddr int16) {
+	a.Offset = relAddr
 }

@@ -2,7 +2,11 @@ package ebpf
 
 import "fmt"
 
-var _ Instruction = (*JumpSignedGreaterThan)(nil)
+var (
+	_ Instruction = (*JumpSignedGreaterThanOrEqual)(nil)
+	_ Jumper      = (*JumpSignedGreaterThanOrEqual)(nil)
+	_ Valuer      = (*JumpSignedGreaterThanOrEqual)(nil)
+)
 
 type JumpSignedGreaterThanOrEqual struct {
 	Dest   Register
@@ -20,7 +24,19 @@ func (a JumpSignedGreaterThanOrEqual) String() string {
 	return fmt.Sprintf("if (s64)%s >= %d: goto pc%+d", a.Dest, a.Value, a.Offset)
 }
 
-var _ Instruction = (*JumpSignedGreaterThanOrEqual32)(nil)
+func (a *JumpSignedGreaterThanOrEqual) SetJumpTarget(relAddr int16) {
+	a.Offset = relAddr
+}
+
+func (a *JumpSignedGreaterThanOrEqual) SetValue(value int32) {
+	a.Value = value
+}
+
+var (
+	_ Instruction = (*JumpSignedGreaterThanOrEqual32)(nil)
+	_ Jumper      = (*JumpSignedGreaterThanOrEqual32)(nil)
+	_ Valuer      = (*JumpSignedGreaterThanOrEqual32)(nil)
+)
 
 type JumpSignedGreaterThanOrEqual32 struct {
 	Dest   Register
@@ -38,7 +54,18 @@ func (a JumpSignedGreaterThanOrEqual32) String() string {
 	return fmt.Sprintf("if (s32)%s >= %d: goto pc%+d", a.Dest, a.Value, a.Offset)
 }
 
-var _ Instruction = (*JumpSignedGreaterThanOrEqualRegister)(nil)
+func (a *JumpSignedGreaterThanOrEqual32) SetJumpTarget(relAddr int16) {
+	a.Offset = relAddr
+}
+
+func (a *JumpSignedGreaterThanOrEqual32) SetValue(value int32) {
+	a.Value = value
+}
+
+var (
+	_ Instruction = (*JumpSignedGreaterThanOrEqualRegister)(nil)
+	_ Jumper      = (*JumpSignedGreaterThanOrEqualRegister)(nil)
+)
 
 type JumpSignedGreaterThanOrEqualRegister struct {
 	Dest   Register
@@ -56,7 +83,14 @@ func (a JumpSignedGreaterThanOrEqualRegister) String() string {
 	return fmt.Sprintf("if (s64)%s >= (s64)%s: goto pc%+d", a.Dest, a.Src, a.Offset)
 }
 
-var _ Instruction = (*JumpSignedGreaterThanOrEqualRegister32)(nil)
+func (a *JumpSignedGreaterThanOrEqualRegister) SetJumpTarget(relAddr int16) {
+	a.Offset = relAddr
+}
+
+var (
+	_ Instruction = (*JumpSignedGreaterThanOrEqualRegister32)(nil)
+	_ Jumper      = (*JumpSignedGreaterThanOrEqualRegister32)(nil)
+)
 
 type JumpSignedGreaterThanOrEqualRegister32 struct {
 	Dest   Register
@@ -72,4 +106,8 @@ func (a JumpSignedGreaterThanOrEqualRegister32) Raw() ([]RawInstruction, error) 
 
 func (a JumpSignedGreaterThanOrEqualRegister32) String() string {
 	return fmt.Sprintf("if (s32)%s >= (s32)%s: goto pc%+d", a.Dest, a.Src, a.Offset)
+}
+
+func (a *JumpSignedGreaterThanOrEqualRegister32) SetJumpTarget(relAddr int16) {
+	a.Offset = relAddr
 }
