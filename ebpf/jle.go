@@ -14,13 +14,13 @@ type JumpSmallerThanEqual struct {
 	Value  int32
 }
 
-func (a JumpSmallerThanEqual) Raw() ([]RawInstruction, error) {
+func (a *JumpSmallerThanEqual) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{Op: BPF_JLE | BPF_K | BPF_JMP, Reg: NewReg(0, a.Dest), Off: a.Offset, Imm: a.Value},
 	}, nil
 }
 
-func (a JumpSmallerThanEqual) String() string {
+func (a *JumpSmallerThanEqual) String() string {
 	return fmt.Sprintf("if (u64)%s <= %d: goto pc%+d", a.Dest, a.Value, a.Offset)
 }
 
@@ -44,13 +44,13 @@ type JumpSmallerThanEqual32 struct {
 	Value  int32
 }
 
-func (a JumpSmallerThanEqual32) Raw() ([]RawInstruction, error) {
+func (a *JumpSmallerThanEqual32) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{Op: BPF_JLE | BPF_K | BPF_JMP32, Reg: NewReg(0, a.Dest), Off: a.Offset, Imm: a.Value},
 	}, nil
 }
 
-func (a JumpSmallerThanEqual32) String() string {
+func (a *JumpSmallerThanEqual32) String() string {
 	return fmt.Sprintf("if (u32)%s <= %d: goto pc%+d", a.Dest, a.Value, a.Offset)
 }
 
@@ -73,13 +73,13 @@ type JumpSmallerThanEqualRegister struct {
 	Offset int16
 }
 
-func (a JumpSmallerThanEqualRegister) Raw() ([]RawInstruction, error) {
+func (a *JumpSmallerThanEqualRegister) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{Op: BPF_JLE | BPF_X | BPF_JMP, Reg: NewReg(a.Src, a.Dest), Off: a.Offset},
 	}, nil
 }
 
-func (a JumpSmallerThanEqualRegister) String() string {
+func (a *JumpSmallerThanEqualRegister) String() string {
 	return fmt.Sprintf("if (u64)%s <= (u64)%s: goto pc%+d", a.Dest, a.Src, a.Offset)
 }
 
@@ -98,13 +98,13 @@ type JumpSmallerThanEqualRegister32 struct {
 	Offset int16
 }
 
-func (a JumpSmallerThanEqualRegister32) Raw() ([]RawInstruction, error) {
+func (a *JumpSmallerThanEqualRegister32) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{Op: BPF_JLE | BPF_X | BPF_JMP32, Reg: NewReg(a.Src, a.Dest), Off: a.Offset},
 	}, nil
 }
 
-func (a JumpSmallerThanEqualRegister32) String() string {
+func (a *JumpSmallerThanEqualRegister32) String() string {
 	return fmt.Sprintf("if (u32)%s <= (u32)%s: goto pc%+d", a.Dest, a.Src, a.Offset)
 }
 

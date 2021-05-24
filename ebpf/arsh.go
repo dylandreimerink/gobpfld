@@ -5,35 +5,35 @@ import "fmt"
 var _ Instruction = (*ARSH32)(nil)
 
 type ARSH32 struct {
-	Dest Register
-	Val  int32
+	Dest  Register
+	Value int32
 }
 
-func (a ARSH32) Raw() ([]RawInstruction, error) {
+func (a *ARSH32) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
-		{Op: BPF_ALU | BPF_K | BPF_ARSH, Reg: NewReg(0, a.Dest), Imm: a.Val},
+		{Op: BPF_ALU | BPF_K | BPF_ARSH, Reg: NewReg(0, a.Dest), Imm: a.Value},
 	}, nil
 }
 
-func (a ARSH32) String() string {
-	return fmt.Sprintf("%s ~>>= %d", a.Dest, a.Val)
+func (a *ARSH32) String() string {
+	return fmt.Sprintf("%s ~>>= %d", a.Dest, a.Value)
 }
 
 var _ Instruction = (*ARSH64)(nil)
 
 type ARSH64 struct {
-	Dest Register
-	Val  int32
+	Dest  Register
+	Value int32
 }
 
-func (a ARSH64) Raw() ([]RawInstruction, error) {
+func (a *ARSH64) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
-		{Op: BPF_ALU64 | BPF_K | BPF_ARSH, Reg: NewReg(0, a.Dest), Imm: a.Val},
+		{Op: BPF_ALU64 | BPF_K | BPF_ARSH, Reg: NewReg(0, a.Dest), Imm: a.Value},
 	}, nil
 }
 
-func (a ARSH64) String() string {
-	return fmt.Sprintf("%s ~>>= %d", a.Dest, a.Val)
+func (a *ARSH64) String() string {
+	return fmt.Sprintf("%s ~>>= %d", a.Dest, a.Value)
 }
 
 var _ Instruction = (*ARSH32Register)(nil)
@@ -43,13 +43,13 @@ type ARSH32Register struct {
 	Src  Register
 }
 
-func (a ARSH32Register) Raw() ([]RawInstruction, error) {
+func (a *ARSH32Register) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{Op: BPF_ALU | BPF_X | BPF_ARSH, Reg: NewReg(a.Src, a.Dest)},
 	}, nil
 }
 
-func (a ARSH32Register) String() string {
+func (a *ARSH32Register) String() string {
 	return fmt.Sprintf("%s ~>>= %d", a.Dest, a.Src)
 }
 
@@ -60,12 +60,12 @@ type ARSH64Register struct {
 	Src  Register
 }
 
-func (a ARSH64Register) Raw() ([]RawInstruction, error) {
+func (a *ARSH64Register) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{Op: BPF_ALU64 | BPF_X | BPF_ARSH, Reg: NewReg(a.Src, a.Dest)},
 	}, nil
 }
 
-func (a ARSH64Register) String() string {
+func (a *ARSH64Register) String() string {
 	return fmt.Sprintf("%s ~>>= %s", a.Dest, a.Src)
 }

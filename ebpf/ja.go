@@ -11,13 +11,13 @@ type Jump struct {
 	Offset int16
 }
 
-func (a Jump) Raw() ([]RawInstruction, error) {
+func (a *Jump) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{Op: BPF_JA | BPF_JMP, Off: a.Offset},
 	}, nil
 }
 
-func (a Jump) String() string {
+func (a *Jump) String() string {
 	return fmt.Sprintf("goto pc%+d", a.Offset)
 }
 

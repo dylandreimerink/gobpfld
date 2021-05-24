@@ -113,8 +113,8 @@ func main() {
 			// Move XDP_PASS into R3 (third argument)
 			/* r3 = XDP_PASS */
 			&ebpf.Mov64{
-				Dest: ebpf.BPF_REG_3,
-				Val:  ebpf.XDP_PASS,
+				Dest:  ebpf.BPF_REG_3,
+				Value: ebpf.XDP_PASS,
 			},
 			/* call bpf_redirect_map */
 			&ebpf.CallHelper{

@@ -8,28 +8,28 @@ type StoreMemoryConstant struct {
 	Dest   Register
 	Size   Size
 	Offset int16
-	Val    int32
+	Value  int32
 }
 
-func (sm StoreMemoryConstant) Raw() ([]RawInstruction, error) {
+func (sm *StoreMemoryConstant) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{
 			Op:  BPF_ST | uint8(sm.Size) | BPF_MEM,
 			Reg: NewReg(0, sm.Dest),
 			Off: sm.Offset,
-			Imm: sm.Val,
+			Imm: sm.Value,
 		},
 	}, nil
 }
 
-func (sm StoreMemoryConstant) String() string {
+func (sm *StoreMemoryConstant) String() string {
 	sign := "+"
 	offset := sm.Offset
 	if offset < 0 {
 		sign = "-"
 		offset = -offset
 	}
-	return fmt.Sprintf("*(%s *) (%s %s %d) = %d", sm.Size, sm.Dest, sign, offset, sm.Val)
+	return fmt.Sprintf("*(%s *) (%s %s %d) = %d", sm.Size, sm.Dest, sign, offset, sm.Value)
 }
 
 var _ Instruction = (*StoreMemoryRegister)(nil)
@@ -41,7 +41,7 @@ type StoreMemoryRegister struct {
 	Size   Size
 }
 
-func (sm StoreMemoryRegister) Raw() ([]RawInstruction, error) {
+func (sm *StoreMemoryRegister) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{
 			Op:  BPF_STX | uint8(sm.Size) | BPF_MEM,
@@ -51,7 +51,7 @@ func (sm StoreMemoryRegister) Raw() ([]RawInstruction, error) {
 	}, nil
 }
 
-func (sm StoreMemoryRegister) String() string {
+func (sm *StoreMemoryRegister) String() string {
 	sign := "+"
 	offset := sm.Offset
 	if offset < 0 {
@@ -71,7 +71,7 @@ type AtomicAdd struct {
 	Fetch  bool
 }
 
-func (aa AtomicAdd) Raw() ([]RawInstruction, error) {
+func (aa *AtomicAdd) Raw() ([]RawInstruction, error) {
 	imm := int32(BPF_ADD)
 	if aa.Fetch {
 		imm = int32(BPF_ADD | BPF_FETCH)
@@ -86,7 +86,7 @@ func (aa AtomicAdd) Raw() ([]RawInstruction, error) {
 	}, nil
 }
 
-func (aa AtomicAdd) String() string {
+func (aa *AtomicAdd) String() string {
 	sign := "+"
 	offset := aa.Offset
 	if offset < 0 {
@@ -106,7 +106,7 @@ type AtomicAnd struct {
 	Fetch  bool
 }
 
-func (aa AtomicAnd) Raw() ([]RawInstruction, error) {
+func (aa *AtomicAnd) Raw() ([]RawInstruction, error) {
 	imm := int32(BPF_AND)
 	if aa.Fetch {
 		imm = int32(BPF_AND | BPF_FETCH)
@@ -121,7 +121,7 @@ func (aa AtomicAnd) Raw() ([]RawInstruction, error) {
 	}, nil
 }
 
-func (aa AtomicAnd) String() string {
+func (aa *AtomicAnd) String() string {
 	sign := "+"
 	offset := aa.Offset
 	if offset < 0 {
@@ -141,7 +141,7 @@ type AtomicOr struct {
 	Fetch  bool
 }
 
-func (ao AtomicOr) Raw() ([]RawInstruction, error) {
+func (ao *AtomicOr) Raw() ([]RawInstruction, error) {
 	imm := int32(BPF_OR)
 	if ao.Fetch {
 		imm = int32(BPF_OR | BPF_FETCH)
@@ -156,7 +156,7 @@ func (ao AtomicOr) Raw() ([]RawInstruction, error) {
 	}, nil
 }
 
-func (ao AtomicOr) String() string {
+func (ao *AtomicOr) String() string {
 	sign := "+"
 	offset := ao.Offset
 	if offset < 0 {
@@ -176,7 +176,7 @@ type AtomicXor struct {
 	Fetch  bool
 }
 
-func (ax AtomicXor) Raw() ([]RawInstruction, error) {
+func (ax *AtomicXor) Raw() ([]RawInstruction, error) {
 	imm := int32(BPF_XOR)
 	if ax.Fetch {
 		imm = int32(BPF_XOR | BPF_FETCH)
@@ -191,7 +191,7 @@ func (ax AtomicXor) Raw() ([]RawInstruction, error) {
 	}, nil
 }
 
-func (ax AtomicXor) String() string {
+func (ax *AtomicXor) String() string {
 	sign := "+"
 	offset := ax.Offset
 	if offset < 0 {
@@ -211,7 +211,7 @@ type AtomicExchange struct {
 	Size   Size
 }
 
-func (chg AtomicExchange) Raw() ([]RawInstruction, error) {
+func (chg *AtomicExchange) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{
 			Op:  BPF_STX | uint8(chg.Size) | BPF_ATOMIC,
@@ -222,7 +222,7 @@ func (chg AtomicExchange) Raw() ([]RawInstruction, error) {
 	}, nil
 }
 
-func (chg AtomicExchange) String() string {
+func (chg *AtomicExchange) String() string {
 	sign := "+"
 	offset := chg.Offset
 	if offset < 0 {
@@ -242,7 +242,7 @@ type AtomicCompareAndWrite struct {
 	Size   Size
 }
 
-func (chg AtomicCompareAndWrite) Raw() ([]RawInstruction, error) {
+func (chg *AtomicCompareAndWrite) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{
 			Op:  BPF_STX | uint8(chg.Size) | BPF_ATOMIC,
@@ -253,7 +253,7 @@ func (chg AtomicCompareAndWrite) Raw() ([]RawInstruction, error) {
 	}, nil
 }
 
-func (chg AtomicCompareAndWrite) String() string {
+func (chg *AtomicCompareAndWrite) String() string {
 	sign := "+"
 	offset := chg.Offset
 	if offset < 0 {

@@ -2,8 +2,6 @@ package ebpf
 
 import "fmt"
 
-var _ Instruction = (*LoadConstant)(nil)
-
 const (
 	// BPF_PSEUDO_MAP_FD is used in the SRC register to mark the imm value as a map file descriptor
 	// https://elixir.bootlin.com/linux/v5.12.4/source/include/uapi/linux/bpf.h#L376
@@ -16,21 +14,6 @@ const (
 	BPF_PSEUDO_BTF_ID = 3
 )
 
-type LoadConstant struct {
-	Dest Register
-	Val  int32
-}
-
-func (lc LoadConstant) Raw() ([]RawInstruction, error) {
-	return []RawInstruction{
-		{Op: BPF_LD | BPF_IMM, Reg: NewReg(0, lc.Dest), Imm: lc.Val},
-	}, nil
-}
-
-func (lc LoadConstant) String() string {
-	return fmt.Sprintf("%s = %d", lc.Dest, lc.Val)
-}
-
 var _ Instruction = (*LoadConstant64bit)(nil)
 
 type LoadConstant64bit struct {
@@ -40,14 +23,14 @@ type LoadConstant64bit struct {
 	Val2 int32
 }
 
-func (lc LoadConstant64bit) Raw() ([]RawInstruction, error) {
+func (lc *LoadConstant64bit) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{Op: BPF_LD | uint8(BPF_DW) | BPF_IMM, Reg: NewReg(lc.Src, lc.Dest), Imm: lc.Val1},
 		{Op: 0, Reg: 0, Imm: lc.Val2},
 	}, nil
 }
 
-func (lc LoadConstant64bit) String() string {
+func (lc *LoadConstant64bit) String() string {
 	if lc.Src == BPF_PSEUDO_MAP_FD {
 		return fmt.Sprintf("%s = map fd#%d", lc.Dest, lc.Val1)
 	}
@@ -68,7 +51,7 @@ type LoadMemory struct {
 	Size   Size
 }
 
-func (lm LoadMemory) Raw() ([]RawInstruction, error) {
+func (lm *LoadMemory) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{
 			Op:  BPF_LDX | uint8(lm.Size) | BPF_MEM,
@@ -78,7 +61,7 @@ func (lm LoadMemory) Raw() ([]RawInstruction, error) {
 	}, nil
 }
 
-func (lm LoadMemory) String() string {
+func (lm *LoadMemory) String() string {
 	sign := "+"
 	offset := lm.Offset
 	if offset < 0 {
@@ -97,7 +80,7 @@ type LoadSocketBuf struct {
 	Offset int32
 }
 
-func (lm LoadSocketBuf) Raw() ([]RawInstruction, error) {
+func (lm *LoadSocketBuf) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{
 			Op:  BPF_IND | uint8(lm.Size) | BPF_LD,
@@ -107,26 +90,26 @@ func (lm LoadSocketBuf) Raw() ([]RawInstruction, error) {
 	}, nil
 }
 
-func (lm LoadSocketBuf) String() string {
+func (lm *LoadSocketBuf) String() string {
 	return fmt.Sprintf("r0 = ntohl((%s) (((struct sk_buff *) r6)->data[%s%+d]))", lm.Size, lm.Src, lm.Offset)
 }
 
 var _ Instruction = (*LoadSocketBufConstant)(nil)
 
 type LoadSocketBufConstant struct {
-	Val  int32
-	Size Size
+	Value int32
+	Size  Size
 }
 
-func (lm LoadSocketBufConstant) Raw() ([]RawInstruction, error) {
+func (lm *LoadSocketBufConstant) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{
 			Op:  BPF_IMM | uint8(lm.Size) | BPF_LD,
-			Imm: lm.Val,
+			Imm: lm.Value,
 		},
 	}, nil
 }
 
-func (lm LoadSocketBufConstant) String() string {
-	return fmt.Sprintf("r0 = ntohl((%s) (((struct sk_buff *) r6)->data[%d]))", lm.Size, lm.Val)
+func (lm *LoadSocketBufConstant) String() string {
+	return fmt.Sprintf("r0 = ntohl((%s) (((struct sk_buff *) r6)->data[%d]))", lm.Size, lm.Value)
 }

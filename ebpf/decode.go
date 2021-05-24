@@ -16,12 +16,6 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 		var inst Instruction
 
 		switch op {
-		case BPF_LD | BPF_IMM:
-			inst = &LoadConstant{
-				Dest: dst,
-				Val:  imm,
-			}
-
 		case BPF_LD | uint8(BPF_DW) | BPF_IMM:
 			if i+1 >= len(rawIns) {
 				return nil, fmt.Errorf("%d: load double word imm op code found but not enough instructions available"+
@@ -41,26 +35,26 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 		case BPF_LD | BPF_ABS | uint8(BPF_W):
 			inst = &LoadSocketBufConstant{
-				Val:  imm,
-				Size: BPF_W,
+				Value: imm,
+				Size:  BPF_W,
 			}
 
 		case BPF_LD | BPF_ABS | uint8(BPF_H):
 			inst = &LoadSocketBufConstant{
-				Val:  imm,
-				Size: BPF_H,
+				Value: imm,
+				Size:  BPF_H,
 			}
 
 		case BPF_LD | BPF_ABS | uint8(BPF_B):
 			inst = &LoadSocketBufConstant{
-				Val:  imm,
-				Size: BPF_B,
+				Value: imm,
+				Size:  BPF_B,
 			}
 
 		case BPF_LD | BPF_ABS | uint8(BPF_DW):
 			inst = &LoadSocketBufConstant{
-				Val:  imm,
-				Size: BPF_DW,
+				Value: imm,
+				Size:  BPF_DW,
 			}
 
 		case BPF_LD | BPF_IND | uint8(BPF_W):
@@ -111,7 +105,7 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 				Dest:   dst,
 				Offset: off,
 				Size:   Size(op ^ (BPF_ST | BPF_MEM)),
-				Val:    imm,
+				Value:  imm,
 			}
 
 		case BPF_STX | BPF_MEM | uint8(BPF_W),
@@ -181,14 +175,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 		case BPF_ALU | BPF_K | BPF_ADD:
 			inst = &Add32{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU64 | BPF_K | BPF_ADD:
 			inst = &Add64{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU | BPF_X | BPF_ADD:
@@ -207,14 +201,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 		case BPF_ALU | BPF_K | BPF_SUB:
 			inst = &Sub32{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU64 | BPF_K | BPF_SUB:
 			inst = &Sub64{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU | BPF_X | BPF_SUB:
@@ -233,14 +227,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 		case BPF_ALU | BPF_K | BPF_MUL:
 			inst = &Mul32{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU64 | BPF_K | BPF_MUL:
 			inst = &Mul64{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU | BPF_X | BPF_MUL:
@@ -259,14 +253,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 		case BPF_ALU | BPF_K | BPF_DIV:
 			inst = &Div32{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU64 | BPF_K | BPF_DIV:
 			inst = &Div64{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU | BPF_X | BPF_DIV:
@@ -285,14 +279,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 		case BPF_ALU | BPF_K | BPF_OR:
 			inst = &Or32{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU64 | BPF_K | BPF_OR:
 			inst = &Or64{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU | BPF_X | BPF_OR:
@@ -311,14 +305,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 		case BPF_ALU | BPF_K | BPF_AND:
 			inst = &And32{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU64 | BPF_K | BPF_AND:
 			inst = &And64{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU | BPF_X | BPF_AND:
@@ -337,14 +331,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 		case BPF_ALU | BPF_K | BPF_LSH:
 			inst = &Lsh32{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU64 | BPF_K | BPF_LSH:
 			inst = &Lsh64{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU | BPF_X | BPF_LSH:
@@ -363,14 +357,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 		case BPF_ALU | BPF_K | BPF_RSH:
 			inst = &Rsh32{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU64 | BPF_K | BPF_RSH:
 			inst = &Rsh64{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU | BPF_X | BPF_RSH:
@@ -401,14 +395,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 		case BPF_ALU | BPF_K | BPF_MOD:
 			inst = &Mod32{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU64 | BPF_K | BPF_MOD:
 			inst = &Mod64{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU | BPF_X | BPF_MOD:
@@ -427,14 +421,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 		case BPF_ALU | BPF_K | BPF_XOR:
 			inst = &Xor32{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU64 | BPF_K | BPF_XOR:
 			inst = &Xor64{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU | BPF_X | BPF_XOR:
@@ -453,14 +447,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 		case BPF_ALU | BPF_K | BPF_MOV:
 			inst = &Mov32{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU64 | BPF_K | BPF_MOV:
 			inst = &Mov64{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU | BPF_X | BPF_MOV:
@@ -479,14 +473,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 
 		case BPF_ALU | BPF_K | BPF_ARSH:
 			inst = &ARSH32{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU64 | BPF_K | BPF_ARSH:
 			inst = &ARSH64{
-				Dest: dst,
-				Val:  imm,
+				Dest:  dst,
+				Value: imm,
 			}
 
 		case BPF_ALU | BPF_X | BPF_ARSH:
@@ -623,28 +617,28 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			//
 
 		case BPF_JMP | BPF_K | BPF_JSET:
-			inst = &JumpIfAnd{
+			inst = &JumpAnd{
 				Dest:   dst,
 				Offset: off,
 				Value:  imm,
 			}
 
 		case BPF_JMP32 | BPF_K | BPF_JSET:
-			inst = &JumpIfAnd32{
+			inst = &JumpAnd32{
 				Dest:   dst,
 				Offset: off,
 				Value:  imm,
 			}
 
 		case BPF_JMP | BPF_X | BPF_JSET:
-			inst = &JumpIfAndRegister{
+			inst = &JumpAndRegister{
 				Dest:   dst,
 				Src:    src,
 				Offset: off,
 			}
 
 		case BPF_JMP32 | BPF_X | BPF_JSET:
-			inst = &JumpIfAndRegister32{
+			inst = &JumpAndRegister32{
 				Dest:   dst,
 				Src:    src,
 				Offset: off,
@@ -653,28 +647,28 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			//
 
 		case BPF_JMP | BPF_K | BPF_JNE:
-			inst = &JumpIfNotEqual{
+			inst = &JumpNotEqual{
 				Dest:   dst,
 				Offset: off,
 				Value:  imm,
 			}
 
 		case BPF_JMP32 | BPF_K | BPF_JNE:
-			inst = &JumpIfNotEqual32{
+			inst = &JumpNotEqual32{
 				Dest:   dst,
 				Offset: off,
 				Value:  imm,
 			}
 
 		case BPF_JMP | BPF_X | BPF_JNE:
-			inst = &JumpIfNotEqualRegister{
+			inst = &JumpNotEqualRegister{
 				Dest:   dst,
 				Src:    src,
 				Offset: off,
 			}
 
 		case BPF_JMP32 | BPF_X | BPF_JNE:
-			inst = &JumpIfNotEqualRegister32{
+			inst = &JumpNotEqualRegister32{
 				Dest:   dst,
 				Src:    src,
 				Offset: off,

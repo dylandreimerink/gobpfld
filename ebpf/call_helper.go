@@ -8,13 +8,13 @@ type CallHelper struct {
 	Function int32
 }
 
-func (c CallHelper) Raw() ([]RawInstruction, error) {
+func (c *CallHelper) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{Op: BPF_CALL | BPF_JMP, Reg: NewReg(0, 0), Imm: c.Function},
 	}, nil
 }
 
-func (c CallHelper) String() string {
+func (c *CallHelper) String() string {
 	return fmt.Sprintf("call %s#%d", BPFHelperFuncNumToStr[c.Function], c.Function)
 }
 

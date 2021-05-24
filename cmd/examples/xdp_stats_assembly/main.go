@@ -47,8 +47,8 @@ func main() {
 			// __u32 key = XDP_PASS;
 			////
 			&ebpf.Mov64{ // r1 = 2
-				Dest: ebpf.BPF_REG_1,
-				Val:  ebpf.XDP_PASS,
+				Dest:  ebpf.BPF_REG_1,
+				Value: ebpf.XDP_PASS,
 			},
 			&ebpf.StoreMemoryRegister{ // *(u32 *)(r10 - 4) = r1
 				Size:   ebpf.BPF_W,      // 32bits
@@ -66,8 +66,8 @@ func main() {
 			},
 			// make R2 a pointer to key, aka &key
 			&ebpf.Add64{ // r2 += -4
-				Dest: ebpf.BPF_REG_2,
-				Val:  -4,
+				Dest:  ebpf.BPF_REG_2,
+				Value: -4,
 			},
 			// The constant value to be loaded here will be inserted by the loader
 			//  it will become a pointer to the map, aka &xdp_stats_map
@@ -87,8 +87,8 @@ func main() {
 			// if (!rec) return XDP_ABORTED;
 			////
 			&ebpf.Mov64{ // r1 = 0
-				Dest: ebpf.BPF_REG_1,
-				Val:  ebpf.XDP_ABORTED, // XDP_ABORTED = 0
+				Dest:  ebpf.BPF_REG_1,
+				Value: ebpf.XDP_ABORTED, // XDP_ABORTED = 0
 			},
 			// check if the return value is a null pointer, aka: if (!rec)
 			&ebpf.JumpEqual{ // if r0 == 0: goto pc+3 <LBL0>
@@ -101,8 +101,8 @@ func main() {
 			// lock_xadd(&rec->rx_packets, 1);
 			////
 			&ebpf.Mov64{ // r1 = 1
-				Dest: ebpf.BPF_REG_1,
-				Val:  1,
+				Dest:  ebpf.BPF_REG_1,
+				Value: 1,
 			},
 			&ebpf.AtomicAdd{ // lock *(u64 *)(r0 + 0) += r1
 				Size: ebpf.BPF_DW,
@@ -114,8 +114,8 @@ func main() {
 			// return XDP_PASS;
 			////
 			&ebpf.Mov64{ // r1 = 2
-				Dest: ebpf.BPF_REG_1,
-				Val:  ebpf.XDP_PASS, // XDP_PASS = 2
+				Dest:  ebpf.BPF_REG_1,
+				Value: ebpf.XDP_PASS, // XDP_PASS = 2
 			},
 
 			////

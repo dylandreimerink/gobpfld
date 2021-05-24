@@ -14,13 +14,13 @@ type JumpSignedSmallerThanOrEqual struct {
 	Value  int32
 }
 
-func (a JumpSignedSmallerThanOrEqual) Raw() ([]RawInstruction, error) {
+func (a *JumpSignedSmallerThanOrEqual) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{Op: BPF_JSLE | BPF_K | BPF_JMP, Reg: NewReg(0, a.Dest), Off: a.Offset, Imm: a.Value},
 	}, nil
 }
 
-func (a JumpSignedSmallerThanOrEqual) String() string {
+func (a *JumpSignedSmallerThanOrEqual) String() string {
 	return fmt.Sprintf("if (s64)%s <= %d: goto pc%+d", a.Dest, a.Value, a.Offset)
 }
 
@@ -44,13 +44,13 @@ type JumpSignedSmallerThanOrEqual32 struct {
 	Value  int32
 }
 
-func (a JumpSignedSmallerThanOrEqual32) Raw() ([]RawInstruction, error) {
+func (a *JumpSignedSmallerThanOrEqual32) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{Op: BPF_JSLE | BPF_K | BPF_JMP32, Reg: NewReg(0, a.Dest), Off: a.Offset, Imm: a.Value},
 	}, nil
 }
 
-func (a JumpSignedSmallerThanOrEqual32) String() string {
+func (a *JumpSignedSmallerThanOrEqual32) String() string {
 	return fmt.Sprintf("if (s32)%s <= %d: goto pc%+d", a.Dest, a.Value, a.Offset)
 }
 
@@ -73,13 +73,13 @@ type JumpSignedSmallerThanOrEqualRegister struct {
 	Offset int16
 }
 
-func (a JumpSignedSmallerThanOrEqualRegister) Raw() ([]RawInstruction, error) {
+func (a *JumpSignedSmallerThanOrEqualRegister) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{Op: BPF_JSLE | BPF_X | BPF_JMP, Reg: NewReg(a.Src, a.Dest), Off: a.Offset},
 	}, nil
 }
 
-func (a JumpSignedSmallerThanOrEqualRegister) String() string {
+func (a *JumpSignedSmallerThanOrEqualRegister) String() string {
 	return fmt.Sprintf("if (s64)%s <= (s64)%s: goto pc%+d", a.Dest, a.Src, a.Offset)
 }
 
@@ -98,13 +98,13 @@ type JumpSignedSmallerThanOrEqualRegister32 struct {
 	Offset int16
 }
 
-func (a JumpSignedSmallerThanOrEqualRegister32) Raw() ([]RawInstruction, error) {
+func (a *JumpSignedSmallerThanOrEqualRegister32) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{Op: BPF_JSLE | BPF_X | BPF_JMP32, Reg: NewReg(a.Src, a.Dest), Off: a.Offset},
 	}, nil
 }
 
-func (a JumpSignedSmallerThanOrEqualRegister32) String() string {
+func (a *JumpSignedSmallerThanOrEqualRegister32) String() string {
 	return fmt.Sprintf("if (s32)%s <= (s32)%s: goto pc%+d", a.Dest, a.Src, a.Offset)
 }
 
