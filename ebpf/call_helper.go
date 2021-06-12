@@ -15,7 +15,7 @@ func (c *CallHelper) Raw() ([]RawInstruction, error) {
 }
 
 func (c *CallHelper) String() string {
-	return fmt.Sprintf("call %s#%d", BPFHelperFuncNumToStr[c.Function], c.Function)
+	return fmt.Sprintf("call %d#%s", c.Function, BPFHelperFuncNumToStr[c.Function])
 }
 
 // BPFHelperFuncNumToStr is a translation tables from the helper function ids/numbers to their string form.

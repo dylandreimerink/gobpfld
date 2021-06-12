@@ -38,7 +38,8 @@ lock *(u32 *)(r3 + 456) ^= w2
 lock *(u32 *)(r3 - 456) ^= w2
 lock *(u64 *)(r3 + 456) ^= r2
 lock *(u64 *)(r3 - 456) ^= r2
-call +6
+call 6#bpf_trace_printk
+call +20
 w1 /= 123
 w1 /= w2
 r1 /= 123
