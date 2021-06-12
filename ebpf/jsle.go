@@ -21,7 +21,7 @@ func (a *JumpSignedSmallerThanOrEqual) Raw() ([]RawInstruction, error) {
 }
 
 func (a *JumpSignedSmallerThanOrEqual) String() string {
-	return fmt.Sprintf("if (s64)%s <= %d: goto pc%+d", a.Dest, a.Value, a.Offset)
+	return fmt.Sprintf("if r%s s<= %d goto %+d", a.Dest, a.Value, a.Offset)
 }
 
 func (a *JumpSignedSmallerThanOrEqual) SetJumpTarget(relAddr int16) {
@@ -51,7 +51,7 @@ func (a *JumpSignedSmallerThanOrEqual32) Raw() ([]RawInstruction, error) {
 }
 
 func (a *JumpSignedSmallerThanOrEqual32) String() string {
-	return fmt.Sprintf("if (s32)%s <= %d: goto pc%+d", a.Dest, a.Value, a.Offset)
+	return fmt.Sprintf("if w%d s<= %d goto %+d", a.Dest, a.Value, a.Offset)
 }
 
 func (a *JumpSignedSmallerThanOrEqual32) SetJumpTarget(relAddr int16) {
@@ -80,7 +80,7 @@ func (a *JumpSignedSmallerThanOrEqualRegister) Raw() ([]RawInstruction, error) {
 }
 
 func (a *JumpSignedSmallerThanOrEqualRegister) String() string {
-	return fmt.Sprintf("if (s64)%s <= (s64)%s: goto pc%+d", a.Dest, a.Src, a.Offset)
+	return fmt.Sprintf("if r%s s<= r%s goto %+d", a.Dest, a.Src, a.Offset)
 }
 
 func (a *JumpSignedSmallerThanOrEqualRegister) SetJumpTarget(relAddr int16) {
@@ -105,7 +105,7 @@ func (a *JumpSignedSmallerThanOrEqualRegister32) Raw() ([]RawInstruction, error)
 }
 
 func (a *JumpSignedSmallerThanOrEqualRegister32) String() string {
-	return fmt.Sprintf("if (s32)%s <= (s32)%s: goto pc%+d", a.Dest, a.Src, a.Offset)
+	return fmt.Sprintf("if w%d s<= w%d goto %+d", a.Dest, a.Src, a.Offset)
 }
 
 func (a *JumpSignedSmallerThanOrEqualRegister32) SetJumpTarget(relAddr int16) {

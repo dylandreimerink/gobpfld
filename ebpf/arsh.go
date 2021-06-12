@@ -16,7 +16,7 @@ func (a *ARSH32) Raw() ([]RawInstruction, error) {
 }
 
 func (a *ARSH32) String() string {
-	return fmt.Sprintf("%s ~>>= %d", a.Dest, a.Value)
+	return fmt.Sprintf("w%s s>>= %d", a.Dest, a.Value)
 }
 
 var _ Instruction = (*ARSH64)(nil)
@@ -33,7 +33,7 @@ func (a *ARSH64) Raw() ([]RawInstruction, error) {
 }
 
 func (a *ARSH64) String() string {
-	return fmt.Sprintf("%s ~>>= %d", a.Dest, a.Value)
+	return fmt.Sprintf("r%s s>>= %d", a.Dest, a.Value)
 }
 
 var _ Instruction = (*ARSH32Register)(nil)
@@ -50,7 +50,7 @@ func (a *ARSH32Register) Raw() ([]RawInstruction, error) {
 }
 
 func (a *ARSH32Register) String() string {
-	return fmt.Sprintf("%s ~>>= %d", a.Dest, a.Src)
+	return fmt.Sprintf("w%s s>>= w%d", a.Dest, a.Src)
 }
 
 var _ Instruction = (*ARSH64Register)(nil)
@@ -67,5 +67,5 @@ func (a *ARSH64Register) Raw() ([]RawInstruction, error) {
 }
 
 func (a *ARSH64Register) String() string {
-	return fmt.Sprintf("%s ~>>= %s", a.Dest, a.Src)
+	return fmt.Sprintf("r%s s>>= r%s", a.Dest, a.Src)
 }

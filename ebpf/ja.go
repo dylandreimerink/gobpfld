@@ -18,7 +18,7 @@ func (a *Jump) Raw() ([]RawInstruction, error) {
 }
 
 func (a *Jump) String() string {
-	return fmt.Sprintf("goto pc%+d", a.Offset)
+	return fmt.Sprintf("goto %+d", a.Offset)
 }
 
 func (a *Jump) SetJumpTarget(relAddr int16) {

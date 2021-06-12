@@ -19,27 +19,27 @@ var _ Instruction = (*LoadConstant64bit)(nil)
 type LoadConstant64bit struct {
 	Dest Register
 	Src  Register
-	Val1 int32
-	Val2 int32
+	Val1 uint32
+	Val2 uint32
 }
 
 func (lc *LoadConstant64bit) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
-		{Op: BPF_LD | uint8(BPF_DW) | BPF_IMM, Reg: NewReg(lc.Src, lc.Dest), Imm: lc.Val1},
-		{Op: 0, Reg: 0, Imm: lc.Val2},
+		{Op: BPF_LD | uint8(BPF_DW) | BPF_IMM, Reg: NewReg(lc.Src, lc.Dest), Imm: int32(lc.Val1)},
+		{Op: 0, Reg: 0, Imm: int32(lc.Val2)},
 	}, nil
 }
 
 func (lc *LoadConstant64bit) String() string {
 	if lc.Src == BPF_PSEUDO_MAP_FD {
-		return fmt.Sprintf("%s = map fd#%d", lc.Dest, lc.Val1)
+		return fmt.Sprintf("r%s = map fd#%d", lc.Dest, lc.Val1)
 	}
 
 	if lc.Src == BPF_PSEUDO_MAP_FD_VALUE {
-		return fmt.Sprintf("%s = map value#%d[%d]", lc.Dest, lc.Val1, lc.Val2)
+		return fmt.Sprintf("r%s = map value#%d[%d]", lc.Dest, lc.Val1, lc.Val2)
 	}
 
-	return fmt.Sprintf("%s = %d ll", lc.Dest, int64(lc.Val1)<<32+int64(lc.Val2))
+	return fmt.Sprintf("r%s = %d ll", lc.Dest, (uint64(lc.Val2)<<32)+uint64(lc.Val1))
 }
 
 var _ Instruction = (*LoadMemory)(nil)
@@ -69,7 +69,7 @@ func (lm *LoadMemory) String() string {
 		offset = -offset
 	}
 
-	return fmt.Sprintf("%s = *(%s *) (%s %s %d)", lm.Dest, lm.Size, lm.Src, sign, offset)
+	return fmt.Sprintf("r%s = *(%s *)(r%s %s %d)", lm.Dest, lm.Size, lm.Src, sign, offset)
 }
 
 var _ Instruction = (*LoadSocketBuf)(nil)
@@ -91,7 +91,14 @@ func (lm *LoadSocketBuf) Raw() ([]RawInstruction, error) {
 }
 
 func (lm *LoadSocketBuf) String() string {
-	return fmt.Sprintf("r0 = ntohl((%s) (((struct sk_buff *) r6)->data[%s%+d]))", lm.Size, lm.Src, lm.Offset)
+	sign := "+"
+	off := lm.Offset
+	if lm.Offset < 0 {
+		sign = "-"
+		off = -lm.Offset
+	}
+
+	return fmt.Sprintf("r0 = ntohl((%s) (((struct sk_buff *) r6)->data[r%s %s %d]))", lm.Size, lm.Src, sign, off)
 }
 
 var _ Instruction = (*LoadSocketBufConstant)(nil)
@@ -104,7 +111,7 @@ type LoadSocketBufConstant struct {
 func (lm *LoadSocketBufConstant) Raw() ([]RawInstruction, error) {
 	return []RawInstruction{
 		{
-			Op:  BPF_IMM | uint8(lm.Size) | BPF_LD,
+			Op:  BPF_ABS | uint8(lm.Size) | BPF_LD,
 			Imm: lm.Value,
 		},
 	}, nil

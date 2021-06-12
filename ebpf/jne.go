@@ -21,7 +21,7 @@ func (a *JumpNotEqual) Raw() ([]RawInstruction, error) {
 }
 
 func (a *JumpNotEqual) String() string {
-	return fmt.Sprintf("if %s != %d: goto pc%+d", a.Dest, a.Value, a.Offset)
+	return fmt.Sprintf("if r%s != %d goto %+d", a.Dest, a.Value, a.Offset)
 }
 
 func (a *JumpNotEqual) SetJumpTarget(relAddr int16) {
@@ -51,7 +51,7 @@ func (a *JumpNotEqual32) Raw() ([]RawInstruction, error) {
 }
 
 func (a *JumpNotEqual32) String() string {
-	return fmt.Sprintf("if %s != %d: goto pc%+d", a.Dest, a.Value, a.Offset)
+	return fmt.Sprintf("if w%s != %d goto %+d", a.Dest, a.Value, a.Offset)
 }
 
 func (a *JumpNotEqual32) SetJumpTarget(relAddr int16) {
@@ -80,7 +80,7 @@ func (a *JumpNotEqualRegister) Raw() ([]RawInstruction, error) {
 }
 
 func (a *JumpNotEqualRegister) String() string {
-	return fmt.Sprintf("if %s != %s: goto pc%+d", a.Dest, a.Src, a.Offset)
+	return fmt.Sprintf("if r%s != r%s goto %+d", a.Dest, a.Src, a.Offset)
 }
 
 func (a *JumpNotEqualRegister) SetJumpTarget(relAddr int16) {
@@ -105,7 +105,7 @@ func (a *JumpNotEqualRegister32) Raw() ([]RawInstruction, error) {
 }
 
 func (a *JumpNotEqualRegister32) String() string {
-	return fmt.Sprintf("if %s != %s: goto pc%+d", a.Dest, a.Src, a.Offset)
+	return fmt.Sprintf("if w%s != w%s goto %+d", a.Dest, a.Src, a.Offset)
 }
 
 func (a *JumpNotEqualRegister32) SetJumpTarget(relAddr int16) {

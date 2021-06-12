@@ -16,7 +16,7 @@ func (a *Xor32) Raw() ([]RawInstruction, error) {
 }
 
 func (a *Xor32) String() string {
-	return fmt.Sprintf("%s ^= %d", a.Dest, a.Value)
+	return fmt.Sprintf("w%s ^= %d", a.Dest, a.Value)
 }
 
 var _ Instruction = (*Xor64)(nil)
@@ -33,7 +33,7 @@ func (a *Xor64) Raw() ([]RawInstruction, error) {
 }
 
 func (a *Xor64) String() string {
-	return fmt.Sprintf("%s ^= %d", a.Dest, a.Value)
+	return fmt.Sprintf("r%s ^= %d", a.Dest, a.Value)
 }
 
 var _ Instruction = (*Xor32Register)(nil)
@@ -50,7 +50,7 @@ func (a *Xor32Register) Raw() ([]RawInstruction, error) {
 }
 
 func (a *Xor32Register) String() string {
-	return fmt.Sprintf("%s ^= %d", a.Dest, a.Src)
+	return fmt.Sprintf("w%s ^= w%d", a.Dest, a.Src)
 }
 
 var _ Instruction = (*Xor64Register)(nil)
@@ -67,5 +67,5 @@ func (a *Xor64Register) Raw() ([]RawInstruction, error) {
 }
 
 func (a *Xor64Register) String() string {
-	return fmt.Sprintf("%s ^= %s", a.Dest, a.Src)
+	return fmt.Sprintf("r%s ^= r%s", a.Dest, a.Src)
 }

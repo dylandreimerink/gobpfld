@@ -18,7 +18,7 @@ func (c *CallBPF) Raw() ([]RawInstruction, error) {
 }
 
 func (c *CallBPF) String() string {
-	return fmt.Sprintf("call pc%+d", c.Offset)
+	return fmt.Sprintf("call %+d", c.Offset)
 }
 
 func (c *CallBPF) SetJumpTarget(relAddr int16) {

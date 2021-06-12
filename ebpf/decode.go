@@ -1,6 +1,8 @@
 package ebpf
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // Decode decodes a slice of raw instructions into interpreted instructions
 func Decode(rawIns []RawInstruction) ([]Instruction, error) {
@@ -25,8 +27,8 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			instructions = append(instructions, &LoadConstant64bit{
 				Dest: dst,
 				Src:  src,
-				Val1: imm,
-				Val2: rawIns[i+1].Imm,
+				Val1: uint32(imm),
+				Val2: uint32(rawIns[i+1].Imm),
 			})
 
 			inst = &Nop{}
@@ -133,6 +135,14 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 					Size:   Size(op ^ (BPF_STX | BPF_ATOMIC)),
 					Fetch:  imm == int32(BPF_ADD|BPF_FETCH),
 				}
+			case int32(BPF_SUB), int32(BPF_SUB | BPF_FETCH):
+				inst = &AtomicSub{
+					Src:    src,
+					Dest:   dst,
+					Offset: off,
+					Size:   Size(op ^ (BPF_STX | BPF_ATOMIC)),
+					Fetch:  imm == int32(BPF_SUB|BPF_FETCH),
+				}
 			case int32(BPF_AND), int32(BPF_AND | BPF_FETCH):
 				inst = &AtomicAnd{
 					Src:    src,
@@ -165,7 +175,7 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 					Size:   Size(op ^ (BPF_STX | BPF_ATOMIC)),
 				}
 			case int32(BPF_CMPXCHG):
-				inst = &AtomicCompareAndWrite{
+				inst = &AtomicCompareAndExchange{
 					Src:    src,
 					Dest:   dst,
 					Offset: off,
@@ -387,7 +397,7 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			}
 
 		case BPF_ALU64 | BPF_NEG:
-			inst = &Neg32{
+			inst = &Neg64{
 				Dest: dst,
 			}
 
@@ -498,23 +508,35 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 			//
 
 		case BPF_ALU | BPF_END | BPF_TO_LE:
-			inst = &End32ToLE{
-				Dest: dst,
-			}
-
-		case BPF_ALU64 | BPF_END | BPF_TO_LE:
-			inst = &End64ToLE{
-				Dest: dst,
+			switch imm {
+			case 16:
+				inst = &End16ToLE{
+					Dest: dst,
+				}
+			case 32:
+				inst = &End32ToLE{
+					Dest: dst,
+				}
+			case 64:
+				inst = &End64ToLE{
+					Dest: dst,
+				}
 			}
 
 		case BPF_ALU | BPF_END | BPF_TO_BE:
-			inst = &End32ToBE{
-				Dest: dst,
-			}
-
-		case BPF_ALU64 | BPF_END | BPF_TO_BE:
-			inst = &End64ToBE{
-				Dest: dst,
+			switch imm {
+			case 16:
+				inst = &End16ToBE{
+					Dest: dst,
+				}
+			case 32:
+				inst = &End32ToBE{
+					Dest: dst,
+				}
+			case 64:
+				inst = &End64ToBE{
+					Dest: dst,
+				}
 			}
 
 			//

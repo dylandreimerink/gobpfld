@@ -1,0 +1,162 @@
+w1 s>>= 123
+w1 s>>= w2
+r1 s>>= 123
+r1 s>>= r2
+w1 += 123
+w1 += w2
+r1 += 123
+r1 += r2
+w1 &= 123
+w1 &= w2
+r1 &= 123
+r1 &= r2
+lock *(u32 *)(r3 + 456) += w2
+lock *(u32 *)(r3 - 456) += w2
+lock *(u64 *)(r3 + 456) += r2
+lock *(u64 *)(r3 - 456) += r2
+lock *(u32 *)(r3 + 456) -= w2
+lock *(u32 *)(r3 - 456) -= w2
+lock *(u64 *)(r3 + 456) -= r2
+lock *(u32 *)(r3 - 456) -= w2
+lock *(u32 *)(r3 + 456) &= w2
+lock *(u32 *)(r3 - 456) &= w2
+lock *(u64 *)(r3 + 456) &= r2
+lock *(u64 *)(r3 - 456) &= r2
+w0 = cmpxchg(r3 + 456, w0, w2)
+w0 = cmpxchg(r3 - 456, w0, w2)
+r0 = cmpxchg(r3 + 456, r0, r2)
+r0 = cmpxchg(r3 - 456, r0, r2)
+w1 = xchg(r3 + 456, w1)
+w1 = xchg(r3 - 456, w1)
+r1 = xchg(r3 + 456, r1)
+r1 = xchg(r3 - 456, r1)
+lock *(u32 *)(r3 + 456) |= w2
+lock *(u32 *)(r3 - 456) |= w2
+lock *(u64 *)(r3 + 456) |= r2
+lock *(u64 *)(r3 - 456) |= r2
+lock *(u32 *)(r3 + 456) ^= w2
+lock *(u32 *)(r3 - 456) ^= w2
+lock *(u64 *)(r3 + 456) ^= r2
+lock *(u64 *)(r3 - 456) ^= r2
+call +6
+w1 /= 123
+w1 /= w2
+r1 /= 123
+r1 /= r2
+r1 = be16 r1
+r1 = le16 r1
+r1 = be32 r1
+r1 = le32 r1
+r1 = be64 r1
+r1 = le64 r1
+exit
+goto +109
+if w1 == 123 goto +108
+if w1 == w2 goto +107
+if w1 == 123 goto +456
+if w1 == 123 goto -456
+if w1 == w2 goto +456
+if w1 == w2 goto -456
+if r1 == 123 goto +102
+if r1 == r2 goto +101
+if r1 == 123 goto +456
+if r1 == 123 goto -456
+if r1 == r2 goto +456
+if r1 == r2 goto -456
+if w1 > 123 goto +96
+if w1 > w2 goto +95
+if r1 > 123 goto +94
+if r1 > r2 goto +93
+if w1 >= 123 goto +92
+if w1 >= w2 goto +91
+if r1 >= 123 goto +90
+if r1 >= r2 goto +89
+if w1 & 123 goto +88
+if w1 & w2 goto +87
+if r1 & 123 goto +86
+if r1 & r2 goto +85
+if w1 != 123 goto +84
+if w1 != w2 goto +83
+if r1 != 123 goto +82
+if r1 != r2 goto +81
+if w1 s> 123 goto +80
+if w1 s> w2 goto +79
+if r1 s> 123 goto +78
+if r1 s> r2 goto +77
+if w1 s>= 123 goto +76
+if w1 s>= w2 goto +75
+if r1 s>= 123 goto +74
+if r1 s>= r2 goto +73
+if w1 s< 123 goto +72
+if w1 s< w2 goto +71
+if r1 s< 123 goto +70
+if r1 s< r2 goto +69
+if w1 s<= 123 goto +68
+if w1 s<= w2 goto +67
+if r1 s<= 123 goto +66
+if r1 s<= r2 goto +65
+if w1 < 123 goto +64
+if w1 < w2 goto +63
+if r1 < 123 goto +62
+if r1 < r2 goto +61
+if w1 <= 123 goto +60
+if w1 <= w2 goto +59
+if r1 <= 123 goto +58
+if r1 <= r2 goto +57
+r1 = 123123123123123 ll
+nop
+r1 = *(u8 *)(r3 + 456)
+r1 = *(u16 *)(r3 + 456)
+r1 = *(u32 *)(r3 + 456)
+r1 = *(u64 *)(r3 + 456)
+r0 = ntohl((u8) (((struct sk_buff *) r6)->data[456]))
+r0 = ntohl((u16) (((struct sk_buff *) r6)->data[456]))
+r0 = ntohl((u32) (((struct sk_buff *) r6)->data[456]))
+r0 = ntohl((u64) (((struct sk_buff *) r6)->data[456]))
+r0 = ntohl((u8) (((struct sk_buff *) r6)->data[r3 + 456]))
+r0 = ntohl((u16) (((struct sk_buff *) r6)->data[r3 + 456]))
+r0 = ntohl((u32) (((struct sk_buff *) r6)->data[r3 - 456]))
+r0 = ntohl((u64) (((struct sk_buff *) r6)->data[r3 - 456]))
+w1 <<= 123
+w1 <<= w2
+r1 <<= 123
+r1 <<= r2
+w1 %= w2
+w1 %= w2
+r1 %= 123
+r1 %= r2
+w1 = 123
+w1 = w2
+r1 = 123
+r1 = r2
+w1 *= 123
+w1 *= w2
+r1 *= 123
+r1 *= r2
+w1 = -w1
+r1 = -r1
+w1 |= 123
+w1 |= w2
+r1 |= 123
+r1 |= r2
+w1 >>= 123
+w1 >>= w2
+r1 >>= 123
+r1 >>= r2
+*(u8 *)(r3 + 456) = r1
+*(u16 *)(r3 + 456) = r1
+*(u32 *)(r3 + 456) = r1
+*(u64 *)(r3 + 456) = r1
+*(u8 *)(r3 + 456) = 123
+*(u16 *)(r3 + 456) = 123
+*(u32 *)(r3 + 456) = 123
+*(u64 *)(r3 + 456) = 123
+w1 -= 123
+w1 -= w2
+r1 -= 123
+r1 -= r2
+w1 ^= 123
+w1 ^= w2
+r1 ^= 123
+r1 ^= r2
+exit

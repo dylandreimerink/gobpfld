@@ -21,7 +21,7 @@ func (a *JumpEqual) Raw() ([]RawInstruction, error) {
 }
 
 func (a *JumpEqual) String() string {
-	return fmt.Sprintf("if %s == %d: goto pc%+d", a.Dest, a.Value, a.Offset)
+	return fmt.Sprintf("if r%s == %d goto %+d", a.Dest, a.Value, a.Offset)
 }
 
 func (a *JumpEqual) SetJumpTarget(relAddr int16) {
@@ -51,7 +51,7 @@ func (a *JumpEqual32) Raw() ([]RawInstruction, error) {
 }
 
 func (a *JumpEqual32) String() string {
-	return fmt.Sprintf("if %s == %d: goto pc%+d", a.Dest, a.Value, a.Offset)
+	return fmt.Sprintf("if w%s == %d goto %+d", a.Dest, a.Value, a.Offset)
 }
 
 func (a *JumpEqual32) SetJumpTarget(relAddr int16) {
@@ -80,7 +80,7 @@ func (a *JumpEqualRegister) Raw() ([]RawInstruction, error) {
 }
 
 func (a *JumpEqualRegister) String() string {
-	return fmt.Sprintf("if %s == %s: goto pc%+d", a.Dest, a.Src, a.Offset)
+	return fmt.Sprintf("if r%s == r%s goto %+d", a.Dest, a.Src, a.Offset)
 }
 
 func (a *JumpEqualRegister) SetJumpTarget(relAddr int16) {
@@ -105,7 +105,7 @@ func (a *JumpEqualRegister32) Raw() ([]RawInstruction, error) {
 }
 
 func (a *JumpEqualRegister32) String() string {
-	return fmt.Sprintf("if %s == %s: goto pc%+d", a.Dest, a.Src, a.Offset)
+	return fmt.Sprintf("if w%s == w%s goto %+d", a.Dest, a.Src, a.Offset)
 }
 
 func (a *JumpEqualRegister32) SetJumpTarget(relAddr int16) {

@@ -183,7 +183,7 @@ const PSEUDO_CALL Register = 0x01
 
 func (r Register) String() string {
 	if r < BPF_REG_MAX {
-		return fmt.Sprintf("r%d", r)
+		return fmt.Sprintf("%d", r)
 	}
 
 	return "invalid"

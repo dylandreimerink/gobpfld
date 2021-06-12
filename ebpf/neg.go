@@ -15,7 +15,7 @@ func (a *Neg32) Raw() ([]RawInstruction, error) {
 }
 
 func (a *Neg32) String() string {
-	return fmt.Sprintf("!%s", a.Dest)
+	return fmt.Sprintf("w%s = -w%s", a.Dest, a.Dest)
 }
 
 var _ Instruction = (*Neg64)(nil)
@@ -31,5 +31,5 @@ func (a *Neg64) Raw() ([]RawInstruction, error) {
 }
 
 func (a *Neg64) String() string {
-	return fmt.Sprintf("!%s", a.Dest)
+	return fmt.Sprintf("r%s = -r%s", a.Dest, a.Dest)
 }
