@@ -38,6 +38,7 @@ GoBPFLD is a loader/library to make eBPF tool development in Go smoother. It is 
 * Attaching eBPF programs to sockets(see BPFProgram.SocketAttach and BPFProgram.SocketAttachControlFunc)
 * XSK/AF_XDP socket support (see NewXSKSocket and XSKSocket)
 * Go wrappers around all bpf syscall commands (see bpfsys package)
+* eBPF clang style assembly parser/assembler (see eBPF package)
 
 ## Examples
 

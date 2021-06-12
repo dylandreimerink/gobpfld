@@ -8,11 +8,15 @@ This program demonstrates the loading of a simple XDP eBPF program. The program 
 
 It demonstrates opening and decoding an ELF file into a BPFProgram and BPFMap, loading the program and map into the kernel, attaching the program to the loopback interface and reading the stats reported by the XDP program from the map.
 
-## xdp_stats_assembly
+## xdp_stats_instructions
 
 This program is functionally identical to the xdp_stats example, but the program is not loaded from an ELF file, rather the `ebpf` package is used to craft the same program from individual instructions.
 
 It demonstrates how userspace applications can generate programs dynamically without needing a full toolchain to build the programs.
+
+## xdp_stats_assembly
+
+This program is almost identical to the `xdp_stats_instructions` example, except it replaces the manual instruction crafting with eBPF assembly code which is parsed and turned into eBPF instruction by the `ebpf` package.
 
 ## per_cpu_map
 
