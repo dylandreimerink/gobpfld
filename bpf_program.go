@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"regexp"
 	"syscall"
 	"unsafe"
 
@@ -444,6 +446,79 @@ func (p *BPFProgram) XDPLinkDetach(settings BPFProgramXDPLinkDetachSettings) err
 	return nil
 }
 
+// TestXDPProgSettings are the settings passed to XDPTestProgram
+type TestXDPProgSettings struct {
+	// How often should the test be repeated? For benchmarking purposes
+	Repeat uint32
+	// The input data, in this case the ethernet frame to check
+	Data []byte
+}
+
+// TestXDPProgResult is the result of XDPTestProgram
+type TestXDPProgResult struct {
+	// The return value of the program
+	ReturnValue int32
+	// The avarage duration of a single run in nanoseconds
+	Duration uint32
+	// The modified data (as it would be received by the network stack)
+	Data []byte
+}
+
+// XDPTestProgram executes a loaded XDP program on supplied data. This feature can be used to test the functionality
+// of an XDP program without having to generate actual traffic on an interface. It is also useful for benchmarking
+// a XDP programs which is otherwise impractical.
+func (p *BPFProgram) XDPTestProgram(settings TestXDPProgSettings) (*TestXDPProgResult, error) {
+	if !p.loaded {
+		return nil, ErrProgramNotLoaded
+	}
+
+	if p.programType != bpftypes.BPF_PROG_TYPE_XDP {
+		return nil, ErrProgramNotXDPType
+	}
+
+	// Some basic checks on the inputs to generate nice errors
+	// https://elixir.bootlin.com/linux/v5.12.10/source/net/bpf/test_run.c#L181
+
+	const ethHeaderLength = 14
+	if len(settings.Data) < ethHeaderLength {
+		return nil, fmt.Errorf("data must be at least %d bytes (size of a ethernet frame header)", ethHeaderLength)
+	}
+
+	pageSize := os.Getpagesize()
+
+	const xdpHeadspace = 256
+	if len(settings.Data)+xdpHeadspace > pageSize {
+		return nil, fmt.Errorf(
+			"data size '%d' + %d bytes headroom is larger than the page size on this machine: '%d'",
+			ethHeaderLength,
+			xdpHeadspace,
+			pageSize,
+		)
+	}
+
+	// Allocate an array the size of a single page since that should be the limit for any generated data
+	out := make([]byte, pageSize)
+
+	attr := bpfsys.BPFAttrProgTestRun{
+		ProgFD:      p.fd,
+		Repeat:      uint32(settings.Repeat),
+		DataSizeIn:  uint32(len(settings.Data)),
+		DataIn:      uintptr(unsafe.Pointer(&settings.Data[0])),
+		DataSizeOut: uint32(pageSize),
+		DataOut:     uintptr(unsafe.Pointer(&out[0])),
+	}
+
+	if err := bpfsys.ProgramTestRun(&attr); err != nil {
+		return nil, fmt.Errorf("bpf syscall error: %w", err)
+	}
+
+	return &TestXDPProgResult{
+		ReturnValue: int32(attr.Retval),
+		Duration:    attr.Duration,
+		Data:        out[:attr.DataSizeOut],
+	}, nil
+}
+
 // ErrProgramNotSocketFilterType is returned when attempting to attach a non-socket filter program to a socket.
 var ErrProgramNotSocketFilterType = errors.New("the program is not loaded as an socket filter program and " +
 	"thus can't be attached as such")
@@ -666,17 +741,15 @@ func (on *ObjName) SetBytes(strBytes []byte) error {
 	return nil
 }
 
+// https://elixir.bootlin.com/linux/v5.12.10/source/kernel/bpf/syscall.c#L719
+var objNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9_\.]{1,15}$`)
+
 func (on *ObjName) SetString(str string) error {
-	strBytes := []byte(str)
-	if len(strBytes) > bpftypes.BPF_OBJ_NAME_LEN-1 {
-		return fmt.Errorf(
-			"%w: limit is %d bytes, length: %d",
-			ErrObjNameToLarge,
-			bpftypes.BPF_OBJ_NAME_LEN-1,
-			len(strBytes),
-		)
+	if !objNameRegexp.MatchString(str) {
+		return fmt.Errorf("object name must be 1 to 15 alpha numeric, '_', or '.' chars")
 	}
 
+	strBytes := []byte(str)
 	on.str = str
 	for i := 0; i < bpftypes.BPF_OBJ_NAME_LEN-1; i++ {
 		if len(strBytes) > i {

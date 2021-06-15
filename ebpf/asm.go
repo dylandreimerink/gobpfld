@@ -15,7 +15,8 @@ var (
 		{Name: "Comment", Pattern: `(?:#)[^\n]*`, Action: nil},
 		{Name: "Register32", Pattern: `w[0-9]{1,2}`, Action: nil},
 		{Name: "Register64", Pattern: `r[0-9]{1,2}`, Action: nil},
-		{Name: "Number", Pattern: `(0x|0b)?\d+`, Action: nil},
+		// https://golang.org/pkg/strconv/#ParseInt
+		{Name: "Number", Pattern: `(0x[0-9a-fA-F]+)|(0b[01]+)|(0o?[0-7]+)|\d+`, Action: nil},
 		{Name: "Nop", Pattern: `nop`, Action: nil},
 		{Name: "Ident", Pattern: `[a-zA-Z0-9_]+`, Action: nil},
 		{Name: "LabelEnd", Pattern: `:`, Action: nil},

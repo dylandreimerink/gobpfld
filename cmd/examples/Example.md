@@ -68,15 +68,25 @@ However one must also keep the folloing limitations in mind:
 
 ## icmp_pcap
 
-This examples creates a raw socket and uses a eBPF program to filter out just ICMP traffic. It demonstrates how to write a socket filter program as well as how to attach a eBPF program to a socket using a file descriptor.
+This example creates a raw socket and uses a eBPF program to filter out just ICMP traffic. It demonstrates how to write a socket filter program as well as how to attach a eBPF program to a socket using a file descriptor.
 
 ## udp_socket_filter
 
-This examples creates an udp socket which listens on *:3000 using the stdlib net package. The eBPF program is then attached via the net.ListenConfig.Control callback. Event tho the socket listens on all ip addresses the eBPF program filters all traffic accept those with destination address 127.0.0.1.
+This example creates an udp socket which listens on *:3000 using the stdlib net package. The eBPF program is then attached via the net.ListenConfig.Control callback. Event tho the socket listens on all ip addresses the eBPF program filters all traffic accept those with destination address 127.0.0.1.
+
+## test_xdp_program
+
+This example example domonstrates how to test an XDP program without actually attaching the program to a link and sending actual traffic. Once a eBPF is loaded into the kernel we can ask the kernel to call the program X of times with data that is specified by us. The kernel will return the return value, the updated packet and the duration of execution in nanoseconds. 
+
+This is useful in a number of cases, for example:
+  * Programatically testing XDP programs like a unit or intergration test.
+  * Testing a program on production traffic (by capturing/mirroring frames with a raw socket and passing to the XDP program) 
+  * Emulating hard to create edge cases (corrupt packets/failed checksums)
+  * Benchmarking XDP programs
 
 ## xsk_echo_reply
 
-This examples shows how to implement a ICMP echo reply (ping response) using XSK/[AF_XDP](https://www.kernel.org/doc/html/latest/networking/af_xdp.html). XSK(XDP socket) allows us to perform kernel bypass using XDP. We do this by creating a network socket, much like a normal network socket. Instead of binding it to an port and/or IP we just bind it to a network interface and NIC Queue. A XDP program is attached to the same network interface, this program now has the ability to send frames over this socket directly to the userspace application, thus bypassing the kernel network stack.
+This example shows how to implement a ICMP echo reply (ping response) using XSK/[AF_XDP](https://www.kernel.org/doc/html/latest/networking/af_xdp.html). XSK(XDP socket) allows us to perform kernel bypass using XDP. We do this by creating a network socket, much like a normal network socket. Instead of binding it to an port and/or IP we just bind it to a network interface and NIC Queue. A XDP program is attached to the same network interface, this program now has the ability to send frames over this socket directly to the userspace application, thus bypassing the kernel network stack.
 
 We can also transmit to this socket which again bypasses the kernel stack. The technique is quite advanced and requires a lot of work in userspace to use (userspace network stack/packet decoding). However it is also very powerful, applications vary from virtualization to super fast packet capture. A major advantage of XSK is that we can directly read from and write to the same memory buffer the network driver will use to transmit and recieve data. This offers great performance because no memory has to change context (userspace<->kernel).
 
