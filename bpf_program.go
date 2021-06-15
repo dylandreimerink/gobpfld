@@ -501,7 +501,7 @@ func (p *BPFProgram) XDPTestProgram(settings TestXDPProgSettings) (*TestXDPProgR
 
 	attr := bpfsys.BPFAttrProgTestRun{
 		ProgFD:      p.fd,
-		Repeat:      uint32(settings.Repeat),
+		Repeat:      settings.Repeat,
 		DataSizeIn:  uint32(len(settings.Data)),
 		DataIn:      uintptr(unsafe.Pointer(&settings.Data[0])),
 		DataSizeOut: uint32(pageSize),
