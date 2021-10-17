@@ -40,6 +40,9 @@ const (
 	KFeatMapRingBuffer
 	KFeatMapINodeStorage
 	KFeatMapTaskStorage
+	// KFeatMapPerCPUArrayBatchLookup means batch operations are supported on Per CPU array maps
+	KFeatMapPerCPUArrayBatchLookup
+	KFeatMapPerCPUArrayBatchUpdate
 
 	// An end marker for enumeration, not an actual feature flag
 	kFeatMapMax //nolint:revive // leading k is used to stay consistent with exported vars
@@ -51,35 +54,37 @@ func (ms MapSupport) Has(flags MapSupport) bool {
 }
 
 var mapSupportToString = map[MapSupport]string{
-	KFeatMapHash:                 "Hash",
-	KFeatMapArray:                "Array",
-	KFeatMapTailCall:             "Tail call",
-	KFeatMapPerfEvent:            "Perf event",
-	KFeatMapPerCPUHash:           "Per CPU hash",
-	KFeatMapPerCPUArray:          "Per CPU array",
-	KFeatMapStackTrace:           "Stack trace",
-	KFeatMapCGroupArray:          "CGroup array",
-	KFeatMapLRUHash:              "LRU hash",
-	KFeatMapLRUPerCPUHash:        "LRU per CPU hash",
-	KFeatMapLPMTrie:              "LPM trie",
-	KFeatMapArrayOfMaps:          "Array of maps",
-	KFeatMapHashOfMaps:           "Hash of maps",
-	KFeatMapNetdevArray:          "Netdev array",
-	KFeatMapSocketArray:          "Socket array",
-	KFeatMapCPU:                  "CPU",
-	KFeatMapAFXDP:                "AF_XDP",
-	KFeatMapSocketHash:           "Socket hash",
-	KFeatMapCGroupStorage:        "CGroup storage",
-	KFeatMapReuseportSocketArray: "Reuseport socket array",
-	KFeatMapPerCPUCGroupStorage:  "Per CPU cgroup storage",
-	KFeatMapQueue:                "Queue",
-	KFeatMapStack:                "Stack",
-	KFeatMapSocketLocalStorage:   "Socket local storage",
-	KFeatMapNetdevHash:           "Netdev hash",
-	KFeatMapStructOps:            "Struct ops",
-	KFeatMapRingBuffer:           "Ring buffer",
-	KFeatMapINodeStorage:         "INode storage",
-	KFeatMapTaskStorage:          "Task storage",
+	KFeatMapHash:                   "Hash",
+	KFeatMapArray:                  "Array",
+	KFeatMapTailCall:               "Tail call",
+	KFeatMapPerfEvent:              "Perf event",
+	KFeatMapPerCPUHash:             "Per CPU hash",
+	KFeatMapPerCPUArray:            "Per CPU array",
+	KFeatMapStackTrace:             "Stack trace",
+	KFeatMapCGroupArray:            "CGroup array",
+	KFeatMapLRUHash:                "LRU hash",
+	KFeatMapLRUPerCPUHash:          "LRU per CPU hash",
+	KFeatMapLPMTrie:                "LPM trie",
+	KFeatMapArrayOfMaps:            "Array of maps",
+	KFeatMapHashOfMaps:             "Hash of maps",
+	KFeatMapNetdevArray:            "Netdev array",
+	KFeatMapSocketArray:            "Socket array",
+	KFeatMapCPU:                    "CPU",
+	KFeatMapAFXDP:                  "AF_XDP",
+	KFeatMapSocketHash:             "Socket hash",
+	KFeatMapCGroupStorage:          "CGroup storage",
+	KFeatMapReuseportSocketArray:   "Reuseport socket array",
+	KFeatMapPerCPUCGroupStorage:    "Per CPU cgroup storage",
+	KFeatMapQueue:                  "Queue",
+	KFeatMapStack:                  "Stack",
+	KFeatMapSocketLocalStorage:     "Socket local storage",
+	KFeatMapNetdevHash:             "Netdev hash",
+	KFeatMapStructOps:              "Struct ops",
+	KFeatMapRingBuffer:             "Ring buffer",
+	KFeatMapINodeStorage:           "INode storage",
+	KFeatMapTaskStorage:            "Task storage",
+	KFeatMapPerCPUArrayBatchLookup: "Per CPU array batch lookup",
+	KFeatMapPerCPUArrayBatchUpdate: "Per CPU array batch update",
 }
 
 func (ms MapSupport) String() string {

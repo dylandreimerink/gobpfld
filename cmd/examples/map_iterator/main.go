@@ -12,7 +12,7 @@ import (
 const mapSize = 10
 
 func main() {
-	testMap := &gobpfld.BPFGenericMap{
+	testMap := &gobpfld.ArrayMap{
 		AbstractMap: gobpfld.AbstractMap{
 			Name: gobpfld.MustNewObjName("xdp_stats_map"),
 			Definition: gobpfld.BPFMapDef{
@@ -36,7 +36,7 @@ func main() {
 
 	for i := uint32(1); i <= mapSize; i++ {
 		val := uint64(i * 10)
-		err = testMap.Set(&i, &val, bpfsys.BPFMapElemAny)
+		err = testMap.Set(i, &val, bpfsys.BPFMapElemAny)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error while setting to map: %s\n", err.Error())
 			os.Exit(1)

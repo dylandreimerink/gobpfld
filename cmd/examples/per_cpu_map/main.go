@@ -40,7 +40,7 @@ func main() {
 	program := elf.Programs["percpumap"]
 
 	// Since the map type is an per cpu array type, the elf package will return a generic map
-	counterMap := program.Maps["cnt_map"].(*gobpfld.BPFGenericMap)
+	counterMap := program.Maps["cnt_map"].(*gobpfld.ArrayMap)
 
 	log, err := program.Load(gobpfld.BPFProgramLoadSettings{
 		ProgramType:      bpftypes.BPF_PROG_TYPE_XDP,
@@ -86,7 +86,7 @@ func main() {
 				key := uint32(0)
 				valueSlice := make([]uint64, numCPUs)
 
-				err := counterMap.Get(&key, &valueSlice)
+				err := counterMap.Get(key, &valueSlice)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "error while getting data from per-cpu map: %s\n", err.Error())
 					// Close sigchan to trigger a shutdown
@@ -103,7 +103,7 @@ func main() {
 				if i%10 == 0 {
 					key := uint32(1)
 
-					err := counterMap.Set(&key, &valueSlice, bpfsys.BPFMapElemAny)
+					err := counterMap.Set(key, &valueSlice, bpfsys.BPFMapElemAny)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "error while setting data to per-cpu map: %s\n", err.Error())
 						// Close sigchan to trigger a shutdown
@@ -117,7 +117,7 @@ func main() {
 				// Array must have a static size, so we pick a number of CPUs we will not exceed
 				valueArray := [1024]uint64{}
 
-				err := counterMap.Get(&key, &valueArray)
+				err := counterMap.Get(key, &valueArray)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "error while getting data from per-cpu map: %s\n", err.Error())
 					// Close sigchan to trigger a shutdown

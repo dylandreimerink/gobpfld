@@ -28,7 +28,7 @@ type BPFELF struct {
 	// Used for library code and code shared by multiple programs by way of BPF to BPF calls
 	txtInstr []ebpf.RawInstruction
 	// A list of relocation tables by section name
-	relTables map[string]ELFRelocTable
+	relTables map[string]elfRelocTable
 }
 
 func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error) {
@@ -219,7 +219,7 @@ func parseElf(
 	bpfElf = BPFELF{
 		Programs:  map[string]*BPFProgram{},
 		Maps:      map[string]BPFMap{},
-		relTables: map[string]ELFRelocTable{},
+		relTables: map[string]elfRelocTable{},
 	}
 
 	symbols, err := elfFile.Symbols()
@@ -306,23 +306,7 @@ func parseElf(
 
 					// TODO map name duplicate check
 
-					var bpfMap BPFMap
-					switch abstractMap.Definition.Type {
-					case bpftypes.BPF_MAP_TYPE_PROG_ARRAY:
-						bpfMap = &ProgArrayMap{
-							AbstractMap: abstractMap,
-						}
-					case bpftypes.BPF_MAP_TYPE_XSKMAP:
-						bpfMap = &XSKMap{
-							AbstractMap: abstractMap,
-						}
-					default:
-						bpfMap = &BPFGenericMap{
-							AbstractMap: abstractMap,
-						}
-					}
-
-					bpfElf.Maps[abstractMap.Name.String()] = bpfMap
+					bpfElf.Maps[abstractMap.Name.String()] = bpfMapFromAbstractMap(abstractMap)
 				}
 
 				continue
@@ -386,9 +370,9 @@ func parseElf(
 				return bpfElf, fmt.Errorf("size of relocation table '%s' not devisable by 16", section.Name)
 			}
 
-			relTable := make(ELFRelocTable, len(data)/16)
+			relTable := make(elfRelocTable, len(data)/16)
 			for i := 0; i < len(data); i += 16 {
-				entry := ELFRelocEntry{
+				entry := elfRelocEntry{
 					Rel64: elf.Rel64{
 						Off:  elfFile.ByteOrder.Uint64(data[i : i+8]),
 						Info: elfFile.ByteOrder.Uint64(data[i+8 : i+16]),
@@ -403,7 +387,7 @@ func parseElf(
 				}
 
 				entry.Symbol = &symbols[symNum-1]
-				entry.Type = ELF_R_BPF(elf.R_TYPE64(entry.Info))
+				entry.Type = elf_r_bpf(elf.R_TYPE64(entry.Info))
 
 				relTable[i/16] = entry
 			}
@@ -421,35 +405,36 @@ func parseElf(
 	return bpfElf, nil
 }
 
-type ELFRelocTable []ELFRelocEntry
+type elfRelocTable []elfRelocEntry
 
-// ELF_R_BPF The BPF ELF reloc types for BPF.
+// elf_r_bpf The BPF ELF reloc types for BPF.
 // https://github.com/llvm/llvm-project/blob/74d9a76ad3f55c16982ceaa8b6b4a6b7744109b1/llvm/include/llvm/BinaryFormat/ELFRelocs/BPF.def
 //nolint:lll
-type ELF_R_BPF int
+type elf_r_bpf int
 
 const (
-	// R_BPF_NONE is an invalid relocation type
-	R_BPF_NONE ELF_R_BPF = 0
-	// R_BPF_64_64 indicates that 32 bits should be relocated
-	R_BPF_64_64 ELF_R_BPF = 1
-	// R_BPF_64_32 insicates that 64 bits should be relocated
-	R_BPF_64_32 ELF_R_BPF = 10
+	// r_bpf_none is an invalid relocation type
+	//nolint:deadcode,varcheck // want to keep this here for completeness
+	r_bpf_none elf_r_bpf = 0
+	// r_bpf_64_64 indicates that 32 bits should be relocated
+	r_bpf_64_64 elf_r_bpf = 1
+	// r_bpf_64_32 insicates that 64 bits should be relocated
+	r_bpf_64_32 elf_r_bpf = 10
 )
 
-type ELFRelocEntry struct {
+type elfRelocEntry struct {
 	elf.Rel64
 
 	Symbol *elf.Symbol
-	Type   ELF_R_BPF
+	Type   elf_r_bpf
 }
 
-func (e *ELFRelocEntry) AbsoluteOffset() (uint64, error) {
+func (e *elfRelocEntry) AbsoluteOffset() (uint64, error) {
 	switch e.Type {
-	case R_BPF_64_64:
+	case r_bpf_64_64:
 		// Just the absolute offset from the beginning of the program section
 		return e.Off, nil
-	case R_BPF_64_32:
+	case r_bpf_64_32:
 		// Just the absolute offset from the beginning of the program section truncated to 32 bits
 		const _32bitMask = 0x00000000FFFFFFFF
 		return e.Off & _32bitMask, nil

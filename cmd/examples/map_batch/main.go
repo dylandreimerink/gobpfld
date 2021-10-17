@@ -12,7 +12,7 @@ import (
 const mapSize = 5
 
 func main() {
-	testMap := &gobpfld.BPFGenericMap{
+	testMap := &gobpfld.HashMap{
 		AbstractMap: gobpfld.AbstractMap{
 			Name: gobpfld.MustNewObjName("xdp_stats_map"),
 			Definition: gobpfld.BPFMapDef{

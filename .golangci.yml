@@ -1,6 +1,7 @@
 run:
   skip-dirs:
     - "cmd" # Commands are not part of the library, just examples at the moment
+  tests: false
 
 linters-settings:
   errcheck:

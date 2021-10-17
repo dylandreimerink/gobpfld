@@ -1,6 +1,7 @@
 package gobpfld
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"syscall"
@@ -66,11 +67,14 @@ func MapIterForEach(iter MapIterator, key, value interface{}, callback func(key,
 	return nil
 }
 
-var _ MapIterator = (*SingleLookupIterator)(nil)
+// ErrIteratorDone indicates that Next has been called on an iterator which is done iterating
+var ErrIteratorDone = errors.New("iterator is done")
 
-// SingleLookupIterator uses the MapGetNextKey and MapLookupElem commands to iterate over a map.
+var _ MapIterator = (*singleLookupIterator)(nil)
+
+// singleLookupIterator uses the MapGetNextKey and MapLookupElem commands to iterate over a map.
 // This is very widely supported but not the fastest option.
-type SingleLookupIterator struct {
+type singleLookupIterator struct {
 	// The map over which to iterate
 	BPFMap BPFMap
 
@@ -82,7 +86,7 @@ type SingleLookupIterator struct {
 	done  bool
 }
 
-func (sli *SingleLookupIterator) Init(key, value interface{}) error {
+func (sli *singleLookupIterator) Init(key, value interface{}) error {
 	if sli.BPFMap == nil {
 		return fmt.Errorf("BPFMap may not be nil")
 	}
@@ -116,13 +120,13 @@ func (sli *SingleLookupIterator) Init(key, value interface{}) error {
 // during initialization. It then advances the internal pointer to the next key and value.
 // If the iterator can't get the key and value at the current location since we are done iterating or an error
 // was encountered 'updated' is false.
-func (sli *SingleLookupIterator) Next() (updated bool, err error) {
+func (sli *singleLookupIterator) Next() (updated bool, err error) {
 	if sli.am == nil {
 		return false, fmt.Errorf("iterator not initialized")
 	}
 
 	if sli.done {
-		return false, fmt.Errorf("iterator is done")
+		return false, ErrIteratorDone
 	}
 
 	sli.attr.Value_NextKey = sli.key
@@ -149,9 +153,9 @@ func (sli *SingleLookupIterator) Next() (updated bool, err error) {
 	return true, err
 }
 
-var _ MapIterator = (*BatchLookupIterator)(nil)
+var _ MapIterator = (*batchLookupIterator)(nil)
 
-type BatchLookupIterator struct {
+type batchLookupIterator struct {
 	// The map over which to iterate
 	BPFMap BPFMap
 	// Size of the buffer, bigger buffers are more cpu efficient but takeup more memory
@@ -187,7 +191,7 @@ type BatchLookupIterator struct {
 // According to benchmarks 1024 is a good sweetspot between memory usage and speed
 const defaultBufSize = 1024
 
-func (bli *BatchLookupIterator) Init(key, value interface{}) error {
+func (bli *batchLookupIterator) Init(key, value interface{}) error {
 	if bli.BPFMap == nil {
 		return fmt.Errorf("BPFMap may not be nil")
 	}
@@ -254,13 +258,13 @@ func (bli *BatchLookupIterator) Init(key, value interface{}) error {
 // during initialization. It then advances the internal pointer to the next key and value.
 // If the iterator can't get the key and value at the current location since we are done iterating or an error
 // was encountered 'updated' is false.
-func (bli *BatchLookupIterator) Next() (updated bool, err error) {
+func (bli *batchLookupIterator) Next() (updated bool, err error) {
 	if bli.am == nil {
 		return false, fmt.Errorf("iterator not initialized")
 	}
 
 	if bli.done {
-		return false, fmt.Errorf("iterator is done")
+		return false, ErrIteratorDone
 	}
 
 	// If the buffer has never been filled or we have read until the end of the buffer
@@ -301,6 +305,79 @@ func (bli *BatchLookupIterator) Next() (updated bool, err error) {
 
 	// Increment the offset
 	bli.off++
+
+	return true, nil
+}
+
+var _ MapIterator = (*mmappedIterator)(nil)
+
+// mmappedIterator is a special iterator which can loop over mmapped(memory mapped) maps.
+// This will use the mmapped memory instread of syscalls which improves performance, but only works on array maps which
+// were loaded with the bpftypes.BPFMapFlagsMMapable flag.
+type mmappedIterator struct {
+	am      *ArrayMap
+	nextKey uint32
+	key     *uint32
+	value   uintptr
+}
+
+// Init should be called with a key and value pointer to variables which will be used on subsequent calls to
+// Next to set values. The key and value pointers must be compatible with the map.
+// The value of key should not be modified between the first call to Next and discarding of the iterator since
+// it is reused. Doing so may cause skipped entries, duplicate entries, or error opon calling Next.
+func (mmi *mmappedIterator) Init(key, value interface{}) error {
+	if mmi.am == nil {
+		return fmt.Errorf("array map may not be nil")
+	}
+
+	if ikey, ok := key.(*uint32); ok {
+		mmi.key = ikey
+	} else {
+		return fmt.Errorf("key must be an uint32 key")
+	}
+
+	mmi.nextKey = 0
+
+	var err error
+	mmi.value, err = mmi.am.toValuePtr(value)
+	if err != nil {
+		return fmt.Errorf("toValuePtr: %w", err)
+	}
+
+	return nil
+}
+
+// Next assignes the next value to the key and value last passed via the Init func.
+// True is returned if key and value was updated.
+// If updated is false and err is nil, all values from the iterator were read.
+// On error a iterator should also be considered empty and can be discarded.
+func (mmi *mmappedIterator) Next() (updated bool, err error) {
+	if mmi.am.Definition.MaxEntries == mmi.nextKey {
+		// Use next key to double as an 'done' indicator
+		mmi.nextKey++
+		return false, nil
+	}
+
+	if mmi.am.Definition.MaxEntries < mmi.nextKey {
+		return false, ErrIteratorDone
+	}
+
+	*mmi.key = mmi.nextKey
+	mmi.nextKey++
+
+	// We construct a fake slice of bytes with the memory address that was given.
+	// We need to do this so we can copy the memory, even if the value isn't an slice type
+	dstHdr := reflect.SliceHeader{
+		Data: mmi.value,
+		Len:  int(mmi.am.Definition.ValueSize),
+		Cap:  int(mmi.am.Definition.ValueSize),
+	}
+	//nolint:govet // should be fine if we make sure len and cap are set correctly and the slice doesn't exit scope
+	dstSlice := *(*[]byte)(unsafe.Pointer(&dstHdr))
+
+	start := int(*mmi.key * mmi.am.Definition.ValueSize)
+	end := int((*mmi.key + 1) * mmi.am.Definition.ValueSize)
+	copy(dstSlice, mmi.am.memoryMapped[start:end])
 
 	return true, nil
 }

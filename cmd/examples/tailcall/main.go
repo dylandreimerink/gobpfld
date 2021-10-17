@@ -92,9 +92,9 @@ func main() {
 	// But this is not (yet) included in gobpfld.
 	numCPUs := runtime.NumCPU()
 
-	ipStats := elf.Maps["ip_proto_stats"].(*gobpfld.BPFGenericMap)
-	tcpStats := elf.Maps["tcp_stats"].(*gobpfld.BPFGenericMap)
-	udpStats := elf.Maps["udp_stats"].(*gobpfld.BPFGenericMap)
+	ipStats := elf.Maps["ip_proto_stats"].(*gobpfld.HashMap)
+	tcpStats := elf.Maps["tcp_stats"].(*gobpfld.HashMap)
+	udpStats := elf.Maps["udp_stats"].(*gobpfld.HashMap)
 
 	type trafficStats struct {
 		packets uint64

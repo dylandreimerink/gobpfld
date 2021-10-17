@@ -262,4 +262,10 @@ var featureMinVersion = []kernelFeatureVersion{
 			Map: KFeatMapTaskStorage,
 		},
 	},
+	{
+		version: kernelVersion{major: 5, minor: 13},
+		features: KernelFeatures{
+			Map: KFeatMapPerCPUArrayBatchLookup | KFeatMapPerCPUArrayBatchUpdate,
+		},
+	},
 }

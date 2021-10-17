@@ -40,6 +40,7 @@ GoBPFLD is a loader/library to make eBPF tool development in Go smoother. It is 
 * Go wrappers around all bpf syscall commands (see bpfsys package)
 * eBPF clang style assembly parser/assembler (see eBPF package)
 * XDP program testing (see BPFProgram.XDPTestProgram)
+* Array map memory mapping (https://lwn.net/Articles/805043/)
 
 ## Examples
 
@@ -86,7 +87,7 @@ Features/tasks in this list are not critical for most users but still important 
 * XSK multiple sockets per netdev,queue pair (currently only one socket per pair is supported)
 * (partially implemented) Program testing (Being able to unit test an XDP program would be great)
 * Ringbuffer map support
-* Map access via memory mapping https://lwn.net/Articles/805043/ (could improve performance)
+* ~~Map access via memory mapping https://lwn.net/Articles/805043/ (could improve performance)~~
 * Support for LWT programs (Light weight tunnel)
 * BTF support (So we have more type info to work with)
 * ARM64 support / testing (ARM is on the rise)

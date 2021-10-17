@@ -1,26 +1,25 @@
-package gobpfld_test
+package gobpfld
 
 import (
 	"testing"
 
-	"github.com/dylandreimerink/gobpfld"
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 )
 
 const mapSize = 100000
 
-var testMap *gobpfld.BPFGenericMap
+var testMap *HashMap
 
-func getTestMap() *gobpfld.BPFGenericMap {
+func getTestMap() *HashMap {
 	if testMap != nil {
 		return testMap
 	}
 
-	testMap = &gobpfld.BPFGenericMap{
-		AbstractMap: gobpfld.AbstractMap{
-			Name: gobpfld.MustNewObjName("xdp_stats_map"),
-			Definition: gobpfld.BPFMapDef{
+	testMap = &HashMap{
+		AbstractMap: AbstractMap{
+			Name: MustNewObjName("xdp_stats_map"),
+			Definition: BPFMapDef{
 				Type:       bpftypes.BPF_MAP_TYPE_ARRAY,
 				KeySize:    4, // SizeOf(uint32)
 				ValueSize:  8, // SizeOf(uint64)
@@ -52,7 +51,7 @@ func benchmarkBatchMapIterator(bufSize int, b *testing.B) {
 
 	// run the Fib function b.N times
 	for n := 0; n < b.N; n++ {
-		iter := gobpfld.BatchLookupIterator{
+		iter := batchLookupIterator{
 			BPFMap:  tMap,
 			BufSize: bufSize,
 		}

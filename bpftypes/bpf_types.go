@@ -13,7 +13,7 @@ const (
 
 // BPFCommand is a enum which describes a number of different commands which can be sent to the kernel
 // via the bpf syscall.
-// From bpf_cmd https://github.com/torvalds/linux/blob/master/include/uapi/linux/bpf.h#L96
+// From bpf_cmd https://github.com/torvalds/linux/blob/master/include/uapi/linux/bpf.h#L838
 type BPFCommand int
 
 const (
@@ -147,7 +147,7 @@ func (cmd BPFCommand) String() string {
 }
 
 // BPFMapType is an enum type which describes a type of map
-// From bpf_map_type https://github.com/torvalds/linux/blob/master/include/uapi/linux/bpf.h#L136
+// From bpf_map_type https://github.com/torvalds/linux/blob/master/include/uapi/linux/bpf.h#L878
 //
 // There are generic map types which allow a user to use any key and value type they wish (within limits) and
 // specialized map types which typically have only one or a few purposes, must have specific keys or values, and/or
@@ -433,6 +433,7 @@ const (
 	BPF_PROG_TYPE_EXT
 	BPF_PROG_TYPE_LSM
 	BPF_PROG_TYPE_SK_LOOKUP
+	BPF_PROG_TYPE_SYSCALL
 )
 
 var bpfProgTypeToStr = map[BPFProgType]string{
@@ -467,6 +468,7 @@ var bpfProgTypeToStr = map[BPFProgType]string{
 	BPF_PROG_TYPE_EXT:                     "BPF_PROG_TYPE_EXT",
 	BPF_PROG_TYPE_LSM:                     "BPF_PROG_TYPE_LSM",
 	BPF_PROG_TYPE_SK_LOOKUP:               "BPF_PROG_TYPE_SK_LOOKUP",
+	BPF_PROG_TYPE_SYSCALL:                 "BPF_PROG_TYPE_SYSCALL",
 }
 
 func (pt BPFProgType) String() string {
@@ -533,47 +535,55 @@ const (
 	BPF_SK_LOOKUP
 	// BPF_XDP is used to attach a BPF_PROG_TYPE_XDP program using a link.
 	BPF_XDP
+	BPF_SK_SKB_VERDICT
+	BPF_SK_REUSEPORT_SELECT
+	BPF_SK_REUSEPORT_SELECT_OR_MIGRATE
+	BPF_PERF_EVENT
 )
 
 var bpfAttachTypeToStr = map[BPFAttachType]string{
-	BPF_CGROUP_INET_INGRESS:      "BPF_CGROUP_INET_INGRESS",
-	BPF_CGROUP_INET_EGRESS:       "BPF_CGROUP_INET_EGRESS",
-	BPF_CGROUP_INET_SOCK_CREATE:  "BPF_CGROUP_INET_SOCK_CREATE",
-	BPF_CGROUP_SOCK_OPS:          "BPF_CGROUP_SOCK_OPS",
-	BPF_SK_SKB_STREAM_PARSER:     "BPF_SK_SKB_STREAM_PARSER",
-	BPF_SK_SKB_STREAM_VERDICT:    "BPF_SK_SKB_STREAM_VERDICT",
-	BPF_CGROUP_DEVICE:            "BPF_CGROUP_DEVICE",
-	BPF_SK_MSG_VERDICT:           "BPF_SK_MSG_VERDICT",
-	BPF_CGROUP_INET4_BIND:        "BPF_CGROUP_INET4_BIND",
-	BPF_CGROUP_INET6_BIND:        "BPF_CGROUP_INET6_BIND",
-	BPF_CGROUP_INET4_CONNECT:     "BPF_CGROUP_INET4_CONNECT",
-	BPF_CGROUP_INET6_CONNECT:     "BPF_CGROUP_INET6_CONNECT",
-	BPF_CGROUP_INET4_POST_BIND:   "BPF_CGROUP_INET4_POST_BIND",
-	BPF_CGROUP_INET6_POST_BIND:   "BPF_CGROUP_INET6_POST_BIND",
-	BPF_CGROUP_UDP4_SENDMSG:      "BPF_CGROUP_UDP4_SENDMSG",
-	BPF_CGROUP_UDP6_SENDMSG:      "BPF_CGROUP_UDP6_SENDMSG",
-	BPF_LIRC_MODE2:               "BPF_LIRC_MODE2",
-	BPF_FLOW_DISSECTOR:           "BPF_FLOW_DISSECTOR",
-	BPF_CGROUP_SYSCTL:            "BPF_CGROUP_SYSCTL",
-	BPF_CGROUP_UDP4_RECVMSG:      "BPF_CGROUP_UDP4_RECVMSG",
-	BPF_CGROUP_UDP6_RECVMSG:      "BPF_CGROUP_UDP6_RECVMSG",
-	BPF_CGROUP_GETSOCKOPT:        "BPF_CGROUP_GETSOCKOPT",
-	BPF_CGROUP_SETSOCKOPT:        "BPF_CGROUP_SETSOCKOPT",
-	BPF_TRACE_RAW_TP:             "BPF_TRACE_RAW_TP",
-	BPF_TRACE_FENTRY:             "BPF_TRACE_FENTRY",
-	BPF_TRACE_FEXIT:              "BPF_TRACE_FEXIT",
-	BPF_MODIFY_RETURN:            "BPF_MODIFY_RETURN",
-	BPF_LSM_MAC:                  "BPF_LSM_MAC",
-	BPF_TRACE_ITER:               "BPF_TRACE_ITER",
-	BPF_CGROUP_INET4_GETPEERNAME: "BPF_CGROUP_INET4_GETPEERNAME",
-	BPF_CGROUP_INET6_GETPEERNAME: "BPF_CGROUP_INET6_GETPEERNAME",
-	BPF_CGROUP_INET4_GETSOCKNAME: "BPF_CGROUP_INET4_GETSOCKNAME",
-	BPF_CGROUP_INET6_GETSOCKNAME: "BPF_CGROUP_INET6_GETSOCKNAME",
-	BPF_XDP_DEVMAP:               "BPF_XDP_DEVMAP",
-	BPF_CGROUP_INET_SOCK_RELEASE: "BPF_CGROUP_INET_SOCK_RELEASE",
-	BPF_XDP_CPUMAP:               "BPF_XDP_CPUMAP",
-	BPF_SK_LOOKUP:                "BPF_SK_LOOKUP",
-	BPF_XDP:                      "BPF_XDP",
+	BPF_CGROUP_INET_INGRESS:            "BPF_CGROUP_INET_INGRESS",
+	BPF_CGROUP_INET_EGRESS:             "BPF_CGROUP_INET_EGRESS",
+	BPF_CGROUP_INET_SOCK_CREATE:        "BPF_CGROUP_INET_SOCK_CREATE",
+	BPF_CGROUP_SOCK_OPS:                "BPF_CGROUP_SOCK_OPS",
+	BPF_SK_SKB_STREAM_PARSER:           "BPF_SK_SKB_STREAM_PARSER",
+	BPF_SK_SKB_STREAM_VERDICT:          "BPF_SK_SKB_STREAM_VERDICT",
+	BPF_CGROUP_DEVICE:                  "BPF_CGROUP_DEVICE",
+	BPF_SK_MSG_VERDICT:                 "BPF_SK_MSG_VERDICT",
+	BPF_CGROUP_INET4_BIND:              "BPF_CGROUP_INET4_BIND",
+	BPF_CGROUP_INET6_BIND:              "BPF_CGROUP_INET6_BIND",
+	BPF_CGROUP_INET4_CONNECT:           "BPF_CGROUP_INET4_CONNECT",
+	BPF_CGROUP_INET6_CONNECT:           "BPF_CGROUP_INET6_CONNECT",
+	BPF_CGROUP_INET4_POST_BIND:         "BPF_CGROUP_INET4_POST_BIND",
+	BPF_CGROUP_INET6_POST_BIND:         "BPF_CGROUP_INET6_POST_BIND",
+	BPF_CGROUP_UDP4_SENDMSG:            "BPF_CGROUP_UDP4_SENDMSG",
+	BPF_CGROUP_UDP6_SENDMSG:            "BPF_CGROUP_UDP6_SENDMSG",
+	BPF_LIRC_MODE2:                     "BPF_LIRC_MODE2",
+	BPF_FLOW_DISSECTOR:                 "BPF_FLOW_DISSECTOR",
+	BPF_CGROUP_SYSCTL:                  "BPF_CGROUP_SYSCTL",
+	BPF_CGROUP_UDP4_RECVMSG:            "BPF_CGROUP_UDP4_RECVMSG",
+	BPF_CGROUP_UDP6_RECVMSG:            "BPF_CGROUP_UDP6_RECVMSG",
+	BPF_CGROUP_GETSOCKOPT:              "BPF_CGROUP_GETSOCKOPT",
+	BPF_CGROUP_SETSOCKOPT:              "BPF_CGROUP_SETSOCKOPT",
+	BPF_TRACE_RAW_TP:                   "BPF_TRACE_RAW_TP",
+	BPF_TRACE_FENTRY:                   "BPF_TRACE_FENTRY",
+	BPF_TRACE_FEXIT:                    "BPF_TRACE_FEXIT",
+	BPF_MODIFY_RETURN:                  "BPF_MODIFY_RETURN",
+	BPF_LSM_MAC:                        "BPF_LSM_MAC",
+	BPF_TRACE_ITER:                     "BPF_TRACE_ITER",
+	BPF_CGROUP_INET4_GETPEERNAME:       "BPF_CGROUP_INET4_GETPEERNAME",
+	BPF_CGROUP_INET6_GETPEERNAME:       "BPF_CGROUP_INET6_GETPEERNAME",
+	BPF_CGROUP_INET4_GETSOCKNAME:       "BPF_CGROUP_INET4_GETSOCKNAME",
+	BPF_CGROUP_INET6_GETSOCKNAME:       "BPF_CGROUP_INET6_GETSOCKNAME",
+	BPF_XDP_DEVMAP:                     "BPF_XDP_DEVMAP",
+	BPF_CGROUP_INET_SOCK_RELEASE:       "BPF_CGROUP_INET_SOCK_RELEASE",
+	BPF_XDP_CPUMAP:                     "BPF_XDP_CPUMAP",
+	BPF_SK_LOOKUP:                      "BPF_SK_LOOKUP",
+	BPF_XDP:                            "BPF_XDP",
+	BPF_SK_SKB_VERDICT:                 "BPF_SK_SKB_VERDICT",
+	BPF_SK_REUSEPORT_SELECT:            "BPF_SK_REUSEPORT_SELECT",
+	BPF_SK_REUSEPORT_SELECT_OR_MIGRATE: "BPF_SK_REUSEPORT_SELECT_OR_MIGRATE",
+	BPF_PERF_EVENT:                     "BPF_PERF_EVENT",
 }
 
 func (at BPFAttachType) String() string {
@@ -604,6 +614,8 @@ const (
 	BPF_LINK_TYPE_NETNS
 	// BPF_LINK_TYPE_XDP a program should be attached to a network device
 	BPF_LINK_TYPE_XDP
+	// BPF_LINK_TYPE_PERF_EVENT a program should be attached to a hardware or software perf event
+	BPF_LINK_TYPE_PERF_EVENT
 )
 
 var bpfLinkTypeToStr = map[BPFLinkType]string{
@@ -614,6 +626,7 @@ var bpfLinkTypeToStr = map[BPFLinkType]string{
 	BPF_LINK_TYPE_ITER:           "BPF_LINK_TYPE_ITER",
 	BPF_LINK_TYPE_NETNS:          "BPF_LINK_TYPE_NETNS",
 	BPF_LINK_TYPE_XDP:            "BPF_LINK_TYPE_XDP",
+	BPF_LINK_TYPE_PERF_EVENT:     "BPF_LINK_TYPE_PERF_EVENT",
 }
 
 func (lt BPFLinkType) String() string {

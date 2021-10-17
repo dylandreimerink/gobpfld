@@ -5,6 +5,7 @@ import (
 	"unsafe"
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
+	"github.com/dylandreimerink/gobpfld/bpftypes"
 )
 
 var _ BPFMap = (*ProgArrayMap)(nil)
@@ -12,6 +13,20 @@ var _ BPFMap = (*ProgArrayMap)(nil)
 // ProgArrayMap is a specialized map type used for tail calls https://docs.cilium.io/en/stable/bpf/#tail-calls
 type ProgArrayMap struct {
 	AbstractMap
+}
+
+func (m *ProgArrayMap) Load() error {
+	if m.Definition.Type != bpftypes.BPF_MAP_TYPE_PROG_ARRAY {
+		return fmt.Errorf("map type in definition must be BPF_MAP_TYPE_PROG_ARRAY when using an ProgArrayMap")
+	}
+
+	return m.load()
+}
+
+// Unload closes the file descriptor associate with the map, this will cause the map to unload from the kernel
+// if it is not still in use by a eBPF program, bpf FS, or a userspace program still holding a fd to the map.
+func (m *ProgArrayMap) Unload() error {
+	return m.unload()
 }
 
 // Get performs a lookup in the xskmap based on the key and returns the file descriptor of the socket

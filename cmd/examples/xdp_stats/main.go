@@ -38,7 +38,7 @@ func main() {
 	program := elf.Programs["xdp_stats1"]
 
 	// All maps loaded from elf files are BPFGenericMaps
-	statsMap := program.Maps["xdp_stats_map"].(*gobpfld.BPFGenericMap)
+	statsMap := program.Maps["xdp_stats_map"].(*gobpfld.ArrayMap)
 
 	log, err := program.Load(gobpfld.BPFProgramLoadSettings{
 		ProgramType:      bpftypes.BPF_PROG_TYPE_XDP,
@@ -65,18 +65,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	detach := func() {
+		err = program.XDPLinkDetach(gobpfld.BPFProgramXDPLinkDetachSettings{
+			All: true,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error while detaching program: %s\n", err.Error())
+			os.Exit(1)
+		}
+	}
+
 	ticker := time.Tick(1 * time.Second)
 	for {
 		select {
 		case <-ticker:
 			// The key is 2 since the program puts stats in the XDP_PASS key which has value 2
 			// Tho this is specific to the XDP program we are using as an example.
-			key := uint32(2)
 			var value int64
-
-			err = statsMap.Get(&key, &value)
+			err = statsMap.Get(2, &value)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error while getting stats from map: %s\n", err.Error())
+				detach()
 				os.Exit(1)
 			}
 
@@ -85,13 +94,7 @@ func main() {
 		case <-sigChan:
 			fmt.Println("Detaching XPD program and stopping")
 
-			err = program.XDPLinkDetach(gobpfld.BPFProgramXDPLinkDetachSettings{
-				All: true,
-			})
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error while detaching program: %s\n", err.Error())
-				os.Exit(1)
-			}
+			detach()
 
 			os.Exit(0)
 		}

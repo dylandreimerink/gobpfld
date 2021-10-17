@@ -23,7 +23,7 @@ func main() {
 		Name:    gobpfld.MustNewObjName("xdp_stats1"),
 		License: "GPL",
 		Maps: map[string]gobpfld.BPFMap{
-			"xdp_stats_map": &gobpfld.BPFGenericMap{
+			"xdp_stats_map": &gobpfld.ArrayMap{
 				AbstractMap: gobpfld.AbstractMap{
 					Name: gobpfld.MustNewObjName("xdp_stats_map"),
 					Definition: gobpfld.BPFMapDef{
@@ -130,7 +130,7 @@ func main() {
 	}
 
 	// All maps loaded from elf files are BPFGenericMaps
-	statsMap := program.Maps["xdp_stats_map"].(*gobpfld.BPFGenericMap)
+	statsMap := program.Maps["xdp_stats_map"].(*gobpfld.ArrayMap)
 
 	log, err := program.Load(gobpfld.BPFProgramLoadSettings{
 		ProgramType:      bpftypes.BPF_PROG_TYPE_XDP,
@@ -167,7 +167,7 @@ func main() {
 			key := uint32(2)
 			var value int64
 
-			err = statsMap.Get(&key, &value)
+			err = statsMap.Get(key, &value)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error while getting stats from map: %s\n", err.Error())
 				os.Exit(1)
