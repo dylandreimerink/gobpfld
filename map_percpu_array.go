@@ -51,7 +51,7 @@ func (m *PerCPUArrayMap) GetBatch(
 	partial bool,
 	err error,
 ) {
-	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapPerCPUArrayBatchLookup) {
+	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapPerCPUArrayBatchOps) {
 		return 0,
 			false,
 			fmt.Errorf("batch get operation not support on Per CPU array map type on current kernel version")
@@ -79,7 +79,7 @@ func (m *PerCPUArrayMap) SetBatch(
 	count int,
 	err error,
 ) {
-	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapPerCPUArrayBatchUpdate) {
+	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapPerCPUArrayBatchOps) {
 		return 0, fmt.Errorf("batch set operation not support on Per CPU array map type on current kernel version")
 	}
 
@@ -95,7 +95,7 @@ func (m *PerCPUArrayMap) SetBatch(
 
 func (m *PerCPUArrayMap) Iterator() MapIterator {
 	// If the kernel doesn't have support for batch lookup, use single lookup
-	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapPerCPUArrayBatchLookup) {
+	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapPerCPUArrayBatchOps) {
 		return &singleLookupIterator{
 			BPFMap: m,
 		}

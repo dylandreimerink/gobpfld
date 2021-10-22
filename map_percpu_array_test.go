@@ -1,3 +1,5 @@
+// +build bpftests
+
 package gobpfld
 
 import (

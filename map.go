@@ -75,21 +75,13 @@ func MapFromID(id uint32) (BPFMap, error) {
 // which implements BPFMap
 func bpfMapFromAbstractMap(am AbstractMap) BPFMap {
 	switch am.Definition.Type {
+	case bpftypes.BPF_MAP_TYPE_HASH:
+		return &HashMap{
+			AbstractMap: am,
+		}
+
 	case bpftypes.BPF_MAP_TYPE_ARRAY:
 		return &ArrayMap{
-			AbstractMap: am,
-		}
-
-	case bpftypes.BPF_MAP_TYPE_PERCPU_ARRAY:
-		return &PerCPUArrayMap{
-			AbstractMap: am,
-		}
-
-	case bpftypes.BPF_MAP_TYPE_HASH,
-		bpftypes.BPF_MAP_TYPE_PERCPU_HASH,
-		bpftypes.BPF_MAP_TYPE_LRU_HASH,
-		bpftypes.BPF_MAP_TYPE_LRU_PERCPU_HASH:
-		return &HashMap{
 			AbstractMap: am,
 		}
 
@@ -98,10 +90,54 @@ func bpfMapFromAbstractMap(am AbstractMap) BPFMap {
 			AbstractMap: am,
 		}
 
+		// TODO BPF_MAP_TYPE_PERF_EVENT_ARRAY
+
+	case bpftypes.BPF_MAP_TYPE_PERCPU_HASH:
+		return &HashMap{
+			AbstractMap: am,
+		}
+
+	case bpftypes.BPF_MAP_TYPE_PERCPU_ARRAY:
+		return &PerCPUArrayMap{
+			AbstractMap: am,
+		}
+
+		// TODO BPF_MAP_TYPE_STACK_TRACE
+
+	case bpftypes.BPF_MAP_TYPE_LRU_HASH,
+		bpftypes.BPF_MAP_TYPE_LRU_PERCPU_HASH:
+		return &HashMap{
+			AbstractMap: am,
+		}
+
+	case bpftypes.BPF_MAP_TYPE_LPM_TRIE:
+		return &LPMTrieMap{
+			AbstractMap: am,
+		}
+
+		// TODO BPF_MAP_TYPE_ARRAY_OF_MAPS
+		// TODO BPF_MAP_TYPE_HASH_OF_MAPS
+		// TODO BPF_MAP_TYPE_DEVMAP
+		// TODO BPF_MAP_TYPE_SOCKMAP
+		// TODO BPF_MAP_TYPE_CPUMAP
+
 	case bpftypes.BPF_MAP_TYPE_XSKMAP:
 		return &XSKMap{
 			AbstractMap: am,
 		}
+
+		// TODO BPF_MAP_TYPE_SOCKHASH
+		// TODO BPF_MAP_TYPE_CGROUP_STORAGE
+		// TODO BPF_MAP_TYPE_REUSEPORT_SOCKARRAY
+		// TODO BPF_MAP_TYPE_PERCPU_CGROUP_STORAGE
+		// TODO BPF_MAP_TYPE_QUEUE
+		// TODO BPF_MAP_TYPE_STACK
+		// TODO BPF_MAP_TYPE_SK_STORAGE
+		// TODO BPF_MAP_TYPE_DEVMAP_HASH
+		// TODO BPF_MAP_TYPE_STRUCT_OPS
+		// TODO BPF_MAP_TYPE_RINGBUF
+		// TODO BPF_MAP_TYPE_INODE_STORAGE
+		// TODO BPF_MAP_TYPE_TASK_STORAGE
 
 	default:
 		return &HashMap{
