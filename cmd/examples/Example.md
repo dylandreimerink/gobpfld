@@ -106,3 +106,5 @@ The example contains both aproaches which can be selected using a flag.
 
 * xsk encapsulation example
 * xsk write lease example
+* LPM trie example
+* Map op maps example

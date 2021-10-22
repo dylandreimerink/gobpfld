@@ -42,8 +42,14 @@ func MapFromID(id uint32) (BPFMap, error) {
 		return nil, fmt.Errorf("bpf syscall error: %w", err)
 	}
 
+	return MapFromFD(fd)
+}
+
+// MapFromFD creates a BPFMap object from a map that is already loaded into the kernel and for which we already have
+// a file descriptor.
+func MapFromFD(fd bpfsys.BPFfd) (BPFMap, error) {
 	mapInfo := bpftypes.BPFMapInfo{}
-	err = bpfsys.ObjectGetInfoByFD(&bpfsys.BPFAttrGetInfoFD{
+	err := bpfsys.ObjectGetInfoByFD(&bpfsys.BPFAttrGetInfoFD{
 		BPFFD:   fd,
 		Info:    uintptr(unsafe.Pointer(&mapInfo)),
 		InfoLen: uint32(bpftypes.BPFMapInfoSize),
@@ -115,8 +121,16 @@ func bpfMapFromAbstractMap(am AbstractMap) BPFMap {
 			AbstractMap: am,
 		}
 
-		// TODO BPF_MAP_TYPE_ARRAY_OF_MAPS
-		// TODO BPF_MAP_TYPE_HASH_OF_MAPS
+	case bpftypes.BPF_MAP_TYPE_ARRAY_OF_MAPS:
+		return &ArrayOfMapsMap{
+			AbstractMap: am,
+		}
+
+	case bpftypes.BPF_MAP_TYPE_HASH_OF_MAPS:
+		return &HashOfMapsMap{
+			AbstractMap: am,
+		}
+
 		// TODO BPF_MAP_TYPE_DEVMAP
 		// TODO BPF_MAP_TYPE_SOCKMAP
 		// TODO BPF_MAP_TYPE_CPUMAP

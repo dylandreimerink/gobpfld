@@ -7,9 +7,8 @@ import (
 
 var _ BPFMap = (*HashMap)(nil)
 
-// HashMap is a runtime reflection implementation for generic BPFTypes.
-// Because it uses reflection for type information it is slower than any application specific map.
-// For high speed access a custom BPFMap implementation is recommended.
+// HashMap is a generic map type, both the key and value may be of any type. The value of the key is hashed so values
+// do not need to be contiguous.
 type HashMap struct {
 	AbstractMap
 }

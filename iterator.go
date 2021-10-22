@@ -382,5 +382,102 @@ func (mmi *mmappedIterator) Next() (updated bool, err error) {
 	return true, nil
 }
 
+var _ MapIterator = (*singleMapLookupIterator)(nil)
+
+// singleMapLookupIterator uses the MapGetNextKey and MapLookupElem commands to iterate over a map to get map file
+// descriptors. It then uses the MapFromFD function to turn these file descriptors into BPFMap's an assinging them
+// to the value pointer. It is a specialized iterator type for array of maps and hash of maps type maps.
+type singleMapLookupIterator struct {
+	// The map over which to iterate
+	BPFMap BPFMap
+
+	// clone of the map so it can't change during iteration
+	am    *AbstractMap
+	key   uintptr
+	value interface{}
+	fd    bpfsys.BPFfd
+	attr  bpfsys.BPFAttrMapElem
+	done  bool
+}
+
+func (sli *singleMapLookupIterator) Init(key, value interface{}) error {
+	if sli.BPFMap == nil {
+		return fmt.Errorf("BPFMap may not be nil")
+	}
+
+	// Copy the important features of the map so they are imutable from
+	// outside the package during iteration.
+	sli.am = &AbstractMap{
+		Name:       sli.BPFMap.GetName(),
+		Loaded:     sli.BPFMap.IsLoaded(),
+		Fd:         sli.BPFMap.GetFD(),
+		Definition: sli.BPFMap.GetDefinition(),
+	}
+
+	sli.attr.MapFD = sli.am.Fd
+
+	var err error
+	sli.key, err = sli.am.toKeyPtr(key)
+	if err != nil {
+		return fmt.Errorf("toKeyPtr: %w", err)
+	}
+
+	if _, ok := sli.value.(*BPFMap); !ok {
+		return fmt.Errorf("value is not of type *BPFMap")
+	}
+
+	sli.value = value
+
+	return nil
+}
+
+// Next gets the key and value at the current location and writes them to the pointers given to the iterator
+// during initialization. It then advances the internal pointer to the next key and value.
+// If the iterator can't get the key and value at the current location since we are done iterating or an error
+// was encountered 'updated' is false.
+func (sli *singleMapLookupIterator) Next() (updated bool, err error) {
+	if sli.am == nil {
+		return false, fmt.Errorf("iterator not initialized")
+	}
+
+	if sli.done {
+		return false, ErrIteratorDone
+	}
+
+	sli.attr.Value_NextKey = sli.key
+
+	err = bpfsys.MapGetNextKey(&sli.attr)
+	if err != nil {
+		sli.done = true
+		if sysErr, ok := err.(*bpfsys.BPFSyscallError); ok && sysErr.Errno == syscall.ENOENT {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	sli.attr.Key = sli.attr.Value_NextKey
+	sli.attr.Value_NextKey = uintptr(unsafe.Pointer(&sli.fd))
+
+	err = bpfsys.MapLookupElem(&sli.attr)
+	if err != nil {
+		sli.done = true
+		return false, err
+	}
+
+	valPtr, ok := sli.value.(*BPFMap)
+	if !ok {
+		return false, fmt.Errorf("value is not of type *BPFMap")
+	}
+
+	*valPtr, err = MapFromFD(sli.fd)
+	if err != nil {
+		sli.done = true
+		return false, err
+	}
+
+	return true, err
+}
+
 // TODO implement for Queue and Stack maps
 // type LookupAndDeleteIterator struct {}
