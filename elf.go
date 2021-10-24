@@ -48,11 +48,11 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 
 	bpfElf, err = parseElf(elfFile, settings)
 	if err != nil {
-		return bpfElf, fmt.Errorf("processSectionsL %w", err)
+		return bpfElf, fmt.Errorf("processSections: %w", err)
 	}
 
-	for _, program := range bpfElf.Programs {
-		progRelocTable, found := bpfElf.relTables[".rel"+program.Name.String()]
+	for progname, program := range bpfElf.Programs {
+		progRelocTable, found := bpfElf.relTables[".rel"+progname]
 		if !found {
 			continue
 		}
@@ -342,6 +342,10 @@ func parseElf(
 
 			// For other sections, create it as a separate program
 
+			// TODO use section name as program type indication
+			// TODO use function name as program name
+			// TODO auto truncate in-kernel program name
+
 			program := NewBPFProgram()
 			program.Instructions = instructions
 			err = program.Name.SetString(section.Name)
@@ -352,11 +356,11 @@ func parseElf(
 						return bpfElf, fmt.Errorf("failed to truncate program name: %w", err)
 					}
 				} else {
-					return bpfElf, fmt.Errorf("failed to set program name: %w", err)
+					return bpfElf, fmt.Errorf("failed to set program name '%s': %w", section.Name, err)
 				}
 			}
 
-			bpfElf.Programs[program.Name.String()] = program
+			bpfElf.Programs[section.Name] = program
 
 		case elf.SHT_REL:
 			// Relocation table

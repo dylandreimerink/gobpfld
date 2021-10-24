@@ -3,7 +3,6 @@ package bpfsys
 import (
 	"errors"
 	"fmt"
-	"syscall"
 	"unsafe"
 
 	"github.com/dylandreimerink/gobpfld/bpftypes"
@@ -12,10 +11,10 @@ import (
 )
 
 // ENOTSUPP - Operation is not supported
-const ENOTSUPP = syscall.Errno(524)
+const ENOTSUPP = unix.Errno(524)
 
 // a map of string translations for syscall errors which are no included in the standard library
-var nonStdErrors = map[syscall.Errno]string{
+var nonStdErrors = map[unix.Errno]string{
 	ENOTSUPP: "Operation is not supported",
 }
 
@@ -28,7 +27,7 @@ type BPFSyscallError struct {
 	// meaning depending on context
 	Err string
 	// The underlaying syscall error number
-	Errno syscall.Errno
+	Errno unix.Errno
 }
 
 func (e *BPFSyscallError) Error() string {
@@ -64,14 +63,14 @@ type BPFfd uint32
 
 // Close closes a file descriptor
 func (fd BPFfd) Close() error {
-	_, _, errno := syscall.Syscall(syscall.SYS_CLOSE, uintptr(fd), 0, 0)
+	_, _, errno := unix.Syscall(unix.SYS_CLOSE, uintptr(fd), 0, 0)
 	if errno != 0 {
 		return &BPFSyscallError{
 			Errno: errno,
-			Err: map[syscall.Errno]string{
-				syscall.EBADF: "fd isn't a valid open file descriptor",
-				syscall.EINTR: "The Close() call was interrupted by a signal; see signal(7)",
-				syscall.EIO:   "An I/O error occurred",
+			Err: map[unix.Errno]string{
+				unix.EBADF: "fd isn't a valid open file descriptor",
+				unix.EINTR: "The Close() call was interrupted by a signal; see signal(7)",
+				unix.EIO:   "An I/O error occurred",
 			}[errno],
 		}
 	}
@@ -86,7 +85,7 @@ func Bpf(cmd bpftypes.BPFCommand, attr BPFAttribute, size int) (fd BPFfd, err er
 		return 0, fmt.Errorf("eBPF is not supported: %w", ErrNotSupported)
 	}
 
-	r0, _, errno := syscall.Syscall(unix.SYS_BPF, uintptr(cmd), uintptr(attr.ToPtr()), uintptr(size))
+	r0, _, errno := unix.Syscall(unix.SYS_BPF, uintptr(cmd), uintptr(attr.ToPtr()), uintptr(size))
 	if errno != 0 {
 		err = &BPFSyscallError{
 			Errno: errno,
@@ -170,12 +169,12 @@ func MapUpdateElem(attr *BPFAttrMapElem) error {
 
 	err := bpfNoReturn(bpftypes.BPF_MAP_UPDATE_ELEM, attr, int(attr.Size()))
 	if syserr, ok := err.(*BPFSyscallError); ok {
-		syserr.Err = map[syscall.Errno]string{
-			syscall.E2BIG: "The number of elements in the map reached the *max_entries* limit specified at map " +
+		syserr.Err = map[unix.Errno]string{
+			unix.E2BIG: "The number of elements in the map reached the *max_entries* limit specified at map " +
 				"creation time.",
-			syscall.EEXIST: "attr.Flags specifies BPFMapElemNoExists and the element with attr.Key already exists " +
+			unix.EEXIST: "attr.Flags specifies BPFMapElemNoExists and the element with attr.Key already exists " +
 				"in the map.",
-			syscall.ENOENT: "attr.Flags specifies BPFMapElemExists and the element with attr.Key does not exist " +
+			unix.ENOENT: "attr.Flags specifies BPFMapElemExists and the element with attr.Key does not exist " +
 				"in the map",
 		}[syserr.Errno]
 		return syserr
@@ -214,8 +213,8 @@ func MapGetNextKey(attr *BPFAttrMapElem) error {
 
 	err := bpfNoReturn(bpftypes.BPF_MAP_GET_NEXT_KEY, attr, int(attr.Size()))
 	if syserr, ok := err.(*BPFSyscallError); ok {
-		syserr.Err = map[syscall.Errno]string{
-			syscall.ENOENT: "element indicated by attr.Key is the last in the map",
+		syserr.Err = map[unix.Errno]string{
+			unix.ENOENT: "element indicated by attr.Key is the last in the map",
 		}[syserr.Errno]
 		return syserr
 	}
@@ -246,7 +245,7 @@ func LoadProgram(attr *BPFAttrProgramLoad) (fd BPFfd, err error) {
 // attr.BPFfd.Close(), and hence the lifetime of the parent
 // process.
 //
-// Applying syscall.Unlink or similar calls to the attr.Pathname
+// Applying unix.Unlink or similar calls to the attr.Pathname
 // unpins the object from the filesystem, removing the reference.
 // If no other file descriptors or filesystem nodes refer to the
 // same object, it will be deallocated.
@@ -371,8 +370,8 @@ func ProgramTestRun(attr *BPFAttrProgTestRun) error {
 
 	err := bpfNoReturn(bpftypes.BPF_PROG_TEST_RUN, attr, int(attr.Size()))
 	if syserr, ok := err.(*BPFSyscallError); ok {
-		syserr.Err = map[syscall.Errno]string{
-			syscall.ENOSPC: "Either attr.DataSizeOut or attr.CtxSizeOut is too small",
+		syserr.Err = map[unix.Errno]string{
+			unix.ENOSPC: "Either attr.DataSizeOut or attr.CtxSizeOut is too small",
 			ENOTSUPP: "This command is not supported by the program type of the program referred to " +
 				"by attr.ProgFD",
 		}[syserr.Errno]
@@ -625,7 +624,7 @@ func BTFGetNextID(attr *BPFAttrGetID) error {
 // user buffer, with the keys copied into attr.Keys and the values
 // copied into the corresponding indices in attr.Values.
 //
-// If an error is returned and errno is not syscall.EFAULT, attr.Count
+// If an error is returned and errno is not unix.EFAULT, attr.Count
 // is set to the number of successfully processed elements.
 func MapLookupBatch(attr *BPFAttrMapBatch) error {
 	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
@@ -635,8 +634,8 @@ func MapLookupBatch(attr *BPFAttrMapBatch) error {
 
 	err := bpfNoReturn(bpftypes.BPF_MAP_LOOKUP_BATCH, attr, int(attr.Size()))
 	if syserr, ok := err.(*BPFSyscallError); ok {
-		syserr.Err = map[syscall.Errno]string{
-			syscall.ENOENT: "last batch in the map",
+		syserr.Err = map[unix.Errno]string{
+			unix.ENOENT: "last batch in the map",
 		}[syserr.Errno]
 		return syserr
 	}
@@ -649,7 +648,7 @@ func MapLookupBatch(attr *BPFAttrMapBatch) error {
 //	* Every element that is successfully returned is also deleted
 //	  from the map. This is at least attr.Count elements. Note that
 //	  attr.Count is both an input and an output parameter.
-//	* Upon returning with errno set to syscall.EFAULT, up to
+//	* Upon returning with errno set to unix.EFAULT, up to
 //	  attr.Count elements may be deleted without returning the keys
 //	  and values of the deleted elements.
 func MapLookupBatchAndDelete(attr *BPFAttrMapBatch) error {
@@ -688,7 +687,7 @@ func MapLookupBatchAndDelete(attr *BPFAttrMapBatch) error {
 //
 // On success, attr.Count elements from the map are updated.
 //
-// If an error is returned and errno is not syscall.EFAULT, attr.Count
+// If an error is returned and errno is not unix.EFAULT, attr.Count
 // is set to the number of successfully processed elements.
 func MapUpdateBatch(attr *BPFAttrMapBatch) error {
 	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
@@ -698,12 +697,12 @@ func MapUpdateBatch(attr *BPFAttrMapBatch) error {
 
 	err := bpfNoReturn(bpftypes.BPF_MAP_UPDATE_BATCH, attr, int(attr.Size()))
 	if syserr, ok := err.(*BPFSyscallError); ok {
-		syserr.Err = map[syscall.Errno]string{
-			syscall.E2BIG: "the number of elements in the map reached the *max_entries* limit specified at map " +
+		syserr.Err = map[unix.Errno]string{
+			unix.E2BIG: "the number of elements in the map reached the *max_entries* limit specified at map " +
 				"creation time",
-			syscall.EEXIST: "attr.Flags specifies BPFMapElemNoExists and the element with attr.Keys[*] already " +
+			unix.EEXIST: "attr.Flags specifies BPFMapElemNoExists and the element with attr.Keys[*] already " +
 				"exists in the map",
-			syscall.ENOENT: "attr.Flags specifies BPFMapElemExists and the element with attr.Keys[*] does not " +
+			unix.ENOENT: "attr.Flags specifies BPFMapElemExists and the element with attr.Keys[*] does not " +
 				"exist in the map",
 		}[syserr.Errno]
 		return syserr
@@ -732,9 +731,9 @@ func MapUpdateBatch(attr *BPFAttrMapBatch) error {
 //
 // On success, attr.Count elements from the map are updated.
 //
-// If an error is returned and errno is not syscall.EFAULT, attr.Count
+// If an error is returned and errno is not unix.EFAULT, attr.Count
 // is set to the number of successfully processed elements. If
-// errno is syscall.EFAULT, up to attr.Count elements may be been
+// errno is unix.EFAULT, up to attr.Count elements may be been
 // deleted.
 func MapDeleteBatch(attr *BPFAttrMapBatch) error {
 	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
@@ -809,7 +808,7 @@ func EnableStats(attr *BPFAttrEnableStats) (fd BPFfd, err error) {
 // file descriptor that can be used to trigger the iteration.
 //
 // If the resulting file descriptor is pinned to the filesystem
-// using ObjectPin, then subsequent syscall.Read syscalls
+// using ObjectPin, then subsequent unix.Read syscalls
 // for that path will trigger the iterator to read kernel state
 // using the eBPF program attached to attr.LinkFD.
 func IterCreate(attr *BPFAttrIterCreate) (fd BPFfd, err error) {
@@ -848,11 +847,11 @@ func ProgBindMap(attr *BPFAttrProgBindMap) error {
 
 type Socklen uint32
 
-// Getsockopt is a public version of the syscall.getsockopt without additional wrappers which allows us to use any
+// Getsockopt is a public version of the unix.getsockopt without additional wrappers which allows us to use any
 // value type we want. But does require the usage of unsafe.
 func Getsockopt(s int, level int, name int, val unsafe.Pointer, vallen *Socklen) (err error) {
-	_, _, e1 := syscall.Syscall6(
-		syscall.SYS_GETSOCKOPT,
+	_, _, e1 := unix.Syscall6(
+		unix.SYS_GETSOCKOPT,
 		uintptr(s),
 		uintptr(level),
 		uintptr(name),
@@ -868,11 +867,11 @@ func Getsockopt(s int, level int, name int, val unsafe.Pointer, vallen *Socklen)
 	return
 }
 
-// Setsockopt is a public version of the syscall.setsockopt without additional wrappers which allows us to use any
+// Setsockopt is a public version of the unix.setsockopt without additional wrappers which allows us to use any
 // value type we want. But does require the usage of unsafe.
 func Setsockopt(s int, level int, name int, val unsafe.Pointer, vallen uintptr) (err error) {
-	_, _, e1 := syscall.Syscall6(
-		syscall.SYS_SETSOCKOPT,
+	_, _, e1 := unix.Syscall6(
+		unix.SYS_SETSOCKOPT,
 		uintptr(s),
 		uintptr(level),
 		uintptr(name),
@@ -888,10 +887,10 @@ func Setsockopt(s int, level int, name int, val unsafe.Pointer, vallen uintptr) 
 	return
 }
 
-// Bind is a public version of the syscall.bind without additional wrappers which allows us to use any
+// Bind is a public version of the unix.bind without additional wrappers which allows us to use any
 // value type we want. But does require the usage of unsafe.
 func Bind(s int, addr unsafe.Pointer, addrlen Socklen) (err error) {
-	_, _, e1 := syscall.Syscall(syscall.SYS_BIND, uintptr(s), uintptr(addr), uintptr(addrlen))
+	_, _, e1 := unix.Syscall(unix.SYS_BIND, uintptr(s), uintptr(addr), uintptr(addrlen))
 	if e1 != 0 {
 		err = &BPFSyscallError{
 			Errno: e1,
@@ -901,10 +900,10 @@ func Bind(s int, addr unsafe.Pointer, addrlen Socklen) (err error) {
 }
 
 // Zero single-word zero for use when we need a valid pointer to 0 bytes.
-// See mksyscall.pl.
+// See mkunix.pl.
 var Zero uintptr
 
-// Sendto is a public version of the syscall.sendto without additional wrappers which allows us to use any
+// Sendto is a public version of the unix.sendto without additional wrappers which allows us to use any
 // value type we want. But does require the usage of unsafe.
 func Sendto(s int, buf []byte, flags int, to unsafe.Pointer, addrlen Socklen) (err error) {
 	var _p0 unsafe.Pointer
@@ -913,8 +912,8 @@ func Sendto(s int, buf []byte, flags int, to unsafe.Pointer, addrlen Socklen) (e
 	} else {
 		_p0 = unsafe.Pointer(&Zero)
 	}
-	_, _, e1 := syscall.Syscall6(
-		syscall.SYS_SENDTO,
+	_, _, e1 := unix.Syscall6(
+		unix.SYS_SENDTO,
 		uintptr(s),
 		uintptr(_p0),
 		uintptr(len(buf)),

@@ -745,6 +745,10 @@ func (on *ObjName) SetBytes(strBytes []byte) error {
 var objNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9_\.]{1,15}$`)
 
 func (on *ObjName) SetString(str string) error {
+	if len(str) > 15 {
+		return ErrObjNameToLarge
+	}
+
 	if !objNameRegexp.MatchString(str) {
 		return fmt.Errorf("object name must be 1 to 15 alpha numeric, '_', or '.' chars")
 	}
