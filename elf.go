@@ -145,7 +145,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 
 				// Update the imm of the call instruction which points to a relocated function
 				// in the .text section to reflect the current relative offset
-				callInst := &program.Instructions[int(progOff)/ebpf.BPFInstSize]
+				callInst := &program.Instructions[progOff/ebpf.BPFInstSize]
 				callInst.Imm = (int32(txtInsOff) + callInst.Imm) - (int32(progOff) / int32(ebpf.BPFInstSize))
 
 				continue

@@ -33,11 +33,6 @@ type AbstractBPFProgram struct {
 
 const defaultBPFVerifierLogSize = 1 * 1024 * 1024 // 1MB
 
-type abstractBPFProgramLoadSettings struct {
-	VerifierLogLevel bpftypes.BPFLogLevel
-	VerifierLogSize  int
-}
-
 func (p *AbstractBPFProgram) Fd() (bpfsys.BPFfd, error) {
 	if !p.loaded {
 		return 0, fmt.Errorf("program is not loaded")
