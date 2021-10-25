@@ -22,3 +22,5 @@ jobs:
           version: v1.40.1
       - name: Run Unit tests
         run: go test ./...
+      - name: Check go mod tidyness
+        run: ./tools/check-go-mod.sh
