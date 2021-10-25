@@ -206,7 +206,7 @@ static __noinline void inc_ip_proto(
 	}
 }
 
-SEC("handle_tcp")
+SEC("xdp")
 int tcp_prog(struct xdp_md* ctx) {
 	void *data      = (void *)(unsigned long)ctx->data;
 	void *data_end  = (void *)(unsigned long)ctx->data_end;
@@ -267,7 +267,7 @@ int tcp_prog(struct xdp_md* ctx) {
 	return XDP_PASS;
 }
 
-SEC("handle_udp")
+SEC("xdp")
 int udp_prog(struct xdp_md* ctx) {
 	void *data      = (void *)(unsigned long)ctx->data;
 	void *data_end  = (void *)(unsigned long)ctx->data_end;
@@ -328,7 +328,7 @@ int udp_prog(struct xdp_md* ctx) {
 	return XDP_PASS;
 }
 
-SEC("handle_ipv4")
+SEC("xdp")
 int ipv4_prog(struct xdp_md* ctx) {
 	void *data      = (void *)(unsigned long)ctx->data;
 	void *data_end  = (void *)(unsigned long)ctx->data_end;
@@ -385,7 +385,7 @@ int ipv4_prog(struct xdp_md* ctx) {
 	return XDP_PASS;
 }
 
-SEC("handle_ipv6")
+SEC("xdp")
 int ipv6_prog(struct xdp_md* ctx) {
 	void *data      = (void *)(unsigned long)ctx->data;
 	void *data_end  = (void *)(unsigned long)ctx->data_end;
@@ -442,7 +442,7 @@ int ipv6_prog(struct xdp_md* ctx) {
 	return XDP_PASS;
 }
 
-SEC("entry")
+SEC("xdp")
 int entry_prog(struct xdp_md* ctx)
 {
 	/* Reserve space in-front of data pointer for our meta info.

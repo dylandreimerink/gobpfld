@@ -15,7 +15,7 @@ import (
 	_ "embed"
 )
 
-//go:embed basic03_map_counter.o
+//go:embed bpf/basic03_map_counter
 var f embed.FS
 
 // This example command is a pure go replacement for the userpace program of the Basic03 program from
@@ -23,7 +23,7 @@ var f embed.FS
 // This example has no options but does demonstrate program loading from ELF, attaching to a interface, and interacting with a map
 
 func main() {
-	elfFileBytes, err := f.ReadFile("basic03_map_counter.o")
+	elfFileBytes, err := f.ReadFile("bpf/basic03_map_counter")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error opening ELF file: %s\n", err.Error())
 		os.Exit(1)
@@ -35,13 +35,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	program := elf.Programs["xdp_stats1"]
+	program := elf.Programs["xdp_stats1_func"].(*gobpfld.ProgramXDP)
 
 	// All maps loaded from elf files are BPFGenericMaps
 	statsMap := program.Maps["xdp_stats_map"].(*gobpfld.ArrayMap)
 
-	log, err := program.Load(gobpfld.BPFProgramLoadSettings{
-		ProgramType:      bpftypes.BPF_PROG_TYPE_XDP,
+	log, err := program.Load(gobpfld.ProgXDPLoadOpts{
 		VerifierLogLevel: bpftypes.BPFLogLevelBasic,
 	})
 
@@ -55,7 +54,7 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, unix.SIGTERM, unix.SIGINT)
 
-	err = program.XDPLinkAttach(gobpfld.BPFProgramXDPLinkAttachSettings{
+	err = program.Attach(gobpfld.ProgXDPAttachOpts{
 		InterfaceName: "lo",
 		Replace:       true,
 	})

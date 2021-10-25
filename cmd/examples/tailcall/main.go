@@ -30,12 +30,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	tailProgs := []string{"handle_ipv4", "handle_ipv6", "handle_tcp", "handle_udp"}
+	tailProgs := []string{"ipv4_prog", "ipv6_prog", "tcp_prog", "udp_prog"}
 
-	entryProgram := elf.Programs["entry"]
+	entryProgram := elf.Programs["entry_prog"].(*gobpfld.ProgramXDP)
 
-	log, err := entryProgram.Load(gobpfld.BPFProgramLoadSettings{
-		ProgramType:      bpftypes.BPF_PROG_TYPE_XDP,
+	log, err := entryProgram.Load(gobpfld.ProgXDPLoadOpts{
 		VerifierLogLevel: bpftypes.BPFLogLevelVerbose,
 	})
 
@@ -50,10 +49,9 @@ func main() {
 	// in the 'tails' map.
 	tailMap := elf.Maps["tails"].(*gobpfld.ProgArrayMap)
 	for i, progName := range tailProgs {
-		tailProg := elf.Programs[progName]
+		tailProg := elf.Programs[progName].(*gobpfld.ProgramXDP)
 
-		log, err := tailProg.Load(gobpfld.BPFProgramLoadSettings{
-			ProgramType:      bpftypes.BPF_PROG_TYPE_XDP,
+		log, err := tailProg.Load(gobpfld.ProgXDPLoadOpts{
 			VerifierLogLevel: bpftypes.BPFLogLevelVerbose,
 		})
 
@@ -74,7 +72,7 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, unix.SIGTERM, unix.SIGINT)
 
-	err = entryProgram.XDPLinkAttach(gobpfld.BPFProgramXDPLinkAttachSettings{
+	err = entryProgram.Attach(gobpfld.ProgXDPAttachOpts{
 		InterfaceName: "lo",
 		Replace:       true,
 	})
@@ -135,6 +133,7 @@ func main() {
 			fmt.Println("-------------------------")
 			fmt.Println("IP Proto stats:")
 			iter := ipStats.Iterator()
+
 			// gobpfld.MapIterForEach(ipStats.Iterator(), &protoNum, &stats, printStats)
 			err := iter.Init(&protoNum, &stats)
 			if err != nil {

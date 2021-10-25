@@ -1019,7 +1019,7 @@ func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 	}
 
 	// Give all Rx frames to the kernel
-	for i := 0; i < rxCount; i++ {
+	for i := 0; i < rxCount-1; i++ {
 		err = xskSock.fill.Enqueue(uint64(i * settings.FrameSize))
 		if err != nil {
 			return nil, fmt.Errorf("fill enqueue: %w", err)

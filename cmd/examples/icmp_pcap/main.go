@@ -27,10 +27,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	program := elf.Programs["sockfilter"]
+	program := elf.Programs["sockfilter_prog"].(*gobpfld.ProgramSocketFilter)
 
-	log, err := program.Load(gobpfld.BPFProgramLoadSettings{
-		ProgramType:      bpftypes.BPF_PROG_TYPE_SOCKET_FILTER,
+	log, err := program.Load(gobpfld.ProgSKFilterLoadOpts{
 		VerifierLogLevel: bpftypes.BPFLogLevelBasic,
 		VerifierLogSize:  1 << 20,
 	})
@@ -46,7 +45,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = program.SocketAttach(uintptr(fd))
+	err = program.Attach(uintptr(fd))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "socket attach: %s", err.Error())
 		os.Exit(1)

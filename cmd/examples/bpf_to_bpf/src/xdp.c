@@ -232,7 +232,7 @@ static __noinline void handle_ipv6(void* data, void* data_end, __u64 nh_off) {
     }
 }
 
-SEC("proto_stats")
+SEC("xdp/proto_stats")
 int firewall_prog(struct xdp_md *ctx)
 {
 	void* data_end = (void *)(long)ctx->data_end;

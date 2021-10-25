@@ -17,7 +17,7 @@ import (
 	_ "embed"
 )
 
-//go:embed percpu.o
+//go:embed bpf/percpu
 var f embed.FS
 
 // This example command demonstrates how to read from and write to a "per cpu" map.
@@ -25,7 +25,7 @@ var f embed.FS
 // Therefor arrays or slices need to be used to read from them or read to them.
 
 func main() {
-	elfFileBytes, err := f.ReadFile("percpu.o")
+	elfFileBytes, err := f.ReadFile("bpf/percpu")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error opening ELF file: %s\n", err.Error())
 		os.Exit(1)
@@ -37,13 +37,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	program := elf.Programs["percpumap"]
+	program := elf.Programs["percpumap_prog"].(*gobpfld.ProgramXDP)
 
 	// Since the map type is an per cpu array type, the elf package will return a generic map
-	counterMap := program.Maps["cnt_map"].(*gobpfld.ArrayMap)
+	counterMap := program.Maps["cnt_map"].(*gobpfld.PerCPUArrayMap)
 
-	log, err := program.Load(gobpfld.BPFProgramLoadSettings{
-		ProgramType:      bpftypes.BPF_PROG_TYPE_XDP,
+	log, err := program.Load(gobpfld.ProgXDPLoadOpts{
 		VerifierLogLevel: bpftypes.BPFLogLevelBasic,
 	})
 
@@ -57,7 +56,7 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, unix.SIGTERM, unix.SIGINT)
 
-	err = program.XDPLinkAttach(gobpfld.BPFProgramXDPLinkAttachSettings{
+	err = program.Attach(gobpfld.ProgXDPAttachOpts{
 		InterfaceName: "lo",
 		Replace:       true,
 	})

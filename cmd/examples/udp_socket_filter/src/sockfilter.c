@@ -27,7 +27,7 @@ static int (*bpf_trace_printk)(const char *fmt, int fmt_size, ...) =
 			 ##__VA_ARGS__);		\
 })
 
-SEC("sockfilter")
+SEC("sock_filter")
 int sockfilter_prog(struct __sk_buff *skb)
 {
     // Use SKF_NET_OFF to access the IP header which is needed since the skb only contains

@@ -7,7 +7,6 @@ import (
 
 	"github.com/dylandreimerink/gobpfld"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
-	"github.com/dylandreimerink/gobpfld/perf"
 )
 
 func main() {
@@ -33,8 +32,9 @@ func main() {
 
 	for name, program := range loadedElf.Programs {
 		fmt.Println("loading program: ", name)
-		log, err := program.Load(gobpfld.BPFProgramLoadSettings{
-			ProgramType:      bpftypes.BPF_PROG_TYPE_TRACEPOINT,
+		prog := program.(*gobpfld.ProgramTracepoint)
+
+		log, err := prog.Load(gobpfld.ProgTPLoadOpts{
 			VerifierLogLevel: bpftypes.BPFLogLevelVerbose,
 			VerifierLogSize:  1 << 20,
 		})
@@ -43,17 +43,7 @@ func main() {
 			panic(err)
 		}
 
-		event, err := perf.OpenTracepointEvent("syscalls", name)
-		if err != nil {
-			panic(err)
-		}
-
-		progFD, err := program.Fd()
-		if err != nil {
-			panic(err)
-		}
-
-		err = event.AttachBPFProgram(progFD)
+		err = prog.Attach(gobpfld.ProgTPAttachOpts{})
 		if err != nil {
 			panic(err)
 		}

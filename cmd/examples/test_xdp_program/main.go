@@ -13,9 +13,12 @@ import (
 // To demonstrate the testing feature, a small program is used that blocks all IPv6 traffic.
 
 func main() {
-	program := &gobpfld.BPFProgram{
-		Name:    gobpfld.MustNewObjName("block_ipv6"),
-		License: "GPL",
+	program := &gobpfld.ProgramXDP{
+		AbstractBPFProgram: gobpfld.AbstractBPFProgram{
+			Name:        gobpfld.MustNewObjName("block_ipv6"),
+			ProgramType: bpftypes.BPF_PROG_TYPE_XDP,
+			License:     "GPL",
+		},
 	}
 
 	asm := `
@@ -40,8 +43,7 @@ func main() {
 
 	program.Instructions = ebpf.MustEncode(inst)
 
-	log, err := program.Load(gobpfld.BPFProgramLoadSettings{
-		ProgramType:      bpftypes.BPF_PROG_TYPE_XDP,
+	log, err := program.Load(gobpfld.ProgXDPLoadOpts{
 		VerifierLogLevel: bpftypes.BPFLogLevelBasic,
 	})
 

@@ -80,69 +80,71 @@ func main() {
 	}
 
 	// Generate a program which will bypass all traffic to userspace
-	program := &gobpfld.BPFProgram{
-		Name:    gobpfld.MustNewObjName("xsk_bypass"),
-		License: "GPL",
-		Maps: map[string]gobpfld.BPFMap{
-			"xskmap": &gobpfld.XSKMap{
-				AbstractMap: gobpfld.AbstractMap{
-					Name: gobpfld.MustNewObjName("xskmap"),
-					Definition: gobpfld.BPFMapDef{
-						Type:       bpftypes.BPF_MAP_TYPE_XSKMAP,
-						KeySize:    4, // SizeOf(uint32)
-						ValueSize:  4, // SizeOf(uint32)
-						MaxEntries: uint32(queues),
+	program := &gobpfld.ProgramXDP{
+		AbstractBPFProgram: gobpfld.AbstractBPFProgram{
+			Name:        gobpfld.MustNewObjName("xsk_bypass"),
+			ProgramType: bpftypes.BPF_PROG_TYPE_XDP,
+			License:     "GPL",
+			Maps: map[string]gobpfld.BPFMap{
+				"xskmap": &gobpfld.XSKMap{
+					AbstractMap: gobpfld.AbstractMap{
+						Name: gobpfld.MustNewObjName("xskmap"),
+						Definition: gobpfld.BPFMapDef{
+							Type:       bpftypes.BPF_MAP_TYPE_XSKMAP,
+							KeySize:    4, // SizeOf(uint32)
+							ValueSize:  4, // SizeOf(uint32)
+							MaxEntries: uint32(queues),
+						},
 					},
 				},
 			},
+			MapFDLocations: map[string][]uint64{
+				"xskmap": {
+					// LoadConstant64bit is the 2nd instruction in this program. So the first byte of the
+					// 2nd instruction is the width of a instruction * 1 to skip the first 1 instruction
+					uint64(ebpf.BPFInstSize) * 1,
+				},
+			},
+			// Instructions for this program:
+			// int xsk_bypass(struct xdp_md *ctx)
+			// {
+			// 	return bpf_redirect_map(&xsks_map, ctx->rx_queue_index, XDP_PASS);
+			// }
+			//
+			// NOTE this program only works in linux kernel >= 5.3
+			// https://elixir.bootlin.com/linux/v5.12.2/source/tools/lib/bpf/xsk.c#L416
+			Instructions: ebpf.MustEncode([]ebpf.Instruction{
+				// load ((xdp_md) ctx)->rx_queue_index into R2 (used as 2nd parameter)
+				/* r2 = *(u32 *)(r1 + 16) */
+				&ebpf.LoadMemory{
+					Dest:   ebpf.BPF_REG_2,
+					Src:    ebpf.BPF_REG_1,
+					Size:   ebpf.BPF_W,
+					Offset: 16,
+				},
+				// Set R1(first parameter) to the address of the xskmap.
+				// Which will be set during loading
+				/* r1 = xskmap[] */
+				&ebpf.LoadConstant64bit{
+					Dest: ebpf.BPF_REG_1,
+				},
+				// Move XDP_PASS into R3 (third argument)
+				/* r3 = XDP_PASS */
+				&ebpf.Mov64{
+					Dest:  ebpf.BPF_REG_3,
+					Value: ebpf.XDP_PASS,
+				},
+				/* call bpf_redirect_map */
+				&ebpf.CallHelper{
+					Function: 51,
+				},
+				&ebpf.Exit{}, // exit
+			}),
 		},
-		MapFDLocations: map[string][]uint64{
-			"xskmap": {
-				// LoadConstant64bit is the 2nd instruction in this program. So the first byte of the
-				// 2nd instruction is the width of a instruction * 1 to skip the first 1 instruction
-				uint64(ebpf.BPFInstSize) * 1,
-			},
-		},
-		// Instructions for this program:
-		// int xsk_bypass(struct xdp_md *ctx)
-		// {
-		// 	return bpf_redirect_map(&xsks_map, ctx->rx_queue_index, XDP_PASS);
-		// }
-		//
-		// NOTE this program only works in linux kernel >= 5.3
-		// https://elixir.bootlin.com/linux/v5.12.2/source/tools/lib/bpf/xsk.c#L416
-		Instructions: ebpf.MustEncode([]ebpf.Instruction{
-			// load ((xdp_md) ctx)->rx_queue_index into R2 (used as 2nd parameter)
-			/* r2 = *(u32 *)(r1 + 16) */
-			&ebpf.LoadMemory{
-				Dest:   ebpf.BPF_REG_2,
-				Src:    ebpf.BPF_REG_1,
-				Size:   ebpf.BPF_W,
-				Offset: 16,
-			},
-			// Set R1(first parameter) to the address of the xskmap.
-			// Which will be set during loading
-			/* r1 = xskmap[] */
-			&ebpf.LoadConstant64bit{
-				Dest: ebpf.BPF_REG_1,
-			},
-			// Move XDP_PASS into R3 (third argument)
-			/* r3 = XDP_PASS */
-			&ebpf.Mov64{
-				Dest:  ebpf.BPF_REG_3,
-				Value: ebpf.XDP_PASS,
-			},
-			/* call bpf_redirect_map */
-			&ebpf.CallHelper{
-				Function: 51,
-			},
-			&ebpf.Exit{}, // exit
-		}),
 	}
 
 	xskmap := program.Maps["xskmap"].(*gobpfld.XSKMap)
-	log, err := program.Load(gobpfld.BPFProgramLoadSettings{
-		ProgramType:      bpftypes.BPF_PROG_TYPE_XDP,
+	log, err := program.Load(gobpfld.ProgXDPLoadOpts{
 		VerifierLogLevel: bpftypes.BPFLogLevelBasic,
 	})
 
@@ -165,7 +167,7 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, unix.SIGTERM, unix.SIGINT)
 
-	err = program.XDPLinkAttach(gobpfld.BPFProgramXDPLinkAttachSettings{
+	err = program.Attach(gobpfld.ProgXDPAttachOpts{
 		InterfaceName: linkName,
 		Replace:       true,
 	})

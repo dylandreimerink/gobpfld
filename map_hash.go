@@ -101,6 +101,13 @@ func (m *HashMap) Iterator() MapIterator {
 		}
 	}
 
+	// TODO change batch lookup iterator to support per-cpu values
+	if m.isPerCPUMap() {
+		return &singleLookupIterator{
+			BPFMap: m,
+		}
+	}
+
 	// If there is no reason not to use the batch lookup iterator, use it
 	return &batchLookupIterator{
 		BPFMap: m,

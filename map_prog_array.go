@@ -50,18 +50,23 @@ func (m *ProgArrayMap) Get(key int) (int, error) {
 	return fd, nil
 }
 
-func (m *ProgArrayMap) Set(key int32, value *BPFProgram) error {
+func (m *ProgArrayMap) Set(key int32, value BPFProgram) error {
 	if !m.Loaded {
 		return fmt.Errorf("can't write to an unloaded map")
+	}
+
+	fd, err := value.Fd()
+	if err != nil {
+		return fmt.Errorf("prog fd: %w", err)
 	}
 
 	attr := &bpfsys.BPFAttrMapElem{
 		MapFD:         m.Fd,
 		Key:           uintptr(unsafe.Pointer(&key)),
-		Value_NextKey: uintptr(unsafe.Pointer(&value.fd)),
+		Value_NextKey: uintptr(unsafe.Pointer(&fd)),
 	}
 
-	err := bpfsys.MapUpdateElem(attr)
+	err = bpfsys.MapUpdateElem(attr)
 	if err != nil {
 		return fmt.Errorf("bpf syscall error: %w", err)
 	}

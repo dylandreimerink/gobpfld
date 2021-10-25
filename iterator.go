@@ -231,14 +231,6 @@ func (bli *batchLookupIterator) Init(key, value interface{}) error {
 		return fmt.Errorf("value argument must be a pointer")
 	}
 
-	if valueType.Elem().Size() != uintptr(bli.am.Definition.ValueSize) {
-		return fmt.Errorf(
-			"value type size(%d) doesn't match size of bfp value(%d)",
-			valueType.Elem().Size(),
-			bli.am.Definition.ValueSize,
-		)
-	}
-
 	bli.value = reflect.ValueOf(value)
 	bli.valueBuf = reflect.New(reflect.ArrayOf(bli.bufSize, valueType.Elem()))
 

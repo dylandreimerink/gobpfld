@@ -33,10 +33,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	program := elf.Programs["proto_stats"]
+	program := elf.Programs["firewall_prog"].(*gobpfld.ProgramXDP)
 
-	log, err := program.Load(gobpfld.BPFProgramLoadSettings{
-		ProgramType:      bpftypes.BPF_PROG_TYPE_XDP,
+	log, err := program.Load(gobpfld.ProgXDPLoadOpts{
 		VerifierLogLevel: bpftypes.BPFLogLevelVerbose,
 	})
 
@@ -50,7 +49,7 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, unix.SIGTERM, unix.SIGINT)
 
-	err = program.XDPLinkAttach(gobpfld.BPFProgramXDPLinkAttachSettings{
+	err = program.Attach(gobpfld.ProgXDPAttachOpts{
 		InterfaceName: "lo",
 		Replace:       true,
 	})

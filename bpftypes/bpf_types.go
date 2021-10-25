@@ -393,8 +393,10 @@ const (
 	// typically called from a network driver as soon as possible, before the kernel network stack.
 	// XDP programs can modify, redirect, or pass frames which can be used for very high performance network programs.
 	BPF_PROG_TYPE_XDP
-	// BPF_PROG_TYPE_PERF_EVENT program type can be attached to perf events. The program is triggered for every perf
-	// event it is attached to within a given scope. It is mainly used for collecting information and monitoring.
+	// BPF_PROG_TYPE_PERF_EVENT program type can be attached to hardware and softwate perf events.
+	// The program is triggered for every perf event it is attached to within a given scope.
+	// It is mainly used for collecting information and monitoring.
+	// https://github.com/torvalds/linux/commit/0515e5999a466dfe6e1924f460da599bb6821487
 	// You can read more about perf and perf_events here: http://www.brendangregg.com/perf.html
 	BPF_PROG_TYPE_PERF_EVENT
 	// BPF_PROG_TYPE_CGROUP_SKB program type can be attached to cgroups and is triggered on IP ingress/egress.
@@ -419,19 +421,53 @@ const (
 	BPF_PROG_TYPE_SK_SKB
 	BPF_PROG_TYPE_CGROUP_DEVICE
 	BPF_PROG_TYPE_SK_MSG
+	// BPF_PROG_TYPE_RAW_TRACEPOINT program type attaches to tracepoints like the BPF_PROG_TYPE_TRACEPOINT type
+	// accept the context passed into the eBPF function can be used to access kernel internal arguments of the
+	// tracepoint in their raw form.
+	// https://github.com/torvalds/linux/commit/c4f6699dfcb8558d138fe838f741b2c10f416cf9
 	BPF_PROG_TYPE_RAW_TRACEPOINT
 	BPF_PROG_TYPE_CGROUP_SOCK_ADDR
 	BPF_PROG_TYPE_LWT_SEG6LOCAL
+	// BPF_PROG_TYPE_LIRC_MODE2 program type attaches to a LIRC(Linux Infra Red Controller) device.
+	// The main purpose of this program type is to allow for custom IR encoding/decoding implemented in eBPF.
+	// https://github.com/torvalds/linux/commit/f4364dcfc86df7c1ca47b256eaf6b6d0cdd0d936
 	BPF_PROG_TYPE_LIRC_MODE2
+	// BPF_PROG_TYPE_SK_REUSEPORT program type attaches to a socket with the SO_REUSEPORT option set. The eBPF program
+	// is triggered on every connection/datagram and can descide which sockets gets it, whereas without a eBPF program
+	// the process is based on round-robin balancing.
+	// https://github.com/torvalds/linux/commit/2dbb9b9e6df67d444fbe425c7f6014858d337adf
 	BPF_PROG_TYPE_SK_REUSEPORT
 	BPF_PROG_TYPE_FLOW_DISSECTOR
 	BPF_PROG_TYPE_CGROUP_SYSCTL
+	// BPF_PROG_TYPE_RAW_TRACEPOINT_WRITABLE is almost identical to BPF_PROG_TYPE_RAW_TRACEPOINT accept it allows
+	// the eBPF program to write into a buffer provided by the tracepoint.
+	// The purpose of this is not clear at the moment.
+	// https://github.com/torvalds/linux/commit/9df1c28bb75217b244257152ab7d788bb2a386d0
 	BPF_PROG_TYPE_RAW_TRACEPOINT_WRITABLE
 	BPF_PROG_TYPE_CGROUP_SOCKOPT
+	// BPF_PROG_TYPE_TRACING program type replaces BPF_PROG_TYPE_RAW_TRACEPOINT+BTF information.
+	// https://github.com/torvalds/linux/commit/f1b9509c2fb0ef4db8d22dac9aef8e856a5d81f6
 	BPF_PROG_TYPE_TRACING
+	// BPF_PROG_TYPE_STRUCT_OPS program type allows us to replace certain kernel's struct ops (i.e. func ptr) with
+	// our own eBPF programs. Main purpose is to change default kernel behavior, the first use case cited is to replace
+	// functions in struct tcp_congestion_ops thus changeing kernel behavior during TCP congestion.
+	// https://github.com/torvalds/linux/commit/27ae7997a66174cb8afd6a75b3989f5e0c1b9e5a
 	BPF_PROG_TYPE_STRUCT_OPS
+	// BPF_PROG_TYPE_EXT program type can be used to extend/replace logic in eBPF programs that are loaded into the
+	// kernel. This presumably allows you to swap out functions in running programs instead of having the replace the
+	// full program.
+	// https://github.com/torvalds/linux/commit/be8704ff07d2374bcc5c675526f95e70c6459683
 	BPF_PROG_TYPE_EXT
+	// BPF_PROG_TYPE_LSM program type attaches to LSM(Linux security module) hooks, these are the same hooks as used
+	// by AppArmour and SELinux. This basically means this allows userspace applications to implement security features
+	// akin to AppArmour and SELinux but without the need for kernel modules or kernel changes.
+	// https://github.com/torvalds/linux/commit/fc611f47f2188ade2b48ff6902d5cce8baac0c58
 	BPF_PROG_TYPE_LSM
+	// BPF_PROG_TYPE_SK_LOOKUP program types attaches to a network namespace. It can be used to overwrite the native
+	// socket lookup process for connection oriented protocols. This gives us the ability to for example send traffic
+	// for a specific IP to a socket no matter the destination port, something that is impossible with regular port
+	// lookups.
+	// https://github.com/torvalds/linux/commit/e9ddbb7707ff5891616240026062b8c1e29864ca
 	BPF_PROG_TYPE_SK_LOOKUP
 	BPF_PROG_TYPE_SYSCALL
 )

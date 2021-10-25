@@ -14,7 +14,7 @@ unsigned long long load_byte(void *skb,
 unsigned long long load_half(void *skb,
 			     unsigned long long off) asm("llvm.bpf.load.half");
 
-SEC("sockfilter")
+SEC("sock_filter")
 int sockfilter_prog(struct __sk_buff *skb)
 {
     __be16 h_proto = load_half(skb, offsetof(struct ethhdr, h_proto));

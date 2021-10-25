@@ -20,7 +20,14 @@ type ELFParseSettings struct {
 // BPFELF is the result of parsing an eBPF ELF file. It can contain multiple programs and maps.
 type BPFELF struct {
 	// Programs contained within the ELF
-	Programs map[string]*BPFProgram
+	Programs map[string]BPFProgram
+	// Maps defined in the ELF
+	Maps map[string]BPFMap
+}
+
+type bpfELF struct {
+	// Programs contained within the ELF
+	Programs map[string]*elfBPFProgram
 	// Maps defined in the ELF
 	Maps map[string]BPFMap
 
@@ -31,44 +38,70 @@ type BPFELF struct {
 	relTables map[string]elfRelocTable
 }
 
+type elfBPFProgram struct {
+	AbstractBPFProgram
+
+	// The ELF section where the program came from
+	section string
+	// The offset from the start of the section to the start of the program in bytes.
+	offset int
+	// The size of the program code in bytes, which is not always the size of the instructions slice
+	// due to bpf_to_bpf linking
+	size int
+}
+
 func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error) {
-	var bpfElf BPFELF
 	elfFile, err := elf.NewFile(r)
 	if err != nil {
-		return bpfElf, err
+		return BPFELF{}, err
 	}
 
 	if elfFile.Machine != elf.EM_BPF {
-		return bpfElf, fmt.Errorf("elf file machine type is not BPF, machine type: '%s'", elfFile.Machine)
+		return BPFELF{}, fmt.Errorf("elf file machine type is not BPF, machine type: '%s'", elfFile.Machine)
 	}
 
 	if elfFile.Class != elf.ELFCLASS64 {
-		return bpfElf, fmt.Errorf("elf file class is not 64 bit, class: '%s'", elfFile.Class)
+		return BPFELF{}, fmt.Errorf("elf file class is not 64 bit, class: '%s'", elfFile.Class)
 	}
 
-	bpfElf, err = parseElf(elfFile, settings)
+	bpfElf, err := parseElf(elfFile, settings)
 	if err != nil {
-		return bpfElf, fmt.Errorf("processSections: %w", err)
+		return BPFELF{}, fmt.Errorf("processSections: %w", err)
 	}
 
-	for progname, program := range bpfElf.Programs {
-		progRelocTable, found := bpfElf.relTables[".rel"+progname]
+	for _, program := range bpfElf.Programs {
+		progRelocTable, found := bpfElf.relTables[".rel"+program.section]
 		if !found {
 			continue
 		}
 
-		// The offset where main program instructions end and .text instructions start.
+		// The offset where main program instructions ends and .text instructions start.
 		txtInsOff := -1
 
 		// If there is any code in the .text section
 		if len(bpfElf.txtInstr) > 0 {
 			// Check if this program uses any code from the .text section.
-			// If there are multiple programs, not all may need the .text code, so adding it only increases
-			// program size.
+			// If there are multiple programs, not all may need the .text code.
+			// Adding it causes the verifier to throw dead code errors.
 			//
 			// TODO look into only adding the sub programs needed, not the while .text block (if doable)
 			usesTxt := false
 			for _, relocEntry := range progRelocTable {
+				// The absolute offset from the start of the section to the location where the entry should be linked
+				absOff, err := relocEntry.AbsoluteOffset()
+				if err != nil {
+					return BPFELF{}, fmt.Errorf("unable to calculate absolute offset for relocation entry: %w", err)
+				}
+
+				// Calculate the offset from the start of the program within a section
+				progOff := int(absOff) - program.offset
+
+				// If the relocation entry is for before or after a current program (another program in the same
+				// section). Ignore it.
+				if progOff < 0 || progOff >= program.size {
+					continue
+				}
+
 				if elfFile.Sections[int(relocEntry.Symbol.Section)].Name == ".text" {
 					usesTxt = true
 					break
@@ -89,26 +122,36 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 		//  - BPF to BPF function calls (can be resolved here)
 		for _, relocEntry := range progRelocTable {
 			section := elfFile.Sections[relocEntry.Symbol.Section]
+
+			// The absolute offset from the start of the section to the location where the entry should be linked
+			absOff, err := relocEntry.AbsoluteOffset()
+			if err != nil {
+				return BPFELF{}, fmt.Errorf("unable to calculate absolute offset for relocation entry: %w", err)
+			}
+
+			// Calculate the offset from the start of the program within a section
+			progOff := int(absOff) - program.offset
+
+			// If the relocation entry is for before or after a current program (another program in the same section)
+			// Ignore it.
+			if progOff < 0 || progOff >= program.size {
+				continue
+			}
+
 			if section.Name == ".text" {
 				if txtInsOff == -1 {
-					return bpfElf, fmt.Errorf("unable to relocate .text entry since it is empty")
-				}
-
-				absOff, err := relocEntry.AbsoluteOffset()
-				if err != nil {
-					return bpfElf, fmt.Errorf("unable to calculate absolute offset for relocation entry: %w", err)
+					return BPFELF{}, fmt.Errorf("unable to relocate .text entry since it is empty")
 				}
 
 				// Update the imm of the call instruction which points to a relocated function
 				// in the .text section to reflect the current relative offset
-				callInst := &program.Instructions[int(absOff)/ebpf.BPFInstSize]
-				callInst.Imm = (int32(txtInsOff) + callInst.Imm) - (int32(absOff) / int32(ebpf.BPFInstSize))
+				callInst := &program.Instructions[int(progOff)/ebpf.BPFInstSize]
+				callInst.Imm = (int32(txtInsOff) + callInst.Imm) - (int32(progOff) / int32(ebpf.BPFInstSize))
 
 				continue
 			}
 
 			if section.Name == "maps" {
-
 				// The map name is the name of the symbol truncated to BPF_OBJ_NAME_LEN
 				mapName := relocEntry.Symbol.Name
 				if settings.TruncateNames && len(mapName) > bpftypes.BPF_OBJ_NAME_LEN-1 {
@@ -117,7 +160,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 
 				bpfMap, found := bpfElf.Maps[mapName]
 				if !found {
-					return bpfElf, fmt.Errorf("program references undefined map named '%s'", mapName)
+					return BPFELF{}, fmt.Errorf("program references undefined map named '%s'", mapName)
 				}
 
 				// Add map to list of maps used by program if not already in list
@@ -131,11 +174,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 					relLocations = []uint64{}
 				}
 
-				absOff, err := relocEntry.AbsoluteOffset()
-				if err != nil {
-					return bpfElf, fmt.Errorf("unable to calculate absolute offset for relocation entry: %w", err)
-				}
-				relLocations = append(relLocations, absOff)
+				relLocations = append(relLocations, uint64(progOff))
 
 				program.MapFDLocations[mapName] = relLocations
 			}
@@ -154,7 +193,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 				if section.Name == ".text" {
 					absOff, err := relocEntry.AbsoluteOffset()
 					if err != nil {
-						return bpfElf, fmt.Errorf("unable to calculate absolute offset for relocation entry: %w", err)
+						return BPFELF{}, fmt.Errorf("unable to calculate absolute offset for relocation entry: %w", err)
 					}
 
 					// Update the imm of the call instruction which points to a relocated function
@@ -173,7 +212,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 
 					bpfMap, found := bpfElf.Maps[mapName]
 					if !found {
-						return bpfElf, fmt.Errorf("program .text references undefined map named '%s'", mapName)
+						return BPFELF{}, fmt.Errorf("program .text references undefined map named '%s'", mapName)
 					}
 
 					// Add map to list of maps used by program if not already in list
@@ -189,7 +228,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 
 					absOff, err := relocEntry.AbsoluteOffset()
 					if err != nil {
-						return bpfElf, fmt.Errorf("unable to calculate absolute offset for relocation entry: %w", err)
+						return BPFELF{}, fmt.Errorf("unable to calculate absolute offset for relocation entry: %w", err)
 					}
 
 					// Since the .text section is appended to the main program and the relocation offset is relative
@@ -205,7 +244,31 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 		}
 	}
 
-	return bpfElf, nil
+	retBpfELF := BPFELF{
+		Maps:     bpfElf.Maps,
+		Programs: make(map[string]BPFProgram),
+	}
+	for name, prog := range bpfElf.Programs {
+		specificProgInt := BPFProgramFromAbstract(prog.AbstractBPFProgram)
+
+		sectionParts := strings.Split(prog.section, "/")
+
+		// For some program types the section name can be used to pass additional information about
+		// how the program should be attached
+		switch specificProg := specificProgInt.(type) {
+		case *ProgramTracepoint:
+			if len(sectionParts) >= 2 {
+				specificProg.DefaultCategory = sectionParts[1]
+			}
+			if len(sectionParts) >= 3 {
+				specificProg.DefaultName = sectionParts[2]
+			}
+		}
+
+		retBpfELF.Programs[name] = specificProgInt
+	}
+
+	return retBpfELF, nil
 }
 
 // Parse the ELF file into the separate components which will need to be combined later
@@ -213,11 +276,11 @@ func parseElf(
 	elfFile *elf.File,
 	settings ELFParseSettings,
 ) (
-	bpfElf BPFELF,
+	bpfElf bpfELF,
 	err error,
 ) {
-	bpfElf = BPFELF{
-		Programs:  map[string]*BPFProgram{},
+	bpfElf = bpfELF{
+		Programs:  map[string]*elfBPFProgram{},
 		Maps:      map[string]BPFMap{},
 		relTables: map[string]elfRelocTable{},
 	}
@@ -342,25 +405,63 @@ func parseElf(
 
 			// For other sections, create it as a separate program
 
-			// TODO use section name as program type indication
-			// TODO use function name as program name
-			// TODO auto truncate in-kernel program name
+			globalFunctions := make([]elf.Symbol, 0)
 
-			program := NewBPFProgram()
-			program.Instructions = instructions
-			err = program.Name.SetString(section.Name)
-			if err != nil {
-				if settings.TruncateNames && errors.Is(err, ErrObjNameToLarge) {
-					err = program.Name.SetString(section.Name[:bpftypes.BPF_OBJ_NAME_LEN-1])
-					if err != nil {
-						return bpfElf, fmt.Errorf("failed to truncate program name: %w", err)
-					}
-				} else {
-					return bpfElf, fmt.Errorf("failed to set program name '%s': %w", section.Name, err)
+			// Find the name of the program / function name.
+			// We are looking for a global functions
+			for _, sym := range symbols {
+				if sym.Section != elf.SectionIndex(sectionIndex) {
+					continue
 				}
+
+				if elf.ST_BIND(sym.Info) != elf.STB_GLOBAL || elf.ST_TYPE(sym.Info) != elf.STT_FUNC {
+					continue
+				}
+
+				globalFunctions = append(globalFunctions, sym)
 			}
 
-			bpfElf.Programs[section.Name] = program
+			sectionParts := strings.Split(section.Name, "/")
+			progType := sectionNameToProgType[sectionParts[0]]
+
+			if progType == bpftypes.BPF_PROG_TYPE_UNSPEC {
+				return bpfELF{}, fmt.Errorf(
+					"unknown elf section '%s', doesn't match any eBPF program type",
+					sectionParts[0],
+				)
+			}
+
+			for i := 0; i < len(globalFunctions); i++ {
+				sym := globalFunctions[i]
+
+				program := NewAbstractBPFProgram()
+				program.ProgramType = progType
+				start := int(sym.Value) / ebpf.BPFInstSize
+				end := (int(sym.Value) + int(sym.Size)) / ebpf.BPFInstSize
+				program.Instructions = instructions[start:end]
+
+				// spew.Dump(sym.Name)
+				// spew.Dump(ebpf.Decode(program.Instructions))
+
+				err = program.Name.SetString(sym.Name)
+				if err != nil {
+					if settings.TruncateNames && errors.Is(err, ErrObjNameToLarge) {
+						err = program.Name.SetString(sym.Name[:bpftypes.BPF_OBJ_NAME_LEN-1])
+						if err != nil {
+							return bpfElf, fmt.Errorf("failed to truncate program name: %w", err)
+						}
+					} else {
+						return bpfElf, fmt.Errorf("failed to set program name '%s': %w", sym.Name, err)
+					}
+				}
+
+				bpfElf.Programs[sym.Name] = &elfBPFProgram{
+					AbstractBPFProgram: program,
+					section:            section.Name,
+					offset:             int(sym.Value),
+					size:               int(sym.Size),
+				}
+			}
 
 		case elf.SHT_REL:
 			// Relocation table
@@ -407,6 +508,40 @@ func parseElf(
 	}
 
 	return bpfElf, nil
+}
+
+// This map translates ELF section names to program types.
+var sectionNameToProgType = map[string]bpftypes.BPFProgType{
+	"sock_filter":             bpftypes.BPF_PROG_TYPE_SOCKET_FILTER,
+	"kprobe":                  bpftypes.BPF_PROG_TYPE_KPROBE,
+	"tc_cls":                  bpftypes.BPF_PROG_TYPE_SCHED_CLS,
+	"tc_act":                  bpftypes.BPF_PROG_TYPE_SCHED_ACT,
+	"tracepoint":              bpftypes.BPF_PROG_TYPE_TRACEPOINT,
+	"xdp":                     bpftypes.BPF_PROG_TYPE_XDP,
+	"perf_event":              bpftypes.BPF_PROG_TYPE_PERF_EVENT,
+	"cgroup_skb":              bpftypes.BPF_PROG_TYPE_CGROUP_SKB,
+	"cgroup_sock":             bpftypes.BPF_PROG_TYPE_CGROUP_SOCK,
+	"lwt_in":                  bpftypes.BPF_PROG_TYPE_LWT_IN,
+	"lwt_out":                 bpftypes.BPF_PROG_TYPE_LWT_OUT,
+	"lwt_xmit":                bpftypes.BPF_PROG_TYPE_LWT_XMIT,
+	"sock_opts":               bpftypes.BPF_PROG_TYPE_SOCK_OPS,
+	"sk_skb":                  bpftypes.BPF_PROG_TYPE_SK_SKB,
+	"cgroup_device":           bpftypes.BPF_PROG_TYPE_CGROUP_DEVICE,
+	"raw_tracepoint":          bpftypes.BPF_PROG_TYPE_RAW_TRACEPOINT,
+	"cgroup_sock_addr":        bpftypes.BPF_PROG_TYPE_CGROUP_SOCK_ADDR,
+	"lwt_seg6local":           bpftypes.BPF_PROG_TYPE_LWT_SEG6LOCAL,
+	"lirc_mode2":              bpftypes.BPF_PROG_TYPE_LIRC_MODE2,
+	"sk_reuseport":            bpftypes.BPF_PROG_TYPE_SK_REUSEPORT,
+	"flow_dissector":          bpftypes.BPF_PROG_TYPE_FLOW_DISSECTOR,
+	"cgroup_sysctl":           bpftypes.BPF_PROG_TYPE_CGROUP_SYSCTL,
+	"raw_tracepoint_writable": bpftypes.BPF_PROG_TYPE_RAW_TRACEPOINT_WRITABLE,
+	"cgroup_sockopt":          bpftypes.BPF_PROG_TYPE_CGROUP_SOCKOPT,
+	"tracing":                 bpftypes.BPF_PROG_TYPE_TRACING,
+	"struct_ops":              bpftypes.BPF_PROG_TYPE_STRUCT_OPS,
+	"ext":                     bpftypes.BPF_PROG_TYPE_EXT,
+	"lsm":                     bpftypes.BPF_PROG_TYPE_LSM,
+	"sk_lookup":               bpftypes.BPF_PROG_TYPE_SK_LOOKUP,
+	"syscall":                 bpftypes.BPF_PROG_TYPE_SYSCALL,
 }
 
 type elfRelocTable []elfRelocEntry
