@@ -15,7 +15,7 @@ type Event struct {
 
 	fd              FD
 	attachedProgram bpfsys.BPFfd
-	kProbe          *KProbe
+	kprobe          *KProbe
 }
 
 // AttachBPFProgram attach a loaded BPF program to the perf event.
@@ -34,8 +34,8 @@ func (e *Event) AttachBPFProgram(programFD bpfsys.BPFfd) error {
 		return err
 	}
 
-	if e.kProbe != nil {
-		err := e.kProbe.Enable()
+	if e.kprobe != nil {
+		err := e.kprobe.Enable()
 		if err != nil {
 			return fmt.Errorf("kprobe enable: %w", err)
 		}
@@ -47,8 +47,8 @@ func (e *Event) AttachBPFProgram(programFD bpfsys.BPFfd) error {
 }
 
 func (e *Event) DetachBPFProgram() error {
-	if e.kProbe != nil {
-		err := e.kProbe.Disable()
+	if e.kprobe != nil {
+		err := e.kprobe.Disable()
 		if err != nil {
 			return fmt.Errorf("kprobe disable: %w", err)
 		}
@@ -66,9 +66,9 @@ func (e *Event) DetachBPFProgram() error {
 		return fmt.Errorf("close perf event: %w", err)
 	}
 
-	if e.kProbe != nil {
+	if e.kprobe != nil {
 		// ignore error
-		err = e.kProbe.Clear()
+		err = e.kprobe.Clear()
 		if err != nil {
 			return fmt.Errorf("clear kprobe: %w", err)
 		}
@@ -305,7 +305,7 @@ func OpenKProbeEvent(kprobeOpts KprobeOpts) (*Event, error) {
 		return nil, fmt.Errorf("open perf event: %w", err)
 	}
 
-	event.kProbe = kprobe
+	event.kprobe = kprobe
 
 	return event, nil
 }
