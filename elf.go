@@ -263,6 +263,16 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 			if len(sectionParts) >= 3 {
 				specificProg.DefaultName = sectionParts[2]
 			}
+		case *ProgramKProbe:
+			specificProg.DefaultEvent = name
+			if len(sectionParts) == 2 {
+				specificProg.DefaultSymbol = sectionParts[1]
+			}
+
+			if len(sectionParts) >= 3 {
+				specificProg.DefaultModule = sectionParts[1]
+				specificProg.DefaultSymbol = sectionParts[2]
+			}
 		}
 
 		retBpfELF.Programs[name] = specificProgInt

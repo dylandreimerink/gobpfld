@@ -18,6 +18,10 @@ It demonstrates how userspace applications can generate programs dynamically wit
 
 This program is almost identical to the `xdp_stats_instructions` example, except it replaces the manual instruction crafting with eBPF assembly code which is parsed and turned into eBPF instruction by the `ebpf` package.
 
+## kprobe_execve_stats
+
+This program attaches to the `execve` syscall which is called any time a program is executed on linux. The program simply counts the occurrences, more advanced programs can inspect the passed arguments.
+
 ## per_cpu_map
 
 This eBPF program attaches to the loopback interface of the host and counts the amount of packets received per CPU, it stores this information in a `BPF_MAP_TYPE_PERCPU_ARRAY` map. This example demonstrates how to read from and write to a per CPU map type with the `gopbfld.BPFGenericMap`.

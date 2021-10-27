@@ -39,6 +39,11 @@ func BPFProgramFromAbstract(abstract AbstractBPFProgram) BPFProgram {
 			AbstractBPFProgram: abstract,
 		}
 
+	case bpftypes.BPF_PROG_TYPE_KPROBE:
+		return &ProgramKProbe{
+			AbstractBPFProgram: abstract,
+		}
+
 	default:
 		panic("unsupported program type")
 	}

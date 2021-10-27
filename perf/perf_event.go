@@ -11,9 +11,11 @@ import (
 
 // Event represents an linux perf event in userspace.
 type Event struct {
-	Type            Type
+	Type Type
+
 	fd              FD
 	attachedProgram bpfsys.BPFfd
+	kProbe          *KProbe
 }
 
 // AttachBPFProgram attach a loaded BPF program to the perf event.
@@ -32,20 +34,47 @@ func (e *Event) AttachBPFProgram(programFD bpfsys.BPFfd) error {
 		return err
 	}
 
+	if e.kProbe != nil {
+		err := e.kProbe.Enable()
+		if err != nil {
+			return fmt.Errorf("kprobe enable: %w", err)
+		}
+	}
+
 	e.attachedProgram = programFD
 
 	return nil
 }
 
 func (e *Event) DetachBPFProgram() error {
+	if e.kProbe != nil {
+		err := e.kProbe.Disable()
+		if err != nil {
+			return fmt.Errorf("kprobe disable: %w", err)
+		}
+	}
+
 	// disable the perf event
 	err := ioctl(int(e.fd), unix.PERF_EVENT_IOC_DISABLE, 0)
 	if err != nil {
-		return err
+		return fmt.Errorf("ioctl disable perf event: %w", err)
 	}
 
 	// close the fd of the perf event
-	return syscall.Close(int(e.fd))
+	err = syscall.Close(int(e.fd))
+	if err != nil {
+		return fmt.Errorf("close perf event: %w", err)
+	}
+
+	if e.kProbe != nil {
+		// ignore error
+		err = e.kProbe.Clear()
+		if err != nil {
+			return fmt.Errorf("clear kprobe: %w", err)
+		}
+	}
+
+	return nil
 }
 
 type SyscallError struct {
@@ -260,7 +289,27 @@ func OpenTracepointEvent(category, name string) (*Event, error) {
 }
 
 // TODO add open event buffer function
-// TODO add open kprobe event
+
+func OpenKProbeEvent(kprobeOpts KprobeOpts) (*Event, error) {
+	kprobe, err := newKProbe(kprobeOpts)
+	if err != nil {
+		return nil, fmt.Errorf("kprobe: %w", err)
+	}
+
+	event, err := perfEventOpen(perfEventAttr{
+		Type:   TYPE_TRACEPOINT,
+		Size:   attrSize,
+		Config: uint64(kprobe.ID),
+	}, -1, 0, -1, EventOpenFDCloseOnExit)
+	if err != nil {
+		return nil, fmt.Errorf("open perf event: %w", err)
+	}
+
+	event.kProbe = kprobe
+
+	return event, nil
+}
+
 // TODO add open uprobe event
 
 type EventOpenFlags uintptr

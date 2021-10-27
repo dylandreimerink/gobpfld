@@ -66,7 +66,8 @@ Features/tasks in this list are commonly used/requested because they are used in
 
 * Data relocation from ELF files(static global variables)
 * ~~Attach to sockets~~
-* Attach to kprobes
+* ~~Attach to kprobes~~
+* Attach to kretprobes
 * Attach to uprobes
 * Attach to tc (traffic control)
 * ~~Attach to tracepoints~~
