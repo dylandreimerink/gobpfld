@@ -291,6 +291,10 @@ func OpenKProbeEvent(kprobeOpts KProbeOpts) (*Event, error) {
 		return nil, fmt.Errorf("kprobe: %w", err)
 	}
 
+	// TODO using the debugfs and tracepoint type is apparently legacy, the new way to do it is using
+	//   dynamic PMU's. Couldn't get this to work, so in future figure it out and add as preferred method
+	//   and keep this one as fallback for older kernels
+
 	event, err := perfEventOpen(perfEventAttr{
 		Type:   TYPE_TRACEPOINT,
 		Size:   attrSize,
@@ -313,12 +317,14 @@ func OpenUProbeEvent(uprobeOpts UProbeOpts) (*Event, error) {
 
 	// TODO add CPU and PID options since they are allowed for uprobes to trace specific programs
 
+	// TODO using the debugfs and tracepoint type is apparently legacy, the new way to do it is using
+	//   dynamic PMU's. Couldn't get this to work, so in future figure it out and add as preferred method
+	//   and keep this one as fallback for older kernels
+
 	event, err := perfEventOpen(perfEventAttr{
-		Type:                  TYPE_TRACEPOINT,
-		Size:                  attrSize,
-		Config:                uint64(uprobe.ID),
-		SamplePeriodFreq:      1,
-		WakeupEventsWatermark: 1,
+		Type:   TYPE_TRACEPOINT,
+		Size:   attrSize,
+		Config: uint64(uprobe.ID),
 	}, -1, 0, -1, EventOpenFDCloseOnExit)
 	if err != nil {
 		return nil, fmt.Errorf("open perf event: %w", err)

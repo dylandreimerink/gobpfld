@@ -22,6 +22,12 @@ This program is almost identical to the `xdp_stats_instructions` example, except
 
 This program attaches to the `execve` syscall which is called any time a program is executed on linux. The program simply counts the occurrences, more advanced programs can inspect the passed arguments.
 
+## uprobe_bash_stats
+
+This program attaches to `/bin/bash` and is called any time the function at offset `0x030360`(main) is called. The offset is hardcoded in this example and may not work out of the box because the bash binary isn't exactly the same. The proper way to use such a program would be to get the symbols from the ELF file at runtime and extract the offset that way. This does require the program to expose debug symbols if you want to attach to anything other than the entry point.
+
+The program simply counts the occurrences, more advanced programs can inspect the passed arguments.
+
 ## per_cpu_map
 
 This eBPF program attaches to the loopback interface of the host and counts the amount of packets received per CPU, it stores this information in a `BPF_MAP_TYPE_PERCPU_ARRAY` map. This example demonstrates how to read from and write to a per CPU map type with the `gopbfld.BPFGenericMap`.
