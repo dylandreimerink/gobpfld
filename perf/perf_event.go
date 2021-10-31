@@ -16,6 +16,7 @@ type Event struct {
 	fd              FD
 	attachedProgram bpfsys.BPFfd
 	kprobe          *KProbe
+	uprobe          *UProbe
 }
 
 // AttachBPFProgram attach a loaded BPF program to the perf event.
@@ -34,26 +35,12 @@ func (e *Event) AttachBPFProgram(programFD bpfsys.BPFfd) error {
 		return err
 	}
 
-	if e.kprobe != nil {
-		err := e.kprobe.Enable()
-		if err != nil {
-			return fmt.Errorf("kprobe enable: %w", err)
-		}
-	}
-
 	e.attachedProgram = programFD
 
 	return nil
 }
 
 func (e *Event) DetachBPFProgram() error {
-	if e.kprobe != nil {
-		err := e.kprobe.Disable()
-		if err != nil {
-			return fmt.Errorf("kprobe disable: %w", err)
-		}
-	}
-
 	// disable the perf event
 	err := ioctl(int(e.fd), unix.PERF_EVENT_IOC_DISABLE, 0)
 	if err != nil {
@@ -71,6 +58,13 @@ func (e *Event) DetachBPFProgram() error {
 		err = e.kprobe.Clear()
 		if err != nil {
 			return fmt.Errorf("clear kprobe: %w", err)
+		}
+	}
+	if e.uprobe != nil {
+		// ignore error
+		err = e.uprobe.Clear()
+		if err != nil {
+			return fmt.Errorf("clear uprobe: %w", err)
 		}
 	}
 
@@ -243,7 +237,7 @@ type perfEventAttr struct {
 	WakeupEventsWatermark uint32
 	BPType                uint32
 	// union of bp_addr, kprobe_func, uprobe_path, and config1
-	BPAddr uint64
+	BPAddr uintptr
 	// union of bp_len, kprobe_addr, probe_offset, and config2
 	BPLen uint64
 	// Unum of perf_branch_sample_type
@@ -262,7 +256,8 @@ type perfEventAttr struct {
 	// See asm/perf_regs.h for details.
 	SampleRegsIntr uint64
 	// Wakeup watermark for AUX area
-	AUXWatermark uint32
+	AUXWatermark   uint32
+	SampleMaxStack uint16
 	// __reserved_2
 	_             uint16
 	AUXSampleSize uint32
@@ -290,7 +285,7 @@ func OpenTracepointEvent(category, name string) (*Event, error) {
 
 // TODO add open event buffer function
 
-func OpenKProbeEvent(kprobeOpts KprobeOpts) (*Event, error) {
+func OpenKProbeEvent(kprobeOpts KProbeOpts) (*Event, error) {
 	kprobe, err := newKProbe(kprobeOpts)
 	if err != nil {
 		return nil, fmt.Errorf("kprobe: %w", err)
@@ -310,7 +305,29 @@ func OpenKProbeEvent(kprobeOpts KprobeOpts) (*Event, error) {
 	return event, nil
 }
 
-// TODO add open uprobe event
+func OpenUProbeEvent(uprobeOpts UProbeOpts) (*Event, error) {
+	uprobe, err := newUProbe(uprobeOpts)
+	if err != nil {
+		return nil, fmt.Errorf("uprobe: %w", err)
+	}
+
+	// TODO add CPU and PID options since they are allowed for uprobes to trace specific programs
+
+	event, err := perfEventOpen(perfEventAttr{
+		Type:                  TYPE_TRACEPOINT,
+		Size:                  attrSize,
+		Config:                uint64(uprobe.ID),
+		SamplePeriodFreq:      1,
+		WakeupEventsWatermark: 1,
+	}, -1, 0, -1, EventOpenFDCloseOnExit)
+	if err != nil {
+		return nil, fmt.Errorf("open perf event: %w", err)
+	}
+
+	event.uprobe = uprobe
+
+	return event, nil
+}
 
 type EventOpenFlags uintptr
 
@@ -438,4 +455,9 @@ var perfEventOpenErrors = map[syscall.Errno]string{
 		"Linux 3.13) setting a kernel function-trace tracepoint.",
 
 	unix.ESRCH: "Returned if attempting to attach to a process that does not exist.",
+}
+
+// StringToCStrBytes turns the string into a null terminated byte slice
+func stringToCStrBytes(str string) []byte {
+	return []byte(str + "\x00")
 }

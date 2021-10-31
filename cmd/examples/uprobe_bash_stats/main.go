@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	elf, err := os.Open("bpf/tracex1_kern")
+	elf, err := os.Open("bpf/bash_stats")
 	if err != nil {
 		panic(err)
 	}
@@ -22,7 +22,7 @@ func main() {
 		panic(err)
 	}
 
-	stats := loadedElf.Maps["execve_stats"].(*gobpfld.ArrayMap)
+	stats := loadedElf.Maps["bash_stats"].(*gobpfld.ArrayMap)
 	err = stats.Load()
 	if err != nil {
 		panic(err)
@@ -39,10 +39,16 @@ func main() {
 		panic(err)
 	}
 
-	err = program.Attach(gobpfld.ProgKPAttachOpts{})
+	fmt.Println("attaching")
+
+	err = program.Attach(gobpfld.ProgKPAttachOpts{
+		Event: "bash_trace",
+	})
 	if err != nil {
 		panic(err)
 	}
+
+	fmt.Println("attached")
 
 	defer func() {
 		err = program.Detach()

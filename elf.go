@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"github.com/dylandreimerink/gobpfld/ebpf"
+	"github.com/dylandreimerink/gobpfld/perf"
 )
 
 type ELFParseSettings struct {
@@ -263,15 +265,52 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 			if len(sectionParts) >= 3 {
 				specificProg.DefaultName = sectionParts[2]
 			}
+
 		case *ProgramKProbe:
-			specificProg.DefaultEvent = name
-			if len(sectionParts) == 2 {
-				specificProg.DefaultSymbol = sectionParts[1]
+			uprobe := false
+			switch sectionParts[0] {
+			case "kprobe":
+				specificProg.DefaultType = perf.TypeKProbe
+			case "kretprobe":
+				specificProg.DefaultType = perf.TypeKRetprobe
+			case "uprobe":
+				uprobe = true
+				specificProg.DefaultType = perf.TypeUProbe
+			case "uretprobe":
+				uprobe = true
+				specificProg.DefaultType = perf.TypeURetProbe
 			}
 
-			if len(sectionParts) >= 3 {
-				specificProg.DefaultModule = sectionParts[1]
-				specificProg.DefaultSymbol = sectionParts[2]
+			if uprobe {
+				var path, offsetStr string
+				if len(sectionParts) == 2 {
+					path = "/" + sectionParts[1]
+				}
+
+				if len(sectionParts) == 3 {
+					path = "/" + sectionParts[1]
+					offsetStr = sectionParts[2]
+				}
+
+				if len(sectionParts) > 3 {
+					path = "/" + strings.Join(sectionParts[1:len(sectionParts)-1], "/")
+					offsetStr = sectionParts[len(sectionParts)-1]
+				}
+
+				specificProg.DefaultPath = path
+				if off, err := strconv.ParseInt(offsetStr, 0, 64); err == nil {
+					specificProg.DefaultOffset = int(off)
+				}
+
+			} else {
+				specificProg.DefaultEvent = name
+				if len(sectionParts) == 2 {
+					specificProg.DefaultSymbol = sectionParts[1]
+				}
+				if len(sectionParts) >= 3 {
+					specificProg.DefaultModule = sectionParts[1]
+					specificProg.DefaultSymbol = sectionParts[2]
+				}
 			}
 		}
 
@@ -450,9 +489,6 @@ func parseElf(
 				end := (int(sym.Value) + int(sym.Size)) / ebpf.BPFInstSize
 				program.Instructions = instructions[start:end]
 
-				// spew.Dump(sym.Name)
-				// spew.Dump(ebpf.Decode(program.Instructions))
-
 				err = program.Name.SetString(sym.Name)
 				if err != nil {
 					if settings.TruncateNames && errors.Is(err, ErrObjNameToLarge) {
@@ -521,9 +557,14 @@ func parseElf(
 }
 
 // This map translates ELF section names to program types.
+// https://github.com/libbpf/libbpf/blob/eaea2bce024fa6ae0db54af1e78b4d477d422791/src/libbpf.c#L8270
 var sectionNameToProgType = map[string]bpftypes.BPFProgType{
 	"sock_filter":             bpftypes.BPF_PROG_TYPE_SOCKET_FILTER,
+	"socket":                  bpftypes.BPF_PROG_TYPE_SOCKET_FILTER,
 	"kprobe":                  bpftypes.BPF_PROG_TYPE_KPROBE,
+	"kretprobe":               bpftypes.BPF_PROG_TYPE_KPROBE,
+	"uprobe":                  bpftypes.BPF_PROG_TYPE_KPROBE,
+	"uretprobe":               bpftypes.BPF_PROG_TYPE_KPROBE,
 	"tc_cls":                  bpftypes.BPF_PROG_TYPE_SCHED_CLS,
 	"tc_act":                  bpftypes.BPF_PROG_TYPE_SCHED_ACT,
 	"tracepoint":              bpftypes.BPF_PROG_TYPE_TRACEPOINT,

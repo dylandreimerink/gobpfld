@@ -27,20 +27,21 @@ GoBPFLD is a loader/library to make eBPF tool development in Go smoother. It is 
 ## Features
 
 * Pure Go - no CGO, missing libraries, forced dynamic linking, ect.
-* Load pre-compiled eBPF programs from ELF files (see LoadProgramFromELF)
-* Decode eBPF bytecode (see BPFProgram.DecodeToReader and ebpf.Decode)
-* Encode eBPF instructions into bytecode (see ebpf.Encode)
-* Loading eBPF maps into the kernel (see BPFMap.Load)
-* Loading eBPF programs into the kernel (see BPFProgram.Load)
+* Load pre-compiled eBPF programs from ELF files
+* eBPF bytecode decoder 
+* eBPF instructions to bytecode encoder
+* Loading eBPF maps into the kernel 
+* Loading eBPF programs into the kernel
 * Interacting with eBPF maps (lookup, set, delete, batch-lookup, batch-set, and batch-delete)
-* Map iterators (see GenericMap.Iterator and MapIterator)
-* Attaching eBPF programs to network interfaces as XDP programs(see BPFProgram.XDPLinkAttach)
-* Attaching eBPF programs to sockets(see BPFProgram.SocketAttach and BPFProgram.SocketAttachControlFunc)
-* XSK/AF_XDP socket support (see NewXSKSocket and XSKSocket)
-* Go wrappers around all bpf syscall commands (see bpfsys package)
-* eBPF clang style assembly parser/assembler (see eBPF package)
-* XDP program testing (see BPFProgram.XDPTestProgram)
-* Array map memory mapping (https://lwn.net/Articles/805043/)
+* Map iterators
+* Attaching eBPF programs to network interfaces as XDP programs
+* Attaching eBPF programs to sockets
+* Attaching eBPF programs to tracepoints, kprobes, kretprobes, and uprobes
+* XSK/AF_XDP socket support
+* Go wrappers around all bpf syscall commands
+* eBPF clang style assembly parser/assembler
+* XDP program testing
+* Array map memory mapping
 
 ## Examples
 
@@ -67,8 +68,8 @@ Features/tasks in this list are commonly used/requested because they are used in
 * Data relocation from ELF files(static global variables)
 * ~~Attach to sockets~~
 * ~~Attach to kprobes~~
-* Attach to kretprobes
-* Attach to uprobes
+* ~~Attach to kretprobes~~
+* ~~Attach to uprobes~~
 * Attach to tc (traffic control)
 * ~~Attach to tracepoints~~
 * ~~Tailcall support~~
@@ -94,6 +95,7 @@ Features/tasks in this list are not critical for most users but still important 
 * ARM64 support / testing (ARM is on the rise)
 * ARM32 support / testing (ARM is on the rise)
 * Library testing framework(Unit tests but for BPF functions, in a VM for consistant results(muli kernel tests?))
+* ELF symbols to offset functionality for perf package
 
 ### Could have
 
