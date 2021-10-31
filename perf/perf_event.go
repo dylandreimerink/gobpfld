@@ -462,8 +462,3 @@ var perfEventOpenErrors = map[syscall.Errno]string{
 
 	unix.ESRCH: "Returned if attempting to attach to a process that does not exist.",
 }
-
-// StringToCStrBytes turns the string into a null terminated byte slice
-func stringToCStrBytes(str string) []byte {
-	return []byte(str + "\x00")
-}
