@@ -87,7 +87,7 @@ func main() {
 			stats := make([]trafficStats, numCPUs)
 
 			attr := &bpfsys.BPFAttrMapElem{
-				MapFD:         ipStats.Fd,
+				MapFD:         ipStats.GetFD(),
 				Value_NextKey: uintptr(unsafe.Pointer(&protoNum)),
 			}
 
@@ -126,7 +126,7 @@ func main() {
 
 			var tcpPort uint16
 			attr = &bpfsys.BPFAttrMapElem{
-				MapFD:         tcpStats.Fd,
+				MapFD:         tcpStats.GetFD(),
 				Value_NextKey: uintptr(unsafe.Pointer(&tcpPort)),
 			}
 
@@ -165,7 +165,7 @@ func main() {
 
 			var udpPort uint16
 			attr = &bpfsys.BPFAttrMapElem{
-				MapFD:         udpStats.Fd,
+				MapFD:         udpStats.GetFD(),
 				Value_NextKey: uintptr(unsafe.Pointer(&udpPort)),
 			}
 

@@ -20,24 +20,39 @@ func (m *ProgArrayMap) Load() error {
 		return fmt.Errorf("map type in definition must be BPF_MAP_TYPE_PROG_ARRAY when using an ProgArrayMap")
 	}
 
-	return m.load()
+	err := m.load()
+	if err != nil {
+		return err
+	}
+
+	err = mapRegister.add(m)
+	if err != nil {
+		return fmt.Errorf("map register: %w", err)
+	}
+
+	return nil
 }
 
-// Unload closes the file descriptor associate with the map, this will cause the map to unload from the kernel
+// Close closes the file descriptor associate with the map, this will cause the map to unload from the kernel
 // if it is not still in use by a eBPF program, bpf FS, or a userspace program still holding a fd to the map.
-func (m *ProgArrayMap) Unload() error {
-	return m.unload()
+func (m *ProgArrayMap) Close() error {
+	err := mapRegister.delete(m)
+	if err != nil {
+		return fmt.Errorf("map register: %w", err)
+	}
+
+	return m.close()
 }
 
 // Get performs a lookup in the xskmap based on the key and returns the file descriptor of the socket
 func (m *ProgArrayMap) Get(key int) (int, error) {
-	if !m.Loaded {
+	if !m.loaded {
 		return 0, fmt.Errorf("can't read from an unloaded map")
 	}
 
 	var fd int
 	attr := &bpfsys.BPFAttrMapElem{
-		MapFD:         m.Fd,
+		MapFD:         m.fd,
 		Key:           uintptr(unsafe.Pointer(&key)),
 		Value_NextKey: uintptr(unsafe.Pointer(&fd)),
 	}
@@ -51,7 +66,7 @@ func (m *ProgArrayMap) Get(key int) (int, error) {
 }
 
 func (m *ProgArrayMap) Set(key int32, value BPFProgram) error {
-	if !m.Loaded {
+	if !m.loaded {
 		return fmt.Errorf("can't write to an unloaded map")
 	}
 
@@ -61,7 +76,7 @@ func (m *ProgArrayMap) Set(key int32, value BPFProgram) error {
 	}
 
 	attr := &bpfsys.BPFAttrMapElem{
-		MapFD:         m.Fd,
+		MapFD:         m.fd,
 		Key:           uintptr(unsafe.Pointer(&key)),
 		Value_NextKey: uintptr(unsafe.Pointer(&fd)),
 	}

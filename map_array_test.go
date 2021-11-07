@@ -169,7 +169,7 @@ func testArraymap_BatchGetSet_happyPath(t *testing.T, arrayMap *ArrayMap, maxEnt
 	}
 
 	// Cleanup the map, in case we run multiple tests in a same run
-	err = arrayMap.Unload()
+	err = arrayMap.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestArrayMapMMap_BulkGetSet_Edgecases(t *testing.T) {
 	}
 
 	// Cleanup the map, in case we run multiple tests in a same run
-	err = arrayMap.Unload()
+	err = arrayMap.Close()
 	if err != nil {
 		t.Fatal(err)
 	}

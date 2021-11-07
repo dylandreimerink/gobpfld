@@ -14,6 +14,12 @@ var _ BPFMap = (*HashOfMapsMap)(nil)
 // anything, the keys are hashed and thus do not need to be contiguous.
 type HashOfMapsMap struct {
 	AbstractMap
+
+	// InnerMapDef is the definition of the inner map
+	// TODO: Once BTF is implemented we can infer this map type from the BTF debug symbols
+	InnerMapDef BPFMapDef
+	// innerMapDef is a copy of the publicly available map def, so it can't be change while the map is loaded
+	innerMapDef BPFMapDef
 }
 
 func (m *HashOfMapsMap) Load() error {
@@ -25,13 +31,82 @@ func (m *HashOfMapsMap) Load() error {
 		return fmt.Errorf("Hash of maps map type is not supported by the current kernel version")
 	}
 
-	return m.load()
+	err := m.loadHashOfMaps()
+	if err != nil {
+		return err
+	}
+
+	err = mapRegister.add(m)
+	if err != nil {
+		return fmt.Errorf("map register: %w", err)
+	}
+
+	return nil
 }
 
-// Unload closes the file descriptor associate with the map, this will cause the map to unload from the kernel
+// loadPseudoInnerMap will load a map into the kernel with m.InnerMapDef as definition and returns the FD for this map.
+func (m *HashOfMapsMap) loadPseudoInnerMap() (*AbstractMap, error) {
+	// Set the inner map flag
+	m.InnerMapDef.Flags |= bpftypes.BPFMapFlagsInnerMap
+
+	innerMap := &AbstractMap{
+		Name:       MustNewObjName("pseudoinnermap"),
+		Definition: m.InnerMapDef,
+	}
+
+	return innerMap, innerMap.load()
+}
+
+// loadArrayOfMaps will first create a pseudo map, the FD of which we need to pass when loading the outermap to provide
+// type information. The verifier uses this type information to verify how values from the inner map are used.
+func (m *HashOfMapsMap) loadHashOfMaps() error {
+	err := m.Definition.Validate()
+	if err != nil {
+		return err
+	}
+
+	innerMap, err := m.loadPseudoInnerMap()
+	if err != nil {
+		return fmt.Errorf("load pseudo inner map: %w", err)
+	}
+	// Copy the def so it can't be changed after loading
+	m.innerMapDef = m.InnerMapDef
+
+	attr := &bpfsys.BPFAttrMapCreate{
+		MapName:    m.Name.GetCstr(),
+		MapType:    m.Definition.Type,
+		KeySize:    m.Definition.KeySize,
+		ValueSize:  m.Definition.ValueSize,
+		MaxEntries: m.Definition.MaxEntries,
+		MapFlags:   m.Definition.Flags,
+		InnerMapFD: innerMap.fd,
+	}
+
+	m.fd, err = bpfsys.MapCreate(attr)
+	if err != nil {
+		return fmt.Errorf("bpf syscall error: %w", err)
+	}
+
+	m.loaded = true
+
+	// After the outer map has been loaded, the inner map type info is copied so we can unload the pseudo inner map.
+	err = innerMap.close()
+	if err != nil {
+		return fmt.Errorf("inner pseudomap unload: %w", err)
+	}
+
+	return nil
+}
+
+// Close closes the file descriptor associate with the map, this will cause the map to unload from the kernel
 // if it is not still in use by a eBPF program, bpf FS, or a userspace program still holding a fd to the map.
-func (m *HashOfMapsMap) Unload() error {
-	return m.unload()
+func (m *HashOfMapsMap) Close() error {
+	err := mapRegister.delete(m)
+	if err != nil {
+		return fmt.Errorf("map register: %w", err)
+	}
+
+	return m.close()
 }
 
 func (m *HashOfMapsMap) Get(key interface{}) (BPFMap, error) {
@@ -45,6 +120,19 @@ func (m *HashOfMapsMap) Get(key interface{}) (BPFMap, error) {
 }
 
 func (m *HashOfMapsMap) Set(key interface{}, value BPFMap, flags bpfsys.BPFAttrMapElemFlags) error {
+	def := value.GetDefinition()
+	if def.Flags&bpftypes.BPFMapFlagsInnerMap == 0 {
+		return fmt.Errorf("only maps loaded with the BPFMapFlagsInnerMap flag can be set as inner map")
+	}
+
+	// Max entries can be ignored when comparing inner maps. Since the Equal function doesn't take this edge case
+	// into account we will just make the MaxEntries of def equal.
+	// This doesn't update the actual value of the map since we are working with a copy of the definition
+	def.MaxEntries = m.innerMapDef.MaxEntries
+	if !def.Equal(m.innerMapDef) {
+		return fmt.Errorf("map definition of the 'value' doesn't match the inner map definition")
+	}
+
 	fd := value.GetFD()
 	return m.set(&key, &fd, flags)
 }

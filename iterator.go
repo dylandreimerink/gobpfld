@@ -95,12 +95,12 @@ func (sli *singleLookupIterator) Init(key, value interface{}) error {
 	// outside the package during iteration.
 	sli.am = &AbstractMap{
 		Name:       sli.BPFMap.GetName(),
-		Loaded:     sli.BPFMap.IsLoaded(),
-		Fd:         sli.BPFMap.GetFD(),
+		loaded:     sli.BPFMap.IsLoaded(),
+		fd:         sli.BPFMap.GetFD(),
 		Definition: sli.BPFMap.GetDefinition(),
 	}
 
-	sli.attr.MapFD = sli.am.Fd
+	sli.attr.MapFD = sli.am.fd
 
 	var err error
 	sli.key, err = sli.am.toKeyPtr(key)
@@ -205,8 +205,8 @@ func (bli *batchLookupIterator) Init(key, value interface{}) error {
 	// outside the package during iteration.
 	bli.am = &AbstractMap{
 		Name:       bli.BPFMap.GetName(),
-		Loaded:     bli.BPFMap.IsLoaded(),
-		Fd:         bli.BPFMap.GetFD(),
+		loaded:     bli.BPFMap.IsLoaded(),
+		fd:         bli.BPFMap.GetFD(),
 		Definition: bli.BPFMap.GetDefinition(),
 	}
 
@@ -235,7 +235,7 @@ func (bli *batchLookupIterator) Init(key, value interface{}) error {
 	bli.valueBuf = reflect.New(reflect.ArrayOf(bli.bufSize, valueType.Elem()))
 
 	bli.attr = bpfsys.BPFAttrMapBatch{
-		MapFD:    bli.am.Fd,
+		MapFD:    bli.am.fd,
 		InBatch:  uintptr(unsafe.Pointer(&bli.inBatch)),
 		OutBatch: uintptr(unsafe.Pointer(&bli.outBatch)),
 		Keys:     bli.keyBuf.Pointer(),
@@ -401,12 +401,12 @@ func (sli *singleMapLookupIterator) Init(key, value interface{}) error {
 	// outside the package during iteration.
 	sli.am = &AbstractMap{
 		Name:       sli.BPFMap.GetName(),
-		Loaded:     sli.BPFMap.IsLoaded(),
-		Fd:         sli.BPFMap.GetFD(),
+		loaded:     sli.BPFMap.IsLoaded(),
+		fd:         sli.BPFMap.GetFD(),
 		Definition: sli.BPFMap.GetDefinition(),
 	}
 
-	sli.attr.MapFD = sli.am.Fd
+	sli.attr.MapFD = sli.am.fd
 
 	var err error
 	sli.key, err = sli.am.toKeyPtr(key)

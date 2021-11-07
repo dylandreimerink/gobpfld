@@ -16,12 +16,18 @@ import (
 // code dupplication. This type is exported so users of the library can also embed this struct in application
 // specific implementation.
 type AbstractMap struct {
+	// The name of map. This value is passed to the kernel, it is limited to 15 characters. Its use is limited
+	// and mostly to aid diagnostic tools which inspect the BPF subsystem. For primary identification the ID or FD
+	// should be used.
 	Name ObjName
-
-	Loaded bool
-	Fd     bpfsys.BPFfd
-
+	// Definition describes the properties of this map
 	Definition BPFMapDef
+
+	// definition is an unexported copy of Definition which will be pinned as soon as the map is loaded
+	// to prevent the user from chaning the definition while the map is loaded.
+	definition BPFMapDef
+	loaded     bool
+	fd         bpfsys.BPFfd
 }
 
 // Load validates and loads the userspace map definition into the kernel.
@@ -40,26 +46,29 @@ func (m *AbstractMap) load() error {
 		MapFlags:   m.Definition.Flags,
 	}
 
-	m.Fd, err = bpfsys.MapCreate(attr)
+	m.fd, err = bpfsys.MapCreate(attr)
 	if err != nil {
 		return fmt.Errorf("bpf syscall error: %w", err)
 	}
 
-	m.Loaded = true
+	// Copy exported definition to internal definition so it we always have a copy of the loaded definition which
+	// the user can't change while loaded.
+	m.definition = m.Definition
+	m.loaded = true
 
 	return nil
 }
 
-// Unload closes the file descriptor associate with the map, this will cause the map to unload from the kernel
+// Unload closes the file descriptor associate with the map, this will cause the map to close from the kernel
 // if it is not still in use by a eBPF program, bpf FS, or a userspace program still holding a fd to the map.
-func (m *AbstractMap) unload() error {
-	err := m.Fd.Close()
+func (m *AbstractMap) close() error {
+	err := m.fd.Close()
 	if err != nil {
 		return fmt.Errorf("error while closing fd: %w", err)
 	}
 
-	m.Fd = 0
-	m.Loaded = false
+	m.fd = 0
+	m.loaded = false
 
 	return nil
 }
@@ -69,11 +78,11 @@ func (m *AbstractMap) unload() error {
 // A map can be unpinned from the bpf FS by another process thus transferring it or persisting it across
 // multiple runs of the same program.
 func (m *AbstractMap) Pin(relativePath string) error {
-	if !m.Loaded {
+	if !m.loaded {
 		return fmt.Errorf("can't pin an unloaded map")
 	}
 
-	return PinFD(relativePath, m.Fd)
+	return PinFD(relativePath, m.fd)
 }
 
 // Unpin captures the file descriptor of the map at the given 'relativePath' from the kernel.
@@ -83,21 +92,21 @@ func (m *AbstractMap) Pin(relativePath string) error {
 // ownership of the map in a scenario where the map is not shared between multiple programs.
 // Otherwise the pin will keep existing which will cause the map to not be deleted when this program exits.
 func (m *AbstractMap) Unpin(relativePath string, deletePin bool) error {
-	if m.Loaded {
+	if m.loaded {
 		return fmt.Errorf("can't unpin a map since it is already loaded")
 	}
 
 	var err error
-	m.Fd, err = UnpinFD(relativePath, deletePin)
+	m.fd, err = UnpinFD(relativePath, deletePin)
 	if err != nil {
 		return fmt.Errorf("unpin error: %w", err)
 	}
 
 	pinnedMapDef := BPFMapDef{}
 	err = bpfsys.ObjectGetInfoByFD(&bpfsys.BPFAttrGetInfoFD{
-		BPFFD:   m.Fd,
+		BPFFD:   m.fd,
 		Info:    uintptr(unsafe.Pointer(&pinnedMapDef)),
-		InfoLen: uint32(BPFMapDefSize),
+		InfoLen: uint32(bpfMapDefSize),
 	})
 	if err != nil {
 		return fmt.Errorf("bpf obj get info by fd syscall error: %w", err)
@@ -113,7 +122,7 @@ func (m *AbstractMap) Unpin(relativePath string, deletePin bool) error {
 	if m.Definition.Equal(pinnedMapDef) {
 		// Getting the map from the FS created a new file descriptor. Close it so the kernel knows we will
 		// not be using it. If we leak the FD the map will never close.
-		fdErr := m.Fd.Close()
+		fdErr := m.fd.Close()
 		if fdErr != nil {
 			return fmt.Errorf("pinned map definition doesn't match definition of current map, "+
 				"new fd wasn't closed: %w", err)
@@ -122,13 +131,16 @@ func (m *AbstractMap) Unpin(relativePath string, deletePin bool) error {
 		return fmt.Errorf("pinned map definition doesn't match definition of current map")
 	}
 
-	m.Loaded = true
+	// Copy exported definition to internal definition so it we always have a copy of the loaded definition which
+	// the user can't change while loaded.
+	m.definition = m.Definition
+	m.loaded = true
 
 	return nil
 }
 
 func (m *AbstractMap) IsLoaded() bool {
-	return m.Loaded
+	return m.loaded
 }
 
 func (m *AbstractMap) GetName() ObjName {
@@ -136,17 +148,23 @@ func (m *AbstractMap) GetName() ObjName {
 }
 
 func (m *AbstractMap) GetFD() bpfsys.BPFfd {
-	return m.Fd
+	return m.fd
 }
 
 func (m *AbstractMap) GetDefinition() BPFMapDef {
+	// If the map is loaded we will return the internal version of definition since we know it will not be modified
+	// to avoid misuse of the library
+	if m.loaded {
+		return m.definition
+	}
+
 	return m.Definition
 }
 
 // get uses reflection to to dynamically get a k/v pair from any map as long as the sizes of the key and value match
 // the map definition.
 func (m *AbstractMap) get(key interface{}, value interface{}) error {
-	if !m.Loaded {
+	if !m.loaded {
 		return fmt.Errorf("can't read from an unloaded map")
 	}
 
@@ -156,7 +174,7 @@ func (m *AbstractMap) get(key interface{}, value interface{}) error {
 	}
 
 	attr := &bpfsys.BPFAttrMapElem{
-		MapFD: m.Fd,
+		MapFD: m.fd,
 	}
 
 	var err error
@@ -290,7 +308,7 @@ func (m *AbstractMap) getBatch(
 	partial bool,
 	err error,
 ) {
-	if !m.Loaded {
+	if !m.loaded {
 		return 0, false, fmt.Errorf("can't read from an unloaded map")
 	}
 
@@ -301,7 +319,7 @@ func (m *AbstractMap) getBatch(
 
 	var batch uint64
 	attr := &bpfsys.BPFAttrMapBatch{
-		MapFD:    m.Fd,
+		MapFD:    m.fd,
 		OutBatch: uintptr(unsafe.Pointer(&batch)),
 		Count:    maxBatchSize,
 	}
@@ -330,12 +348,12 @@ func (m *AbstractMap) getBatch(
 }
 
 func (m *AbstractMap) set(key interface{}, value interface{}, flags bpfsys.BPFAttrMapElemFlags) error {
-	if !m.Loaded {
+	if !m.loaded {
 		return fmt.Errorf("can't write to an unloaded map")
 	}
 
 	attr := &bpfsys.BPFAttrMapElem{
-		MapFD: m.Fd,
+		MapFD: m.fd,
 		Flags: flags,
 	}
 
@@ -368,13 +386,13 @@ func (m *AbstractMap) setBatch(
 	count int,
 	err error,
 ) {
-	if !m.Loaded {
+	if !m.loaded {
 		return 0, fmt.Errorf("can't write to an unloaded map")
 	}
 
 	var batch uint64
 	attr := &bpfsys.BPFAttrMapBatch{
-		MapFD:    m.Fd,
+		MapFD:    m.fd,
 		OutBatch: uintptr(unsafe.Pointer(&batch)),
 		Count:    maxBatchSize,
 		Flags:    flags,
@@ -400,7 +418,7 @@ func (m *AbstractMap) setBatch(
 }
 
 func (m *AbstractMap) delete(key interface{}) error {
-	if !m.Loaded {
+	if !m.loaded {
 		return fmt.Errorf("can't delete elements in an unloaded map")
 	}
 
@@ -409,7 +427,7 @@ func (m *AbstractMap) delete(key interface{}) error {
 	}
 
 	attr := &bpfsys.BPFAttrMapElem{
-		MapFD: m.Fd,
+		MapFD: m.fd,
 	}
 
 	var err error
@@ -434,7 +452,7 @@ func (m *AbstractMap) deleteBatch(
 	count int,
 	err error,
 ) {
-	if !m.Loaded {
+	if !m.loaded {
 		return 0, fmt.Errorf("can't delete elements in an unloaded map")
 	}
 
@@ -444,7 +462,7 @@ func (m *AbstractMap) deleteBatch(
 
 	var batch uint64
 	attr := &bpfsys.BPFAttrMapBatch{
-		MapFD:    m.Fd,
+		MapFD:    m.fd,
 		OutBatch: uintptr(unsafe.Pointer(&batch)),
 		Count:    maxBatchSize,
 	}
@@ -463,7 +481,7 @@ func (m *AbstractMap) deleteBatch(
 }
 
 func (m *AbstractMap) getAndDelete(key interface{}, value interface{}) error {
-	if !m.Loaded {
+	if !m.loaded {
 		return fmt.Errorf("can't read from an unloaded map")
 	}
 
@@ -472,7 +490,7 @@ func (m *AbstractMap) getAndDelete(key interface{}, value interface{}) error {
 	}
 
 	attr := &bpfsys.BPFAttrMapElem{
-		MapFD: m.Fd,
+		MapFD: m.fd,
 	}
 
 	var err error
@@ -503,7 +521,7 @@ func (m *AbstractMap) getAndDeleteBatch(
 	count int,
 	err error,
 ) {
-	if !m.Loaded {
+	if !m.loaded {
 		return 0, fmt.Errorf("can't read from an unloaded map")
 	}
 
@@ -513,7 +531,7 @@ func (m *AbstractMap) getAndDeleteBatch(
 
 	var batch uint64
 	attr := &bpfsys.BPFAttrMapBatch{
-		MapFD:    m.Fd,
+		MapFD:    m.fd,
 		OutBatch: uintptr(unsafe.Pointer(&batch)),
 		Count:    maxBatchSize,
 	}

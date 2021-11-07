@@ -111,7 +111,7 @@ Features/tasks in this list are not critical for most users but still important 
 
 * ~~XSK/AF_XDP support (useful for kernel bypass and packet capture)~~
 * ~~Map access via memory mapping https://lwn.net/Articles/805043/ (could improve performance)~~
-* Map in map support (useful but not widely used)
+* ~~Map in map support (useful but not widely used)~~
 * XSK multiple sockets per netdev,queue pair (currently only one socket per pair is supported)
 * (partially implemented) Program testing (Being able to unit test an XDP program would be great)
 * Support reuse port sock array map

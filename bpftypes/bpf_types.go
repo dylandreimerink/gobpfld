@@ -973,7 +973,7 @@ var mapDefFlagToStr = map[BPFMapFlags]string{
 func (f BPFMapFlags) String() string {
 	var flags []string
 
-	for flag := BPFMapFlagsNoPreAlloc; flag < BPFMapFlagsInnerMap; flag = flag << 1 {
+	for flag := BPFMapFlagsNoPreAlloc; flag < BPFMapFlagsMax; flag = flag << 1 {
 		if f&flag > 0 {
 			flags = append(flags, mapDefFlagToStr[flag])
 		}

@@ -9,15 +9,21 @@ import (
 	"github.com/dylandreimerink/gobpfld/kernelsupport"
 )
 
-// BPFMapDefSize is the size of BPFMapDef in bytes
-var BPFMapDefSize = int(unsafe.Sizeof(BPFMapDef{}))
+// bpfMapDefSize is the size of BPFMapDef in bytes
+var bpfMapDefSize = int(unsafe.Sizeof(BPFMapDef{}))
 
 type BPFMapDef struct {
-	Type       bpftypes.BPFMapType
-	KeySize    uint32
-	ValueSize  uint32
+	// Type describes map type this map is
+	Type bpftypes.BPFMapType
+	// KeySize is the size of the map key in bytes
+	KeySize uint32
+	// ValueSize is the size of the map value in bytes
+	ValueSize uint32
+	// MaxEntries is the maximum amount of entries in a map. Depending on the map type and flags, memory for all of
+	// these entries might be allocated on map creation or dynamically when inserting.
 	MaxEntries uint32
-	Flags      bpftypes.BPFMapFlags
+	// Flags can be used to ask the kernel for special behavior, not all flags are allowed on all map types.
+	Flags bpftypes.BPFMapFlags
 }
 
 // Equal checks if two map definitions are functionally identical

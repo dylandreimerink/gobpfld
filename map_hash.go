@@ -1,6 +1,8 @@
 package gobpfld
 
 import (
+	"fmt"
+
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/kernelsupport"
 )
@@ -15,13 +17,28 @@ type HashMap struct {
 
 func (m *HashMap) Load() error {
 	// NOTE: do not enforce definition type of map since hash map is currently still a catch all map type
-	return m.load()
+	err := m.load()
+	if err != nil {
+		return err
+	}
+
+	err = mapRegister.add(m)
+	if err != nil {
+		return fmt.Errorf("map register: %w", err)
+	}
+
+	return nil
 }
 
-// Unload closes the file descriptor associate with the map, this will cause the map to unload from the kernel
+// Close closes the file descriptor associate with the map, this will cause the map to unload from the kernel
 // if it is not still in use by a eBPF program, bpf FS, or a userspace program still holding a fd to the map.
-func (m *HashMap) Unload() error {
-	return m.unload()
+func (m *HashMap) Close() error {
+	err := mapRegister.delete(m)
+	if err != nil {
+		return fmt.Errorf("map register: %w", err)
+	}
+
+	return m.close()
 }
 
 func (m *HashMap) Get(key interface{}, value interface{}) error {

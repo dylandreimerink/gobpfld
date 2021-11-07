@@ -46,7 +46,10 @@ func PinFD(relativePath string, fd bpfsys.BPFfd) error {
 // If `deletePin` is true, this function will remove the pin from the BPF FS after successfully getting it.
 //
 // This function is exposed so custom program or map implementations can use outside of this library.
-// However, it is recommendd to use the BPFProgram.Unpin and AbstractMap.Unpin functions if gobpfld types are used.
+// However, it is recommend to use the BPFProgram.Unpin and AbstractMap.Unpin functions if gobpfld types are used.
+//
+// TODO make this function unexported and create an UnpinMap and UnpinProgram function which will automatically recreate
+//  the proper maps. (also necessary to handle map registration properly)
 func UnpinFD(relativePath string, deletePin bool) (bpfsys.BPFfd, error) {
 	sysPath := fmt.Sprint(BPFSysPath, relativePath)
 	cpath := StringToCStrBytes(sysPath)

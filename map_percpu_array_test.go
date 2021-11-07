@@ -74,7 +74,7 @@ func testPerCPUArraymap_SingleGetSet_happyPath(t *testing.T, arrayMap *PerCPUArr
 	}
 
 	// Cleanup the map, in case we run multiple tests in a same run
-	err = arrayMap.Unload()
+	err = arrayMap.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func testPerCPUArrayMap_BatchGetSet_happyPath(t *testing.T, arrayMap *PerCPUArra
 	}
 
 	// Cleanup the map, in case we run multiple tests in a same run
-	err = arrayMap.Unload()
+	err = arrayMap.Close()
 	if err != nil {
 		t.Fatal(err)
 	}

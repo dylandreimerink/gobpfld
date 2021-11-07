@@ -33,6 +33,11 @@ func (m *ArrayMap) Load() error {
 		return fmt.Errorf("error while loading map: %w", err)
 	}
 
+	err = mapRegister.add(m)
+	if err != nil {
+		return fmt.Errorf("map register: %w", err)
+	}
+
 	// From bpf_map_mmap_sz in libbpf
 	valueSize := m.Definition.ValueSize
 	if valueSize < 8 {
@@ -75,7 +80,7 @@ func (m *ArrayMap) Load() error {
 			uintptr(len(m.memoryMapped)),
 			prot,
 			unix.MAP_SHARED|unix.MAP_FIXED,
-			int(m.Fd),
+			int(m.fd),
 			0,
 		)
 		if err != nil {
@@ -86,9 +91,14 @@ func (m *ArrayMap) Load() error {
 	return nil
 }
 
-// Unload closes the file descriptor associate with the map, this will cause the map to unload from the kernel
+// Close closes the file descriptor associate with the map, this will cause the map to unload from the kernel
 // if it is not still in use by a eBPF program, bpf FS, or a userspace program still holding a fd to the map.
-func (m *ArrayMap) Unload() error {
+func (m *ArrayMap) Close() error {
+	err := mapRegister.delete(m)
+	if err != nil {
+		return fmt.Errorf("map register: %w", err)
+	}
+
 	if m.memoryMapped != nil {
 		err := syscall.Munmap(m.memoryMapped)
 		if err != nil {
@@ -98,7 +108,7 @@ func (m *ArrayMap) Unload() error {
 		m.memoryMapped = nil
 	}
 
-	return m.unload()
+	return m.close()
 }
 
 func (m *ArrayMap) Get(key uint32, value interface{}) error {

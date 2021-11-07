@@ -54,7 +54,7 @@ func main() {
 	}
 
 	// Unload it so we can unpin it later
-	err = testMap2.Unload()
+	err = testMap2.Close()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error while unloading map: %s\n", err.Error())
 		os.Exit(1)
@@ -77,7 +77,7 @@ func main() {
 	}
 
 	// Load map 1 so we can unpin it
-	err = testMap.Unload()
+	err = testMap.Close()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error while unloading map: %s\n", err.Error())
 		os.Exit(1)

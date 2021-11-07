@@ -371,7 +371,7 @@ func parseElf(
 					continue
 				}
 
-				for i := 0; i < len(data); i += BPFMapDefSize {
+				for i := 0; i < len(data); i += bpfMapDefSize {
 					abstractMap := AbstractMap{
 						Definition: BPFMapDef{
 							Type:       bpftypes.BPFMapType(elfFile.ByteOrder.Uint32(data[i : i+4])),

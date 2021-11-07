@@ -22,13 +22,28 @@ func (m *PerCPUArrayMap) Load() error {
 		return fmt.Errorf("map type in definition must be BPF_MAP_TYPE_PERCPU_ARRAY when using an PerCPUArrayMap")
 	}
 
-	return m.load()
+	err := m.load()
+	if err != nil {
+		return err
+	}
+
+	err = mapRegister.add(m)
+	if err != nil {
+		return fmt.Errorf("map register: %w", err)
+	}
+
+	return nil
 }
 
-// Unload closes the file descriptor associate with the map, this will cause the map to unload from the kernel
+// Close closes the file descriptor associate with the map, this will cause the map to unload from the kernel
 // if it is not still in use by a eBPF program, bpf FS, or a userspace program still holding a fd to the map.
-func (m *PerCPUArrayMap) Unload() error {
-	return m.unload()
+func (m *PerCPUArrayMap) Close() error {
+	err := mapRegister.delete(m)
+	if err != nil {
+		return fmt.Errorf("map register: %w", err)
+	}
+
+	return m.close()
 }
 
 func (m *PerCPUArrayMap) Get(key uint32, value interface{}) error {

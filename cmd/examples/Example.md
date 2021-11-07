@@ -76,6 +76,16 @@ However one must also keep the folloing limitations in mind:
  * Tail calls have no arguments, any data must be passed via the program specific context or via per-cpu maps(because all tail calls will be executed on the same CPU without interruptions between them, per cpu maps can be safely used as scratch buffers)
  * Programs can only tail call to other programs of the same type and both must JIT'ed or both interperted, can't mix JIT and interperted eBPF programs.
 
+## map_in_map
+
+This examples demonstrates the usage of the map in map types. The "array of maps" and "hash of maps" map types allow you to create a "outer" map which as value type has pointers/file descriptors to other maps. 
+
+There are a few use cases for this feature like:
+ * Switching maps if you need to atomically update multiple settings at once
+ * Switching a stats map so values in the map don't change while you are iterating over it(more accurate stats at a specific point in time)
+
+In the this case we demonstrate the API but the example doesn't really require it.
+
 ## icmp_pcap
 
 This example creates a raw socket and uses a eBPF program to filter out just ICMP traffic. It demonstrates how to write a socket filter program as well as how to attach a eBPF program to a socket using a file descriptor.
@@ -117,4 +127,3 @@ The example contains both aproaches which can be selected using a flag.
 * xsk encapsulation example
 * xsk write lease example
 * LPM trie example
-* Map op maps example

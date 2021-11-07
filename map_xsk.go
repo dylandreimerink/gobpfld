@@ -25,18 +25,33 @@ func (m *XSKMap) Load() error {
 	}
 
 	m.userspaceMap = make(map[uint32]*XSKSocket)
-	return m.load()
+	err := m.load()
+	if err != nil {
+		return err
+	}
+
+	err = mapRegister.add(m)
+	if err != nil {
+		return fmt.Errorf("map register: %w", err)
+	}
+
+	return nil
 }
 
-// Unload closes the file descriptor associate with the map, this will cause the map to unload from the kernel
+// Close closes the file descriptor associate with the map, this will cause the map to unload from the kernel
 // if it is not still in use by a eBPF program, bpf FS, or a userspace program still holding a fd to the map.
-func (m *XSKMap) Unload() error {
-	return m.unload()
+func (m *XSKMap) Close() error {
+	err := mapRegister.delete(m)
+	if err != nil {
+		return fmt.Errorf("map register: %w", err)
+	}
+
+	return m.close()
 }
 
 // Get performs a lookup in the xskmap based on the key and returns the file descriptor of the socket
 func (m *XSKMap) Get(key uint32) (*XSKSocket, error) {
-	if !m.Loaded {
+	if !m.loaded {
 		return nil, fmt.Errorf("can't read from an unloaded map")
 	}
 
@@ -44,7 +59,7 @@ func (m *XSKMap) Get(key uint32) (*XSKSocket, error) {
 }
 
 func (m *XSKMap) Set(key uint32, value *XSKSocket) error {
-	if !m.Loaded {
+	if !m.loaded {
 		return fmt.Errorf("can't write to an unloaded map")
 	}
 
@@ -53,7 +68,7 @@ func (m *XSKMap) Set(key uint32, value *XSKSocket) error {
 	}
 
 	attr := &bpfsys.BPFAttrMapElem{
-		MapFD:         m.Fd,
+		MapFD:         m.fd,
 		Key:           uintptr(unsafe.Pointer(&key)),
 		Value_NextKey: uintptr(unsafe.Pointer(&value.fd)),
 	}
@@ -69,12 +84,12 @@ func (m *XSKMap) Set(key uint32, value *XSKSocket) error {
 }
 
 func (m *XSKMap) Delete(key uint32) error {
-	if !m.Loaded {
+	if !m.loaded {
 		return fmt.Errorf("can't delete elements in an unloaded map")
 	}
 
 	attr := &bpfsys.BPFAttrMapElem{
-		MapFD: m.Fd,
+		MapFD: m.fd,
 		Key:   uintptr(unsafe.Pointer(&key)),
 	}
 
