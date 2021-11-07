@@ -110,13 +110,13 @@ func (m *HashOfMapsMap) Close() error {
 }
 
 func (m *HashOfMapsMap) Get(key interface{}) (BPFMap, error) {
-	var fd bpfsys.BPFfd
-	err := m.get(&key, &fd)
+	var id uint32
+	err := m.get(&key, &id)
 	if err != nil {
 		return nil, fmt.Errorf("map get: %w", err)
 	}
 
-	return MapFromFD(fd)
+	return MapFromID(id)
 }
 
 func (m *HashOfMapsMap) Set(key interface{}, value BPFMap, flags bpfsys.BPFAttrMapElemFlags) error {
