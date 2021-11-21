@@ -25,6 +25,10 @@ type AbstractBPFProgram struct {
 	MapFDLocations map[string][]uint64
 	Maps           map[string]BPFMap
 
+	BTF      *BTF
+	BTFLines []BTFKernelLine
+	BTFFuncs []BTFKernelFunc
+
 	// Indicates if the program is already loaded into the kernel
 	loaded bool
 	// The file descriptor of the program assigned by the kernel
@@ -92,6 +96,36 @@ func (p *AbstractBPFProgram) load(attr bpfsys.BPFAttrProgramLoad) (log string, e
 
 			inst.SetSourceReg(ebpf.BPF_PSEUDO_MAP_FD)
 			inst.Imm = int32(bpfMap.GetFD())
+		}
+	}
+
+	if p.BTF != nil {
+		// Load BTF if not already loaded
+		if !p.BTF.loaded {
+			_, err = p.BTF.Load(BTFLoadOpts{
+				LogLevel: bpftypes.BPFLogLevelBasic,
+			})
+			if err != nil {
+				// TODO make custom error type which includes the verifier log
+				return "", fmt.Errorf("load BTF: %w", err)
+			}
+		}
+
+		attr.ProgBTFFD, err = p.BTF.Fd()
+		if err != nil {
+			return "", fmt.Errorf("get BTF fd: %w", err)
+		}
+
+		if p.BTFLines != nil {
+			attr.LineInfo = uintptr(unsafe.Pointer(&p.BTFLines[0]))
+			attr.LineInfoCnt = uint32(len(p.BTFLines))
+			attr.LineInfoRecSize = uint32(BTFKernelLineSize)
+		}
+
+		if p.BTFFuncs != nil {
+			attr.FuncInfo = uintptr(unsafe.Pointer(&p.BTFFuncs[0]))
+			attr.FuncInfoCnt = uint32(len(p.BTFFuncs))
+			attr.FuncInfoRecSize = uint32(BTFKernelFuncSize)
 		}
 	}
 

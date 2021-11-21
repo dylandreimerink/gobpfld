@@ -25,19 +25,25 @@ type BPFELF struct {
 	Programs map[string]BPFProgram
 	// Maps defined in the ELF
 	Maps map[string]BPFMap
+	BTF  *BTF
 }
 
 type bpfELF struct {
 	// Programs contained within the ELF
 	Programs map[string]*elfBPFProgram
 	// Maps defined in the ELF
-	Maps map[string]BPFMap
+	Maps map[string]AbstractMap
+	BTF  *BTF
 
 	// eBPF code found in the .text section, often called "sub programs".
 	// Used for library code and code shared by multiple programs by way of BPF to BPF calls
 	txtInstr []ebpf.RawInstruction
 	// A list of relocation tables by section name
 	relTables map[string]elfRelocTable
+
+	// Store the data of the .BTF.ext section, since we need to parse it after
+	// the .BTF section.
+	btfExtBytes []byte
 }
 
 type elfBPFProgram struct {
@@ -71,6 +77,37 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 		return BPFELF{}, fmt.Errorf("processSections: %w", err)
 	}
 
+	// TODO process BTF relocations (Look into this, relocation entries don't seem to make sense for .rel.BTF)
+	//   https://patchwork.ozlabs.org/project/netdev/patch/20190807214001.872988-4-andriin@fb.com/
+	// TODO recalculate BTF func and line instruction offsets after all sections have been combined
+
+	// Add BTF info to the abstract maps and resolve the actual map type, to be used during map loading.
+	bpfMaps := make(map[string]BPFMap)
+	for name, bpfMap := range bpfElf.Maps {
+		bpfMap.BTF = bpfElf.BTF
+		if bpfElf.BTF != nil {
+			bpfMap.BTFMapType = bpfElf.BTF.typesByName[name]
+		}
+
+		bpfMaps[name] = bpfMapFromAbstractMap(bpfMap)
+	}
+
+	// Index lines and funcs by section since we will be relocating per section
+	btfLinesPerSection := make(map[string][]BTFLine)
+	btfFuncsPerSection := make(map[string][]BTFFunc)
+	if bpfElf.BTF != nil {
+		for _, line := range bpfElf.BTF.lines {
+			lines := btfLinesPerSection[line.Section]
+			lines = append(lines, line)
+			btfLinesPerSection[line.Section] = lines
+		}
+		for _, f := range bpfElf.BTF.funcs {
+			funcs := btfFuncsPerSection[f.Section]
+			funcs = append(funcs, f)
+			btfFuncsPerSection[f.Section] = funcs
+		}
+	}
+
 	for _, program := range bpfElf.Programs {
 		progRelocTable, found := bpfElf.relTables[".rel"+program.section]
 		if !found {
@@ -86,7 +123,8 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 			// If there are multiple programs, not all may need the .text code.
 			// Adding it causes the verifier to throw dead code errors.
 			//
-			// TODO look into only adding the sub programs needed, not the while .text block (if doable)
+			// TODO look into only adding the sub programs needed, not the whole .text block (if doable)
+			//  if there is dead-code the verifier will refuse to load, so this might be a good feature.
 			usesTxt := false
 			for _, relocEntry := range progRelocTable {
 				// The absolute offset from the start of the section to the location where the entry should be linked
@@ -116,6 +154,39 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 				txtInsOff = copy(newInst, program.Instructions)
 				copy(newInst[txtInsOff:], bpfElf.txtInstr)
 				program.Instructions = newInst
+			}
+		}
+
+		for _, progLines := range btfLinesPerSection[program.section] {
+			line := progLines.ToKernel()
+			// The offsets in ELF are in bytes from section start, for the kernel we need the offset of instructions
+			// Since the program is at the top, we can just divide by the instruction size.
+			line.InstructionOffset = line.InstructionOffset / uint32(ebpf.BPFInstSize)
+			program.BTFLines = append(program.BTFLines, line)
+		}
+		for _, progFuncs := range btfFuncsPerSection[program.section] {
+			f := progFuncs.ToKernel()
+			// The offsets in ELF are in bytes from section start, for the kernel we need the offset of instructions
+			// Since the program is at the top, we can just divide by the instruction size.
+			f.InstructionOffset = f.InstructionOffset / uint32(ebpf.BPFInstSize)
+			program.BTFFuncs = append(program.BTFFuncs, f)
+		}
+		if txtInsOff != -1 {
+			for _, textLine := range btfLinesPerSection[".text"] {
+				line := textLine.ToKernel()
+				// The offsets in ELF are in bytes from section start, for the kernel we need the offset of instructions
+				// Divide to offset within the .text section by instruction size and add the txtInsOff to get
+				// the correct absolute instruction offset.
+				line.InstructionOffset = (line.InstructionOffset / uint32(ebpf.BPFInstSize)) + uint32(txtInsOff)
+				program.BTFLines = append(program.BTFLines, line)
+			}
+			for _, textFunc := range btfFuncsPerSection[".text"] {
+				f := textFunc.ToKernel()
+				// The offsets in ELF are in bytes from section start, for the kernel we need the offset of instructions
+				// Divide to offset within the .text section by instruction size and add the txtInsOff to get
+				// the correct absolute instruction offset.
+				f.InstructionOffset = (f.InstructionOffset / uint32(ebpf.BPFInstSize)) + uint32(txtInsOff)
+				program.BTFFuncs = append(program.BTFFuncs, f)
 			}
 		}
 
@@ -160,7 +231,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 					mapName = mapName[:bpftypes.BPF_OBJ_NAME_LEN-1]
 				}
 
-				bpfMap, found := bpfElf.Maps[mapName]
+				bpfMap, found := bpfMaps[mapName]
 				if !found {
 					return BPFELF{}, fmt.Errorf("program references undefined map named '%s'", mapName)
 				}
@@ -212,7 +283,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 						mapName = mapName[:bpftypes.BPF_OBJ_NAME_LEN-1]
 					}
 
-					bpfMap, found := bpfElf.Maps[mapName]
+					bpfMap, found := bpfMaps[mapName]
 					if !found {
 						return BPFELF{}, fmt.Errorf("program .text references undefined map named '%s'", mapName)
 					}
@@ -247,9 +318,11 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 	}
 
 	retBpfELF := BPFELF{
-		Maps:     bpfElf.Maps,
+		Maps:     bpfMaps,
 		Programs: make(map[string]BPFProgram),
+		BTF:      bpfElf.BTF,
 	}
+
 	for name, prog := range bpfElf.Programs {
 		specificProgInt := BPFProgramFromAbstract(prog.AbstractBPFProgram)
 
@@ -330,7 +403,7 @@ func parseElf(
 ) {
 	bpfElf = bpfELF{
 		Programs:  map[string]*elfBPFProgram{},
-		Maps:      map[string]BPFMap{},
+		Maps:      map[string]AbstractMap{},
 		relTables: map[string]elfRelocTable{},
 	}
 
@@ -346,25 +419,17 @@ func parseElf(
 		case elf.SHT_PROGBITS:
 			// Program data
 
-			// Primary eBPF code sections are not prefixed with a .
-			if strings.HasPrefix(section.Name, ".") {
-				// Ignore the section, unless it is the .text section which contains additional/shared eBPF code
-				if section.Name != ".text" {
-					continue
-				}
-			}
-
 			data, err := section.Data()
 			if err != nil {
 				return bpfElf, fmt.Errorf("error while loading section '%s': %w", section.Name, err)
 			}
 
-			if section.Name == "license" {
+			switch section.Name {
+			case "license":
 				license = CStrBytesToString(data)
 				continue
-			}
 
-			if section.Name == "maps" {
+			case "maps":
 				// If section flag does not have alloc, its not a proper map def
 				if section.Flags&elf.SHF_ALLOC == 0 {
 					// TODO Maybe error here?
@@ -418,94 +483,117 @@ func parseElf(
 
 					// TODO map name duplicate check
 
-					bpfElf.Maps[abstractMap.Name.String()] = bpfMapFromAbstractMap(abstractMap)
+					bpfElf.Maps[abstractMap.Name.String()] = abstractMap
 				}
 
 				continue
-			}
 
-			// Assume program
+			case ".BTF":
+				// BTF type and string information
 
-			// If the section flags don't indicate it contains instructions, it not a program
-			if section.Flags&elf.SHF_EXECINSTR == 0 {
-				// TODO Maybe error here?
-				continue
-			}
-
-			if len(data)%ebpf.BPFInstSize != 0 {
-				return bpfElf, fmt.Errorf("elf section is incorrect size for BPF program, should be divisible by 8")
-			}
-
-			instructions := make([]ebpf.RawInstruction, len(data)/ebpf.BPFInstSize)
-			for i := 0; i < len(data); i += ebpf.BPFInstSize {
-				instructions[i/ebpf.BPFInstSize] = ebpf.RawInstruction{
-					Op:  data[i],
-					Reg: data[i+1],
-					Off: int16(elfFile.ByteOrder.Uint16(data[i+2 : i+4])),
-					Imm: int32(elfFile.ByteOrder.Uint32(data[i+4 : i+8])),
-				}
-			}
-
-			// If this is the .text section, save the instructions in a sperate slice without a program struct
-			if section.Name == ".text" {
-				bpfElf.txtInstr = instructions
-				continue
-			}
-
-			// For other sections, create it as a separate program
-
-			globalFunctions := make([]elf.Symbol, 0)
-
-			// Find the name of the program / function name.
-			// We are looking for a global functions
-			for _, sym := range symbols {
-				if sym.Section != elf.SectionIndex(sectionIndex) {
-					continue
+				if bpfElf.BTF == nil {
+					bpfElf.BTF = NewBTF()
 				}
 
-				if elf.ST_BIND(sym.Info) != elf.STB_GLOBAL || elf.ST_TYPE(sym.Info) != elf.STT_FUNC {
-					continue
-				}
-
-				globalFunctions = append(globalFunctions, sym)
-			}
-
-			sectionParts := strings.Split(section.Name, "/")
-			progType := sectionNameToProgType[sectionParts[0]]
-
-			if progType == bpftypes.BPF_PROG_TYPE_UNSPEC {
-				return bpfELF{}, fmt.Errorf(
-					"unknown elf section '%s', doesn't match any eBPF program type",
-					sectionParts[0],
-				)
-			}
-
-			for i := 0; i < len(globalFunctions); i++ {
-				sym := globalFunctions[i]
-
-				program := NewAbstractBPFProgram()
-				program.ProgramType = progType
-				start := int(sym.Value) / ebpf.BPFInstSize
-				end := (int(sym.Value) + int(sym.Size)) / ebpf.BPFInstSize
-				program.Instructions = instructions[start:end]
-
-				err = program.Name.SetString(sym.Name)
+				err := bpfElf.BTF.ParseBTF(data)
 				if err != nil {
-					if settings.TruncateNames && errors.Is(err, ErrObjNameToLarge) {
-						err = program.Name.SetString(sym.Name[:bpftypes.BPF_OBJ_NAME_LEN-1])
-						if err != nil {
-							return bpfElf, fmt.Errorf("failed to truncate program name: %w", err)
-						}
-					} else {
-						return bpfElf, fmt.Errorf("failed to set program name '%s': %w", sym.Name, err)
+					return bpfElf, fmt.Errorf("parse .BTF: %w", err)
+				}
+
+				continue
+			case ".BTF.ext":
+				// BTF line and function information
+
+				bpfElf.btfExtBytes = data
+
+				continue
+
+			// TODO parse .BTF_ids (Used to identify specific types in the kernel for tracing etc.)
+			default:
+
+				// Assume program
+
+				// If the section flags don't indicate it contains instructions, it not a program
+				if section.Flags&elf.SHF_EXECINSTR == 0 {
+					// TODO Maybe error here?
+					continue
+				}
+
+				if len(data)%ebpf.BPFInstSize != 0 {
+					return bpfElf, fmt.Errorf("elf section is incorrect size for BPF program, should be divisible by 8")
+				}
+
+				instructions := make([]ebpf.RawInstruction, len(data)/ebpf.BPFInstSize)
+				for i := 0; i < len(data); i += ebpf.BPFInstSize {
+					instructions[i/ebpf.BPFInstSize] = ebpf.RawInstruction{
+						Op:  data[i],
+						Reg: data[i+1],
+						Off: int16(elfFile.ByteOrder.Uint16(data[i+2 : i+4])),
+						Imm: int32(elfFile.ByteOrder.Uint32(data[i+4 : i+8])),
 					}
 				}
 
-				bpfElf.Programs[sym.Name] = &elfBPFProgram{
-					AbstractBPFProgram: program,
-					section:            section.Name,
-					offset:             int(sym.Value),
-					size:               int(sym.Size),
+				// If this is the .text section, save the instructions in a sperate slice without a program struct
+				if section.Name == ".text" {
+					bpfElf.txtInstr = instructions
+					continue
+				}
+
+				// For other sections, create it as a separate program
+
+				globalFunctions := make([]elf.Symbol, 0)
+
+				// Find the name of the program / function name.
+				// We are looking for a global functions
+				for _, sym := range symbols {
+					if sym.Section != elf.SectionIndex(sectionIndex) {
+						continue
+					}
+
+					if elf.ST_BIND(sym.Info) != elf.STB_GLOBAL || elf.ST_TYPE(sym.Info) != elf.STT_FUNC {
+						continue
+					}
+
+					globalFunctions = append(globalFunctions, sym)
+				}
+
+				sectionParts := strings.Split(section.Name, "/")
+				progType := sectionNameToProgType[sectionParts[0]]
+
+				if progType == bpftypes.BPF_PROG_TYPE_UNSPEC {
+					return bpfELF{}, fmt.Errorf(
+						"unknown elf section '%s', doesn't match any eBPF program type",
+						sectionParts[0],
+					)
+				}
+
+				for i := 0; i < len(globalFunctions); i++ {
+					sym := globalFunctions[i]
+
+					program := NewAbstractBPFProgram()
+					program.ProgramType = progType
+					start := int(sym.Value) / ebpf.BPFInstSize
+					end := (int(sym.Value) + int(sym.Size)) / ebpf.BPFInstSize
+					program.Instructions = instructions[start:end]
+
+					err = program.Name.SetString(sym.Name)
+					if err != nil {
+						if settings.TruncateNames && errors.Is(err, ErrObjNameToLarge) {
+							err = program.Name.SetString(sym.Name[:bpftypes.BPF_OBJ_NAME_LEN-1])
+							if err != nil {
+								return bpfElf, fmt.Errorf("failed to truncate program name: %w", err)
+							}
+						} else {
+							return bpfElf, fmt.Errorf("failed to set program name '%s': %w", sym.Name, err)
+						}
+					}
+
+					bpfElf.Programs[sym.Name] = &elfBPFProgram{
+						AbstractBPFProgram: program,
+						section:            section.Name,
+						offset:             int(sym.Value),
+						size:               int(sym.Size),
+					}
 				}
 			}
 
@@ -547,10 +635,57 @@ func parseElf(
 		}
 	}
 
+	// If set, parse the .BTF.ext section now, since we have to guarantee it happens after
+	// BTF parsing since the Ext uses the string table and types from the main section.
+	if bpfElf.btfExtBytes != nil {
+		if bpfElf.BTF == nil {
+			bpfElf.BTF = NewBTF()
+		}
+
+		err := bpfElf.BTF.ParseBTFExt(bpfElf.btfExtBytes)
+		if err != nil {
+			return bpfElf, fmt.Errorf("parse .BTF.ext: %w", err)
+		}
+	}
+
+	// Patch total Size of DataSec types, and offsets for the individual variables
+	for _, btfType := range bpfElf.BTF.Types {
+		dataSec, ok := btfType.(*BTFDataSecType)
+		if !ok {
+			continue
+		}
+
+		section := elfFile.Section(dataSec.Name)
+		if section != nil {
+			sizeType := bpfElf.BTF.rawType[dataSec.sizeOffset : dataSec.sizeOffset+4]
+			bpfElf.BTF.btfHdr.byteOrder.PutUint32(sizeType, uint32(section.Size))
+
+			for _, variable := range dataSec.Variables {
+				for _, sym := range symbols {
+					// Ignore any symbols which are not for the current section
+					if len(elfFile.Sections) <= int(sym.Section) || elfFile.Sections[sym.Section] != section {
+						continue
+					}
+
+					// The symbols name must match the name of the DataSec variable type
+					if sym.Name != variable.Type.GetName() {
+						continue
+					}
+
+					// The value of the symbol is the offset from the start of the section
+					offset := bpfElf.BTF.rawType[variable.offsetOffset : variable.offsetOffset+4]
+					bpfElf.BTF.btfHdr.byteOrder.PutUint32(offset, uint32(sym.Value))
+					break
+				}
+			}
+		}
+	}
+
 	// Since the license section may come after a program section, set the license for each program after all sections
 	// are parsed.
 	for _, program := range bpfElf.Programs {
 		program.License = license
+		program.BTF = bpfElf.BTF
 	}
 
 	return bpfElf, nil

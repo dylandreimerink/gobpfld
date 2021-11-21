@@ -22,6 +22,10 @@ type AbstractMap struct {
 	Name ObjName
 	// Definition describes the properties of this map
 	Definition BPFMapDef
+	// A reference to the BTF which contains the type of this map.
+	BTF *BTF
+	// The type of the map.
+	BTFMapType BTFType
 
 	// definition is an unexported copy of Definition which will be pinned as soon as the map is loaded
 	// to prevent the user from chaning the definition while the map is loaded.
@@ -44,6 +48,34 @@ func (m *AbstractMap) load() error {
 		ValueSize:  m.Definition.ValueSize,
 		MaxEntries: m.Definition.MaxEntries,
 		MapFlags:   m.Definition.Flags,
+	}
+
+	// If BTF info is available
+	if m.BTF != nil && m.BTFMapType != nil {
+		// Load BTF if not already loaded
+		if !m.BTF.loaded {
+			_, err = m.BTF.Load(BTFLoadOpts{
+				LogLevel: bpftypes.BPFLogLevelBasic,
+			})
+			if err != nil {
+				// TODO make custom error type which includes the verifier log
+				return fmt.Errorf("load BTF: %w", err)
+			}
+		}
+
+		btfFd, err := m.BTF.Fd()
+		if err != nil {
+			return fmt.Errorf("get BTF fd: %w", err)
+		}
+
+		attr.BTFFD = btfFd
+
+		// TODO we need to provide the typeID of the key an value type. But the bpf_map_def struct only has the
+		// key and value sizes. Libbpf has helpers to define maps, they most likey use these helpers to reference
+		// the key and value types. So we need to add support for the libbpf defined helpers, and communicate
+		// to the user that they need to use these helpers to get type info.
+		// NOTE side note, we might be able to generate type info from the loader program, should be an alternative
+		// since it requires providing type information before loading the maps.
 	}
 
 	m.fd, err = bpfsys.MapCreate(attr)

@@ -110,18 +110,16 @@ type BPFAttrProgramLoad struct {
 	// (context accesses, allowed helpers, etc).
 	ExpectedAttachType bpftypes.BPFAttachType
 
-	// TODO uncomment fields when we are ready to add BTF support https://www.kernel.org/doc/html/latest/bpf/btf.html
-
-	// ProgBTFFD                   uint32  // fd pointing to BTF type data
-	// FuncInfoRecSize             uint32  // userspace bpf_func_info size
-	// FuncInfo                    uintptr // func info
-	// FuncInfoCnt                 uint32  // number of bpf_func_info records
-	// LineInfoRecSize             uint32  // userspace bpf_line_info size
-	// LineInfo                    uint64  // line info
-	// LineInfoCnt                 uint32  // number of bpf_line_info records
-	// AttachBTFID                 uint32  // in-kernel BTF type id to attach to
+	ProgBTFFD       BPFfd   // fd pointing to BTF type data
+	FuncInfoRecSize uint32  // userspace bpf_func_info size
+	FuncInfo        uintptr // func info
+	FuncInfoCnt     uint32  // number of bpf_func_info records
+	LineInfoRecSize uint32  // userspace bpf_line_info size
+	LineInfo        uintptr // line info
+	LineInfoCnt     uint32  // number of bpf_line_info records
+	AttachBTFID     uint32  // in-kernel BTF type id to attach to
 	// valid prog_fd to attach to bpf prog or valid module BTF object fd or 0 to attach to vmlinux
-	// AttachProgFD_AttachBTFObjFD uint32
+	AttachProgFD_AttachBTFObjFD uint32
 }
 
 func (amb *BPFAttrProgramLoad) ToPtr() unsafe.Pointer {
@@ -267,7 +265,7 @@ type BPFAttrBTFLoad struct {
 	BTFLogBuf   uintptr
 	BTFSize     uint32
 	BTFLogSize  uint32
-	BTFLogLevel uint32
+	BTFLogLevel bpftypes.BPFLogLevel
 }
 
 func (abl *BPFAttrBTFLoad) ToPtr() unsafe.Pointer {

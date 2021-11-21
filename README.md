@@ -89,7 +89,7 @@ Features/tasks in this list are commonly used/requested because they are used in
 * ~~BPF2BPF function calls~~
 * ~~Map iterator construct (looping over maps is very common)~~
 * Support perf event array maps
-* Support stack track maps
+* Support stack trace maps
 * Support dev and devhash map
 * Support sock and sockhash map
 * Support cpu map
@@ -121,7 +121,7 @@ Features/tasks in this list are not critical for most users but still important 
 * Support inode storage map
 * Support task storage map
 * Support for LWT programs (Light weight tunnel)
-* BTF support (So we have more type info to work with, some newer features require BTF support in the loader)
+* ~~BTF support (So we have more type info to work with, some newer features require BTF support in the loader)~~
 * ARM64 support / testing (ARM is on the rise)
 * ARM32 support / testing (ARM is on the rise)
 * ELF symbols to offset functionality for perf package
