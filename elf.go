@@ -25,7 +25,8 @@ type BPFELF struct {
 	Programs map[string]BPFProgram
 	// Maps defined in the ELF
 	Maps map[string]BPFMap
-	BTF  *BTF
+	// BTF contains type and debugging information regarding the programs and maps.
+	BTF *BTF
 }
 
 type bpfELF struct {
@@ -33,7 +34,8 @@ type bpfELF struct {
 	Programs map[string]*elfBPFProgram
 	// Maps defined in the ELF
 	Maps map[string]AbstractMap
-	BTF  *BTF
+	// BTF contains type and debugging information regarding the programs and maps.
+	BTF *BTF
 
 	// eBPF code found in the .text section, often called "sub programs".
 	// Used for library code and code shared by multiple programs by way of BPF to BPF calls
@@ -79,7 +81,6 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 
 	// TODO process BTF relocations (Look into this, relocation entries don't seem to make sense for .rel.BTF)
 	//   https://patchwork.ozlabs.org/project/netdev/patch/20190807214001.872988-4-andriin@fb.com/
-	// TODO recalculate BTF func and line instruction offsets after all sections have been combined
 
 	// Add BTF info to the abstract maps and resolve the actual map type, to be used during map loading.
 	bpfMaps := make(map[string]BPFMap)

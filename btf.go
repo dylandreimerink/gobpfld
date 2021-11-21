@@ -13,7 +13,7 @@ import (
 
 // TODO add field to store kernel structure ID's (for map BTFVMLinuxValueTypeID)
 // TODO Add global registry for BTF objects to translate IDs to FDs
-// TODO Add fuzzing, we should never get panics only errors, critical for stability of library users.
+// TODO Add fuzzing, we should never get panics only errors, critical for stability of library users. (go 1.18)
 // TODO (bonus) make code generators for BTF so we can generate C and Go code like bpftool does
 // TODO (bonus) test against VMLinux (/sys/kernel/btf/vmlinux)
 // TODO (bonus) implement libbpf compatible CO:RE(Compile Once Run Everywhere).
@@ -153,7 +153,7 @@ func (btf *BTF) ParseBTF(btfBytes []byte) error {
 
 	// Type ID 0 is reserved for void, this initial item will make it so that the index in this slice
 	// is equal to the Type IDs used by other types.
-	btf.Types = append(btf.Types, &VoidType{})
+	btf.Types = append(btf.Types, &BTFVoidType{})
 
 	for off < len(btfTypes) {
 		ct := (btfType{
@@ -262,7 +262,7 @@ func (btf *BTF) ParseBTF(btfBytes []byte) error {
 			}
 
 		case BTF_KIND_FUNC:
-			btfType = &FuncType{
+			btfType = &BTFFuncType{
 				commonType: ct,
 			}
 
@@ -310,7 +310,7 @@ func (btf *BTF) ParseBTF(btfBytes []byte) error {
 			}
 
 		case BTF_KIND_DECL_TAG:
-			btfType = &DeclTagType{
+			btfType = &BTFDeclTagType{
 				commonType:   ct,
 				ComponentIdx: read32(),
 			}
@@ -361,7 +361,7 @@ func (btf *BTF) ParseBTF(btfBytes []byte) error {
 		case *BTFRestrictType:
 			t.Type = btf.Types[t.sizeType]
 
-		case *FuncType:
+		case *BTFFuncType:
 			t.Type = btf.Types[t.sizeType]
 
 		case *BTFFuncProtoType:
@@ -375,7 +375,7 @@ func (btf *BTF) ParseBTF(btfBytes []byte) error {
 				t.Variables[i].Type = btf.Types[variable.typeID]
 			}
 
-		case *DeclTagType:
+		case *BTFDeclTagType:
 			t.Type = btf.Types[t.sizeType]
 		}
 	}
@@ -403,9 +403,14 @@ func (btf *BTF) ParseBTFExt(btfBytes []byte) error {
 	funcsEnd := headerOffset + btf.btfExtHdr.FuncOffset + btf.btfExtHdr.FuncLength
 	funcs := btfBytes[funcsStart:funcsEnd]
 
+	var readError error
 	off := 0
 	read32 := func() uint32 {
-		// TODO add slice length checking to avoid index out of bounds panics
+		// return a 0, instread of panicing
+		if off+4 > len(funcs) {
+			readError = ErrMissingBTFData
+			return 0
+		}
 
 		v := btf.btfExtHdr.byteOrder.Uint32(funcs[off : off+4])
 		off = off + 4
@@ -436,6 +441,9 @@ func (btf *BTF) ParseBTFExt(btfBytes []byte) error {
 			off += int(funcRecordSize)
 		}
 	}
+	if readError != nil {
+		return err
+	}
 
 	linesStart := headerOffset + btf.btfExtHdr.LineOffset
 	linesEnd := headerOffset + btf.btfExtHdr.LineOffset + btf.btfExtHdr.LineLength
@@ -443,7 +451,11 @@ func (btf *BTF) ParseBTFExt(btfBytes []byte) error {
 
 	off = 0
 	read32 = func() uint32 {
-		// TODO add slice length checking to avoid index out of bounds panics
+		// return a 0, instread of panicing
+		if off+4 > len(funcs) {
+			readError = ErrMissingBTFData
+			return 0
+		}
 
 		v := btf.btfExtHdr.byteOrder.Uint32(lines[off : off+4])
 		off = off + 4
@@ -478,6 +490,9 @@ func (btf *BTF) ParseBTFExt(btfBytes []byte) error {
 			// This makes the code forward compatible
 			off += int(lineRecordSize)
 		}
+	}
+	if readError != nil {
+		return err
 	}
 
 	return nil
@@ -803,38 +818,38 @@ type BTFFloatType struct {
 	commonType
 }
 
-// DeclTagType The name_off encodes btf_decl_tag attribute string.
+// BTFDeclTagType The name_off encodes btf_decl_tag attribute string.
 // The type should be struct, union, func, var or typedef.
 // For var or typedef type, btf_decl_tag.component_idx must be -1.
 // For the other three types, if the btf_decl_tag attribute is applied to the struct,
 // union or func itself, btf_decl_tag.component_idx must be -1.
 // Otherwise, the attribute is applied to a struct/union member or a func argument,
 // and btf_decl_tag.component_idx should be a valid index (starting from 0) pointing to a member or an argument.
-type DeclTagType struct {
+type BTFDeclTagType struct {
 	commonType
 	ComponentIdx uint32
 }
 
-// VoidType is not an actual type in BTF, it is used as type ID 0.
-type VoidType struct{}
+// BTFVoidType is not an actual type in BTF, it is used as type ID 0.
+type BTFVoidType struct{}
 
-func (vt *VoidType) GetID() int {
+func (vt *BTFVoidType) GetID() int {
 	return 0
 }
 
-func (vt *VoidType) GetKind() BTFKind {
+func (vt *BTFVoidType) GetKind() BTFKind {
 	return BTF_KIND_UNKN
 }
 
-func (vt *VoidType) GetName() string {
+func (vt *BTFVoidType) GetName() string {
 	return ""
 }
 
-// A FuncType defines not a type, but a subprogram (function) whose signature is defined by type.
+// A BTFFuncType defines not a type, but a subprogram (function) whose signature is defined by type.
 // The subprogram is thus an instance of that type.
 // The KIND_FUNC may in turn be referenced by a func_info in the 4.2 .BTF.ext section (ELF) or in the arguments
 // to 3.3 BPF_PROG_LOAD (ABI).
-type FuncType struct {
+type BTFFuncType struct {
 	commonType
 }
 
