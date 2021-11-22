@@ -40,6 +40,7 @@ There are a number of eBPF related vulnerabilities known so far: [CVE-2016-2383]
 * Go wrappers around all bpf syscall commands
 * XDP program testing
 * Array map memory mapping
+* BTF loading
 
 ## Motivation
 

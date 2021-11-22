@@ -140,6 +140,10 @@ func (btf *BTF) ParseBTF(btfBytes []byte) error {
 	var readError error
 	off := 0
 	read32 := func() uint32 {
+		defer func() {
+			off = off + 4
+		}()
+
 		// return a 0, instread of panicing
 		if off+4 > len(btfTypes) {
 			readError = ErrMissingBTFData
@@ -147,7 +151,6 @@ func (btf *BTF) ParseBTF(btfBytes []byte) error {
 		}
 
 		v := btf.btfHdr.byteOrder.Uint32(btfTypes[off : off+4])
-		off = off + 4
 		return v
 	}
 
@@ -406,6 +409,10 @@ func (btf *BTF) ParseBTFExt(btfBytes []byte) error {
 	var readError error
 	off := 0
 	read32 := func() uint32 {
+		defer func() {
+			off = off + 4
+		}()
+
 		// return a 0, instread of panicing
 		if off+4 > len(funcs) {
 			readError = ErrMissingBTFData
@@ -413,7 +420,6 @@ func (btf *BTF) ParseBTFExt(btfBytes []byte) error {
 		}
 
 		v := btf.btfExtHdr.byteOrder.Uint32(funcs[off : off+4])
-		off = off + 4
 		return v
 	}
 
@@ -451,14 +457,17 @@ func (btf *BTF) ParseBTFExt(btfBytes []byte) error {
 
 	off = 0
 	read32 = func() uint32 {
+		defer func() {
+			off = off + 4
+		}()
+
 		// return a 0, instread of panicing
-		if off+4 > len(funcs) {
+		if off+4 > len(lines) {
 			readError = ErrMissingBTFData
 			return 0
 		}
 
 		v := btf.btfExtHdr.byteOrder.Uint32(lines[off : off+4])
-		off = off + 4
 		return v
 	}
 
