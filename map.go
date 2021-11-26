@@ -7,6 +7,7 @@ import (
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
+	"github.com/dylandreimerink/gobpfld/internal/cstr"
 )
 
 type BPFMap interface {
@@ -61,7 +62,7 @@ func MapFromFD(fd bpfsys.BPFfd) (BPFMap, error) {
 		AbstractMap{
 			Name: ObjName{
 				cname: mapInfo.Name,
-				str:   CStrBytesToString(mapInfo.Name[:]),
+				str:   cstr.BytesToString(mapInfo.Name[:]),
 			},
 			loaded: true,
 			fd:     fd,

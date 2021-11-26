@@ -9,6 +9,7 @@ import (
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"github.com/dylandreimerink/gobpfld/ebpf"
+	"github.com/dylandreimerink/gobpfld/internal/cstr"
 	"github.com/dylandreimerink/gobpfld/kernelsupport"
 )
 
@@ -72,7 +73,7 @@ func (p *AbstractBPFProgram) load(attr bpfsys.BPFAttrProgramLoad) (log string, e
 
 	// TODO check if helper functions used in program are supported by current kernel version
 
-	licenseCStr := StringToCStrBytes(p.License)
+	licenseCStr := cstr.StringToCStrBytes(p.License)
 
 	// Rewrite / patch instructions with map fds
 	for mapName, offsets := range p.MapFDLocations {
@@ -151,19 +152,19 @@ func (p *AbstractBPFProgram) load(attr bpfsys.BPFAttrProgramLoad) (log string, e
 				continue
 			}
 
-			return CStrBytesToString(verifierLogBytes), fmt.Errorf("bpf syscall error: %w", err)
+			return cstr.BytesToString(verifierLogBytes), fmt.Errorf("bpf syscall error: %w", err)
 		}
 
 		// We encountered no error, so stop trying to load the program
 		break
 	}
 	if err != nil {
-		return CStrBytesToString(verifierLogBytes), fmt.Errorf("bpf syscall error: %w", err)
+		return cstr.BytesToString(verifierLogBytes), fmt.Errorf("bpf syscall error: %w", err)
 	}
 
 	p.loaded = true
 
-	return CStrBytesToString(verifierLogBytes), nil
+	return cstr.BytesToString(verifierLogBytes), nil
 }
 
 var progTypeToKFeature = map[bpftypes.BPFProgType]kernelsupport.ProgramSupport{

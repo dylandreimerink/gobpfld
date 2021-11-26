@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
+	"github.com/dylandreimerink/gobpfld/internal/cstr"
 )
 
 // BPFSysPath is the path to the bpf FS used to pin objects to
@@ -28,7 +29,7 @@ func PinFD(relativePath string, fd bpfsys.BPFfd) error {
 		return fmt.Errorf("error while making directories: %w", err)
 	}
 
-	cPath := StringToCStrBytes(sysPath)
+	cPath := cstr.StringToCStrBytes(sysPath)
 
 	err = bpfsys.ObjectPin(&bpfsys.BPFAttrObj{
 		BPFfd:    fd,
@@ -52,7 +53,7 @@ func PinFD(relativePath string, fd bpfsys.BPFfd) error {
 //  the proper maps. (also necessary to handle map registration properly)
 func UnpinFD(relativePath string, deletePin bool) (bpfsys.BPFfd, error) {
 	sysPath := fmt.Sprint(BPFSysPath, relativePath)
-	cpath := StringToCStrBytes(sysPath)
+	cpath := cstr.StringToCStrBytes(sysPath)
 
 	fd, err := bpfsys.ObjectGet(&bpfsys.BPFAttrObj{
 		Pathname: uintptr(unsafe.Pointer(&cpath[0])),

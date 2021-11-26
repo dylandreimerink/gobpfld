@@ -9,6 +9,7 @@ import (
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
+	"github.com/dylandreimerink/gobpfld/internal/cstr"
 )
 
 // TODO add field to store kernel structure ID's (for map BTFVMLinuxValueTypeID)
@@ -96,13 +97,13 @@ func (btf *BTF) Load(opts BTFLoadOpts) (string, error) {
 
 	fd, err := bpfsys.BTFLoad(&attr)
 	if err != nil {
-		return CStrBytesToString(verifierLogBytes), err
+		return cstr.BytesToString(verifierLogBytes), err
 	}
 
 	btf.fd = fd
 	btf.loaded = true
 
-	return CStrBytesToString(verifierLogBytes), nil
+	return cstr.BytesToString(verifierLogBytes), nil
 }
 
 // ErrMissingBTFData is returned when a datastructure indicates that there should be additional bytes but

@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
+	bpfSyscall "github.com/dylandreimerink/gobpfld/internal/syscall"
 	"github.com/dylandreimerink/gobpfld/kernelsupport"
 	"golang.org/x/sys/unix"
 )
@@ -841,7 +842,7 @@ func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 		// TODO flags
 	}
 	// Register the umem
-	err = bpfsys.Setsockopt(
+	err = bpfSyscall.Setsockopt(
 		xskSock.fd,
 		unix.SOL_XDP,
 		unix.XDP_UMEM_REG,
@@ -866,7 +867,7 @@ func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 	}
 
 	// Tell the kernel how large the fill ring should be
-	err = bpfsys.Setsockopt(
+	err = bpfSyscall.Setsockopt(
 		xskSock.fd,
 		unix.SOL_XDP,
 		unix.XDP_UMEM_FILL_RING,
@@ -878,7 +879,7 @@ func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 	}
 
 	// Tell the kernel how large the completion ring should be
-	err = bpfsys.Setsockopt(
+	err = bpfSyscall.Setsockopt(
 		xskSock.fd,
 		unix.SOL_XDP,
 		unix.XDP_UMEM_COMPLETION_RING,
@@ -942,7 +943,7 @@ func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 	go xskSock.completionWorker()
 
 	// Tell the kernel how large the rx ring should be
-	err = bpfsys.Setsockopt(
+	err = bpfSyscall.Setsockopt(
 		xskSock.fd,
 		unix.SOL_XDP,
 		unix.XDP_RX_RING,
@@ -954,7 +955,7 @@ func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 	}
 
 	// Tell the kernel how large the tx ring should be
-	err = bpfsys.Setsockopt(
+	err = bpfSyscall.Setsockopt(
 		xskSock.fd,
 		unix.SOL_XDP,
 		unix.XDP_TX_RING,
@@ -1013,7 +1014,7 @@ func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
 		sxdpSharedUmemFD: uint32(xskSock.fd),
 		sxdpFlags:        flags,
 	}
-	err = bpfsys.Bind(xskSock.fd, unsafe.Pointer(&sockAddr), bpfsys.Socklen(unsafe.Sizeof(sockAddr)))
+	err = bpfSyscall.Bind(xskSock.fd, unsafe.Pointer(&sockAddr), bpfSyscall.Socklen(unsafe.Sizeof(sockAddr)))
 	if err != nil {
 		return nil, fmt.Errorf("bind: %w", err)
 	}
@@ -1086,7 +1087,13 @@ func (xs *XSKSocket) wakeupFill() error {
 // https://patchwork.ozlabs.org/project/netdev/patch/1560411450-29121-3-git-send-email-magnus.karlsson@intel.com/
 func (xs *XSKSocket) wakeupTx() error {
 	if *(*uint32)(xs.tx.flags)&unix.XDP_RING_NEED_WAKEUP == 1 {
-		err := bpfsys.Sendto(xs.fd, nil, syscall.MSG_DONTWAIT, unsafe.Pointer(&bpfsys.Zero), bpfsys.Socklen(0))
+		err := bpfSyscall.Sendto(
+			xs.fd,
+			nil,
+			syscall.MSG_DONTWAIT,
+			unsafe.Pointer(&bpfSyscall.Zero),
+			bpfSyscall.Socklen(0),
+		)
 		if err != nil {
 			if sysErr, ok := err.(*bpfsys.BPFSyscallError); ok {
 				switch sysErr.Errno {
@@ -1336,8 +1343,8 @@ func (xs *XSKSocket) completionWorker() {
 
 func getMMapOffsets(fd int) (offsets mmapOffsets, err error) {
 	if kernelsupport.CurrentFeatures.Misc.Has(kernelsupport.KFeatMiscXSKRingFlags) {
-		len := bpfsys.Socklen(unsafe.Sizeof(offsets))
-		err = bpfsys.Getsockopt(
+		len := bpfSyscall.Socklen(unsafe.Sizeof(offsets))
+		err = bpfSyscall.Getsockopt(
 			fd,
 			unix.SOL_XDP,
 			unix.XDP_MMAP_OFFSETS,
@@ -1378,8 +1385,8 @@ func getMMapOffsets(fd int) (offsets mmapOffsets, err error) {
 }
 
 func getMMapOffsetsNoFlags(fd int) (offsets [4]ringOffsetNoFlags, err error) {
-	len := bpfsys.Socklen(unsafe.Sizeof(offsets))
-	err = bpfsys.Getsockopt(
+	len := bpfSyscall.Socklen(unsafe.Sizeof(offsets))
+	err = bpfSyscall.Getsockopt(
 		fd,
 		unix.SOL_XDP,
 		unix.XDP_MMAP_OFFSETS,

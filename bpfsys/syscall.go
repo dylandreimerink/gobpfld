@@ -3,44 +3,22 @@ package bpfsys
 import (
 	"errors"
 	"fmt"
-	"unsafe"
 
 	"github.com/dylandreimerink/gobpfld/bpftypes"
+	"github.com/dylandreimerink/gobpfld/internal/syscall"
 	"github.com/dylandreimerink/gobpfld/kernelsupport"
 	"golang.org/x/sys/unix"
 )
-
-// ENOTSUPP - Operation is not supported
-const ENOTSUPP = unix.Errno(524)
-
-// a map of string translations for syscall errors which are no included in the standard library
-var nonStdErrors = map[unix.Errno]string{
-	ENOTSUPP: "Operation is not supported",
-}
 
 // ErrNotSupported is returned when attempting to use a feature that is not supported
 // by the kernel version on which the program is executed.
 var ErrNotSupported = errors.New("feature not supported by kernel version")
 
-type BPFSyscallError struct {
-	// Context specific error information since the same code can have different
-	// meaning depending on context
-	Err string
-	// The underlaying syscall error number
-	Errno unix.Errno
-}
+type BPFSyscallError syscall.Error
 
 func (e *BPFSyscallError) Error() string {
-	errStr := nonStdErrors[e.Errno]
-	if errStr == "" {
-		errStr = e.Errno.Error()
-	}
-
-	if e.Err == "" {
-		return fmt.Sprintf("%s (%d)", errStr, e.Errno)
-	}
-
-	return fmt.Sprintf("%s (%s)(%d)", e.Err, errStr, e.Errno)
+	var sysErr syscall.Error = syscall.Error(*e)
+	return sysErr.Error()
 }
 
 // BPFfd is an alias of a file descriptor returned by bpf to identify a map, program or link.
@@ -63,16 +41,9 @@ type BPFfd uint32
 
 // Close closes a file descriptor
 func (fd BPFfd) Close() error {
-	_, _, errno := unix.Syscall(unix.SYS_CLOSE, uintptr(fd), 0, 0)
-	if errno != 0 {
-		return &BPFSyscallError{
-			Errno: errno,
-			Err: map[unix.Errno]string{
-				unix.EBADF: "fd isn't a valid open file descriptor",
-				unix.EINTR: "The Close() call was interrupted by a signal; see signal(7)",
-				unix.EIO:   "An I/O error occurred",
-			}[errno],
-		}
+	err := unix.Close(int(fd))
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -85,12 +56,7 @@ func Bpf(cmd bpftypes.BPFCommand, attr BPFAttribute, size int) (fd BPFfd, err er
 		return 0, fmt.Errorf("eBPF is not supported: %w", ErrNotSupported)
 	}
 
-	r0, _, errno := unix.Syscall(unix.SYS_BPF, uintptr(cmd), uintptr(attr.ToPtr()), uintptr(size))
-	if errno != 0 {
-		err = &BPFSyscallError{
-			Errno: errno,
-		}
-	}
+	r0, err := syscall.Bpf(int(cmd), attr, size)
 
 	return BPFfd(r0), err
 }
@@ -372,7 +338,7 @@ func ProgramTestRun(attr *BPFAttrProgTestRun) error {
 	if syserr, ok := err.(*BPFSyscallError); ok {
 		syserr.Err = map[unix.Errno]string{
 			unix.ENOSPC: "Either attr.DataSizeOut or attr.CtxSizeOut is too small",
-			ENOTSUPP: "This command is not supported by the program type of the program referred to " +
+			syscall.ENOTSUPP: "This command is not supported by the program type of the program referred to " +
 				"by attr.ProgFD",
 		}[syserr.Errno]
 		return syserr
@@ -843,88 +809,4 @@ func ProgBindMap(attr *BPFAttrProgBindMap) error {
 	}
 
 	return bpfNoReturn(bpftypes.BPF_PROG_BIND_MAP, attr, int(attr.Size()))
-}
-
-type Socklen uint32
-
-// Getsockopt is a public version of the unix.getsockopt without additional wrappers which allows us to use any
-// value type we want. But does require the usage of unsafe.
-func Getsockopt(s int, level int, name int, val unsafe.Pointer, vallen *Socklen) (err error) {
-	_, _, e1 := unix.Syscall6(
-		unix.SYS_GETSOCKOPT,
-		uintptr(s),
-		uintptr(level),
-		uintptr(name),
-		uintptr(val),
-		uintptr(unsafe.Pointer(vallen)),
-		0,
-	)
-	if e1 != 0 {
-		err = &BPFSyscallError{
-			Errno: e1,
-		}
-	}
-	return
-}
-
-// Setsockopt is a public version of the unix.setsockopt without additional wrappers which allows us to use any
-// value type we want. But does require the usage of unsafe.
-func Setsockopt(s int, level int, name int, val unsafe.Pointer, vallen uintptr) (err error) {
-	_, _, e1 := unix.Syscall6(
-		unix.SYS_SETSOCKOPT,
-		uintptr(s),
-		uintptr(level),
-		uintptr(name),
-		uintptr(val),
-		vallen,
-		0,
-	)
-	if e1 != 0 {
-		err = &BPFSyscallError{
-			Errno: e1,
-		}
-	}
-	return
-}
-
-// Bind is a public version of the unix.bind without additional wrappers which allows us to use any
-// value type we want. But does require the usage of unsafe.
-func Bind(s int, addr unsafe.Pointer, addrlen Socklen) (err error) {
-	_, _, e1 := unix.Syscall(unix.SYS_BIND, uintptr(s), uintptr(addr), uintptr(addrlen))
-	if e1 != 0 {
-		err = &BPFSyscallError{
-			Errno: e1,
-		}
-	}
-	return
-}
-
-// Zero single-word zero for use when we need a valid pointer to 0 bytes.
-// See mkunix.pl.
-var Zero uintptr
-
-// Sendto is a public version of the unix.sendto without additional wrappers which allows us to use any
-// value type we want. But does require the usage of unsafe.
-func Sendto(s int, buf []byte, flags int, to unsafe.Pointer, addrlen Socklen) (err error) {
-	var _p0 unsafe.Pointer
-	if len(buf) > 0 {
-		_p0 = unsafe.Pointer(&buf[0])
-	} else {
-		_p0 = unsafe.Pointer(&Zero)
-	}
-	_, _, e1 := unix.Syscall6(
-		unix.SYS_SENDTO,
-		uintptr(s),
-		uintptr(_p0),
-		uintptr(len(buf)),
-		uintptr(flags),
-		uintptr(to),
-		uintptr(addrlen),
-	)
-	if e1 != 0 {
-		err = &BPFSyscallError{
-			Errno: e1,
-		}
-	}
-	return
 }

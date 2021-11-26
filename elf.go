@@ -10,6 +10,7 @@ import (
 
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"github.com/dylandreimerink/gobpfld/ebpf"
+	"github.com/dylandreimerink/gobpfld/internal/cstr"
 	"github.com/dylandreimerink/gobpfld/perf"
 )
 
@@ -251,7 +252,7 @@ func (bpfElf *bpfELF) parseProgBits(sectionIndex int, section *elf.Section) erro
 
 	switch section.Name {
 	case "license":
-		bpfElf.license = CStrBytesToString(data)
+		bpfElf.license = cstr.BytesToString(data)
 
 	case "maps":
 		err := bpfElf.parseMaps(sectionIndex, section)
