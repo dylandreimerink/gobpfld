@@ -10,6 +10,7 @@ import (
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"github.com/dylandreimerink/gobpfld/ebpf"
 	"github.com/dylandreimerink/gobpfld/internal/cstr"
+	bpfSyscall "github.com/dylandreimerink/gobpfld/internal/syscall"
 	"github.com/dylandreimerink/gobpfld/kernelsupport"
 )
 
@@ -148,7 +149,7 @@ func (p *AbstractBPFProgram) load(attr bpfsys.BPFAttrProgramLoad) (log string, e
 		p.fd, err = bpfsys.LoadProgram(&attr)
 		if err != nil {
 			// EAGAIN basically means "there is no data available right now, try again later"
-			if sysErr, ok := err.(*bpfsys.BPFSyscallError); ok && sysErr.Errno == syscall.EAGAIN {
+			if sysErr, ok := err.(*bpfSyscall.Error); ok && sysErr.Errno == syscall.EAGAIN {
 				continue
 			}
 

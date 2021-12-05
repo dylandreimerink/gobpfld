@@ -12,6 +12,7 @@ import (
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"github.com/dylandreimerink/gobpfld/ebpf"
+	bpfSyscall "github.com/dylandreimerink/gobpfld/internal/syscall"
 )
 
 // BPFProgInfo is a more easy to use version of the bpftypes.BPFProgInfo
@@ -50,7 +51,7 @@ func GetLoadedPrograms() ([]BPFProgInfo, error) {
 	attr := &bpfsys.BPFAttrGetID{}
 	for {
 		err := bpfsys.ProgramGetNextID(attr)
-		if syserr, ok := err.(*bpfsys.BPFSyscallError); ok {
+		if syserr, ok := err.(*bpfSyscall.Error); ok {
 			// if the "next" id could not be found, we have scanned them all
 			if syserr.Errno == syscall.ENOENT {
 				return programs, nil

@@ -9,6 +9,7 @@ import (
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
+	bpfSyscall "github.com/dylandreimerink/gobpfld/internal/syscall"
 )
 
 // AbstractMap is a base struct which implements BPFMap however it lacks any features for interacting
@@ -369,7 +370,7 @@ func (m *AbstractMap) getBatch(
 	err = bpfsys.MapLookupBatch(attr)
 	if err != nil {
 		// A ENOENT is not an acutal error, the kernel uses it to signal there is no more data after this batch
-		if sysErr, ok := err.(*bpfsys.BPFSyscallError); ok && sysErr.Errno == syscall.ENOENT {
+		if sysErr, ok := err.(*bpfSyscall.Error); ok && sysErr.Errno == syscall.ENOENT {
 			return int(attr.Count), true, nil
 		}
 

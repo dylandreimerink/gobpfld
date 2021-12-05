@@ -11,7 +11,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/dylandreimerink/gobpfld/bpfsys"
 	bpfSyscall "github.com/dylandreimerink/gobpfld/internal/syscall"
 	"github.com/dylandreimerink/gobpfld/kernelsupport"
 	"golang.org/x/sys/unix"
@@ -1095,7 +1094,7 @@ func (xs *XSKSocket) wakeupTx() error {
 			bpfSyscall.Socklen(0),
 		)
 		if err != nil {
-			if sysErr, ok := err.(*bpfsys.BPFSyscallError); ok {
+			if sysErr, ok := err.(*bpfSyscall.Error); ok {
 				switch sysErr.Errno {
 				// These errors occur regulairly when load is high, ignore these errors, the next time
 				// wakeupTx is called it will trigger the kernel to read the full ring anyway.

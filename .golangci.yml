@@ -42,6 +42,7 @@ linters-settings:
       - golang.org/x/sys
       - github.com/dylandreimerink/gobpfld
       - github.com/alecthomas/participle/v2
+      - github.com/spf13/cobra
 
 linters:
   # please, do not use `enable-all`: it's deprecated and will be removed soon.

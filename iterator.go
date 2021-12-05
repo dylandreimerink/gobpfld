@@ -8,6 +8,7 @@ import (
 	"unsafe"
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
+	bpfSyscall "github.com/dylandreimerink/gobpfld/internal/syscall"
 )
 
 // A MapIterator describes an iterator which can iterate over all keys and values of a map without keeping all
@@ -134,7 +135,7 @@ func (sli *singleLookupIterator) Next() (updated bool, err error) {
 	err = bpfsys.MapGetNextKey(&sli.attr)
 	if err != nil {
 		sli.done = true
-		if sysErr, ok := err.(*bpfsys.BPFSyscallError); ok && sysErr.Errno == syscall.ENOENT {
+		if sysErr, ok := err.(*bpfSyscall.Error); ok && sysErr.Errno == syscall.ENOENT {
 			return false, nil
 		}
 
@@ -270,7 +271,7 @@ func (bli *batchLookupIterator) Next() (updated bool, err error) {
 
 		err = bpfsys.MapLookupBatch(&bli.attr)
 		if err != nil {
-			sysErr, ok := err.(*bpfsys.BPFSyscallError)
+			sysErr, ok := err.(*bpfSyscall.Error)
 			if !ok || sysErr.Errno != syscall.ENOENT {
 				return false, err
 			}
@@ -441,7 +442,7 @@ func (sli *singleMapLookupIterator) Next() (updated bool, err error) {
 	err = bpfsys.MapGetNextKey(&sli.attr)
 	if err != nil {
 		sli.done = true
-		if sysErr, ok := err.(*bpfsys.BPFSyscallError); ok && sysErr.Errno == syscall.ENOENT {
+		if sysErr, ok := err.(*bpfSyscall.Error); ok && sysErr.Errno == syscall.ENOENT {
 			return false, nil
 		}
 

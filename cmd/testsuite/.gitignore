@@ -1,0 +1,3 @@
+# These are temporary until we can download them from the bpfci repo
+bzImage
+initrd.gz

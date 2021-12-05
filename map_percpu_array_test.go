@@ -170,8 +170,8 @@ func testPerCPUArrayMap_BatchGetSet_happyPath(t *testing.T, arrayMap *PerCPUArra
 // Tests that getting and setting of bulk keys work for a normal array map
 func TestPerCPUArrayMap_BulkGetSet_HappyPath(t *testing.T) {
 	// We can only perform this test if the kernel we are running on supports it
-	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapPerCPUArrayBatchLookup |
-		kernelsupport.KFeatMapPerCPUArrayBatchUpdate) {
+	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapPerCPUArrayBatchOps |
+		kernelsupport.KFeatMapPerCPUArrayBatchOps) {
 		return
 	}
 
