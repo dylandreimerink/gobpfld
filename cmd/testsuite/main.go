@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
@@ -91,14 +94,16 @@ func printlnVerbose(args ...interface{}) {
 
 // testEnv represents a combination of factors to test for
 type testEnv struct {
-	arch   string
-	kernel string
+	arch       string
+	kernel     string
+	bzImageURL string
 }
 
 var availableEnvs = map[string]testEnv{
 	"linux-5.15.5-amd64": {
-		arch:   "amd64",
-		kernel: "5.15.5",
+		arch:       "amd64",
+		kernel:     "5.15.5",
+		bzImageURL: "https://github.com/dylandreimerink/bpfci/raw/master/dist/amd64-5.15.5-bzImage",
 	},
 	// "linux-5.15.5-arm64": {
 	// 	arch:   "arm64",
@@ -237,12 +242,15 @@ func testEnvironment(envName string, buildFlags []string) error {
 
 		// TODO generate runtime flags
 
+		// Run script, write stdout to "$exec.results", write stderr to "$exec.error" and the exit code to "$exec.exit"
 		fmt.Fprintf(
 			&scriptBuf,
-			"%s %s > %s\n",
+			"%s %s > %s 2> %s\necho $? > %s\n",
 			path.Join(vmPath, execName),
 			strings.Join(flags, ", "),
 			path.Join(vmPath, execName+".results"),
+			path.Join(vmPath, execName+".error"),
+			path.Join(vmPath, execName+".exit"),
 		)
 	}
 
@@ -338,15 +346,162 @@ func testEnvironment(envName string, buildFlags []string) error {
 		fmt.Fprintf(os.Stderr, "Error while deleting loop device '%s': %s", loopDev, err.Error())
 	}
 
-	// TODO download kernelBz and initrd from bpfci project for the current environment
+	printlnVerbose("--- Checking/downloading bzImage and initrd ---")
+
+	const cacheDir = "/var/cache/bpfld"
+	printlnVerbose("MKDIR", cacheDir)
+	err = os.MkdirAll(cacheDir, 0755)
+	if err != nil {
+		return fmt.Errorf("error while creating cache directory: %w", err)
+	}
+
+	bzFilename := fmt.Sprintf("%s-%s.bzImage", curEnv.arch, curEnv.kernel)
+	bzPath := path.Join(cacheDir, bzFilename)
+	dlBZ := false
+
+	printlnVerbose("CHECKSUM:", bzPath)
+	bzFile, err := os.Open(bzPath)
+	if err != nil {
+		dlBZ = true
+	} else {
+		// Calculate the sha256 hash of the existing bzImage
+		h := sha256.New()
+
+		_, err = io.Copy(h, bzFile)
+		if err != nil {
+			return fmt.Errorf("error while hashing bzImage: %w", err)
+		}
+		bzFile.Close()
+
+		bzHash := h.Sum(nil)
+
+		printlnVerbose("GET: ", curEnv.bzImageURL+".sha256")
+		resp, err := http.Get(curEnv.bzImageURL + ".sha256")
+		if err != nil {
+			return fmt.Errorf("error while downloading bzImage hash: %w", err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("error while reading bzImage hash: %w", err)
+		}
+
+		bodyStr := strings.TrimSpace(string(body))
+		if bodyStr != hex.EncodeToString(bzHash) {
+			printlnVerbose(
+				"Remote =", bodyStr+",",
+				"Local =", hex.EncodeToString(bzHash),
+			)
+			dlBZ = true
+		}
+	}
+
+	// If we can't stat the bzImage in the cache dir, download it
+	if dlBZ {
+		err = func() error {
+			printlnVerbose("DOWNLOAD: ", curEnv.bzImageURL)
+			resp, err := http.Get(curEnv.bzImageURL)
+			if err != nil {
+				return fmt.Errorf("error while downloading bzImage: %w", err)
+			}
+			defer resp.Body.Close()
+
+			bzFile, err = os.OpenFile(bzPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+			if err != nil {
+				return fmt.Errorf("error while creating bzImage: %w", err)
+			}
+			defer bzFile.Close()
+
+			_, err = io.Copy(bzFile, resp.Body)
+			if err != nil {
+				return fmt.Errorf("error while copying bzImage: %w", err)
+			}
+
+			return nil
+		}()
+		if err != nil {
+			return err
+		}
+	}
+
+	const initrdURL = "https://github.com/dylandreimerink/bpfci/raw/master/dist/initrd.gz"
+	initrdPath := path.Join(cacheDir, "initrd.gz")
+	dlInitrd := false
+
+	printlnVerbose("CHECKSUM:", initrdPath)
+	initrdFile, err := os.Open(initrdPath)
+	if err != nil {
+		dlInitrd = true
+	} else {
+		// Calculate the sha256 hash of the existing bzImage
+		h := sha256.New()
+
+		_, err = io.Copy(h, initrdFile)
+		if err != nil {
+			return fmt.Errorf("error while hashing initrd: %w", err)
+		}
+		bzFile.Close()
+
+		initrdHash := h.Sum(nil)
+
+		printlnVerbose("GET: ", initrdURL+".sha256")
+		resp, err := http.Get(initrdURL + ".sha256")
+		if err != nil {
+			return fmt.Errorf("error while downloading initrd hash: %w", err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("error while reading initrd hash: %w", err)
+		}
+
+		bodyStr := strings.TrimSpace(string(body))
+		if bodyStr != hex.EncodeToString(initrdHash) {
+			printlnVerbose(
+				"Remote =", bodyStr+",",
+				"Local =", hex.EncodeToString(initrdHash),
+			)
+			dlInitrd = true
+		}
+	}
+
+	if dlInitrd {
+		err = func() error {
+			printlnVerbose("DOWNLOAD: ", initrdURL)
+			resp, err := http.Get(initrdURL)
+			if err != nil {
+				return fmt.Errorf("error while downloading initrd: %w", err)
+			}
+			defer resp.Body.Close()
+
+			initrdFile, err = os.OpenFile(initrdPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+			if err != nil {
+				return fmt.Errorf("error while creating initrd: %w", err)
+			}
+			defer initrdFile.Close()
+
+			_, err = io.Copy(initrdFile, resp.Body)
+			if err != nil {
+				return fmt.Errorf("error while copying initrd: %w", err)
+			}
+
+			return nil
+		}()
+		if err != nil {
+			return err
+		}
+	}
+
 	// TODO setup bridge and tap devices
 
 	printlnVerbose("--- Starting test run in VM ---")
 
 	arguments := []string{
 		"-m", "4G", // Give the VM 4GB RAM, should be plenty
-		"-kernel", "bzImage", // Start kernel for the given environment
-		"-initrd", "initrd.gz", // Use this initial ram disk (which will call our run.sh after setup)
+		"-kernel", bzPath, // Start kernel for the given environment
+		"-initrd", initrdPath, // Use this initial ram disk (which will call our run.sh after setup)
 		"-drive", "format=raw,file=" + diskPath, // Use the created disk as a drive
 		"-netdev", "tap,id=bpfnet0,ifname=bpfci-tap1,script=no,downscript=no",
 		"-device", "e1000,mac=de:ad:be:ef:00:01,netdev=bpfnet0", // Add a E1000 NIC
@@ -392,6 +547,8 @@ func testEnvironment(envName string, buildFlags []string) error {
 	copyFiles = []string{}
 	for _, execName := range executables {
 		copyFiles = append(copyFiles, execName+".results")
+		copyFiles = append(copyFiles, execName+".error")
+		copyFiles = append(copyFiles, execName+".exit")
 
 		// TODO add files depending on flags
 	}
