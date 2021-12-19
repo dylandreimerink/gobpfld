@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -18,11 +19,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dylandreimerink/gocovmerge"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
+	"golang.org/x/tools/cover"
 )
 
 func main() {
+	//nolint:errcheck // can't do anything about an error, cobra prints it already
 	rootCmd().Execute()
 }
 
@@ -37,14 +41,18 @@ func rootCmd() *cobra.Command {
 }
 
 var (
-	flagVerbose   bool
-	flagCover     bool
-	flagCoverMode string
-	flagRun       string
-	flagTestEnvs  []string
-	flagKeepTmp   bool
-	flagShort     bool
-	flagFailFast  bool
+	flagVerbose bool
+	flagKeepTmp bool
+
+	flagOutputDir  string
+	flagCover      bool
+	flagCoverMode  string
+	flagHTMLReport bool
+
+	flagShort    bool
+	flagFailFast bool
+	flagRun      string
+	flagTestEnvs []string
 )
 
 func testCmd() *cobra.Command {
@@ -57,9 +65,17 @@ func testCmd() *cobra.Command {
 	f := c.Flags()
 	f.BoolVarP(&flagVerbose, "verbose", "v", false, "If set, both this command will output verbosely and all called "+
 		"commands will be called verbosely as well, thus outputting extra information")
+	f.BoolVar(&flagKeepTmp, "keep-tmp", false, "If set, the temporary directories will not be deleted after the test"+
+		"run so intermediate files can be inspected")
+
+	f.StringVarP(&flagOutputDir, "output-dir", "o", "./gobpfld-test-results", "Path to the directory where the result "+
+		"files are stored (report, coverage, profiling, tracing)")
 	f.BoolVar(&flagCover, "cover", false, "Enable coverage analysis")
-	f.StringVar(&flagCoverMode, "covermode", "set", "Set the mode for coverage analysis for the package[s]"+
-		" being tested. The default is \"set\" unless -race is enabled, in which case it is \"atomic\".")
+	f.StringVar(&flagCoverMode, "covermode", "set", "set,count,atomic. Set the mode for coverage analysis for the"+
+		" package[s] being tested. The default is \"set\" unless -race is enabled, in which case it is \"atomic\".")
+	f.BoolVar(&flagHTMLReport, "html-report", false, "If set, a HTML report will be created combining all available "+
+		"data, including all results, coverage, and profiling")
+
 	f.BoolVar(&flagShort, "short", false, "Tell long-running tests to shorten their run time.")
 	f.BoolVar(&flagFailFast, "failfast", false, "Do not start new tests after the first test failure.")
 	f.StringVar(&flagRun, "run", "", "Run only those tests and examples matching the regular expression."+
@@ -71,8 +87,6 @@ func testCmd() *cobra.Command {
 		"of all tests matching X, even those without sub-tests matching Y, "+
 		"because it must run them to look for those sub-tests.")
 	f.StringArrayVar(&flagTestEnvs, "test-env", nil, "If set, tests will only be ran in the given environments")
-	f.BoolVar(&flagKeepTmp, "keep-tmp", false, "If set, the temporary directories will not be deleted after the test"+
-		"run so intermediate files can be inspected")
 	return c
 }
 
@@ -182,9 +196,9 @@ func buildAndRunTests(cmd *cobra.Command, args []string) error {
 
 	for env, envResults := range results {
 		if envFailed[env] {
-			fmt.Println("FAIL: ", env)
+			fmt.Println("FAIL:", env)
 		} else {
-			fmt.Println("PASS: ", env)
+			fmt.Println("PASS:", env)
 		}
 
 		for _, testResult := range envResults {
@@ -300,6 +314,12 @@ func buildTestBinaries(ctx *testCtx) error {
 		"-tags", "bpftests", // Include tests that use the BPF syscall
 	}
 
+	// Include cover mode when building, because according to `go help testflag` coverage reporting annotates
+	// the test binary.
+	if flagCover {
+		buildFlags = append(buildFlags, "-covermode", flagCoverMode)
+	}
+
 	ctx.executables = make([]string, 0, len(packages))
 	for _, pkg := range packages {
 		pkgName := strings.Join([]string{path.Base(pkg), "test"}, ".")
@@ -340,7 +360,9 @@ func genVMRunScript(ctx *testCtx) error {
 			"-test.v",
 		}
 
-		// TODO cover flags
+		if flagCover {
+			flags = append(flags, "-test.coverprofile", path.Join(vmPath, execName+".cover"))
+		}
 
 		if flagFailFast {
 			flags = append(flags, "-test.failfast")
@@ -368,6 +390,8 @@ func genVMRunScript(ctx *testCtx) error {
 
 	// Write the shell script
 	printlnVerbose(scriptBuf.String())
+
+	//nolint:gosec // Creating an executable on purpose
 	err := os.WriteFile(path.Join(ctx.tmpDir, "run.sh"), scriptBuf.Bytes(), 0755)
 	if err != nil {
 		return fmt.Errorf("error while writing run script: %w", err)
@@ -684,7 +708,9 @@ func extractData(ctx *testCtx) error {
 		copyFiles = append(copyFiles, execName+".error")
 		copyFiles = append(copyFiles, execName+".exit")
 
-		// TODO add files depending on flags
+		if flagCover {
+			copyFiles = append(copyFiles, execName+".cover")
+		}
 	}
 
 	for _, fileName := range copyFiles {
@@ -694,7 +720,78 @@ func extractData(ctx *testCtx) error {
 		}
 	}
 
-	// TODO move result files like traces and profiles to an output directory
+	// Merge all .cover files
+	if flagCover {
+		var merged []*cover.Profile
+		for _, execName := range ctx.executables {
+			profiles, err := cover.ParseProfiles(path.Join(ctx.tmpDir, execName+".cover"))
+			if err != nil {
+				log.Fatalf("failed to parse profiles: %v", err)
+			}
+			for _, p := range profiles {
+				merged = gocovmerge.AddProfile(merged, p)
+			}
+		}
+
+		coverPath := path.Join(ctx.tmpDir, "gobpfld.cover")
+		coverFile, err := os.Create(path.Join(ctx.tmpDir, "gobpfld.cover"))
+		if err != nil {
+			return fmt.Errorf("make combined coverfile: %w", err)
+		}
+
+		gocovmerge.DumpProfiles(merged, coverFile)
+
+		err = coverFile.Close()
+		if err != nil {
+			return fmt.Errorf("close combined coverfile: %w", err)
+		}
+
+		if flagHTMLReport {
+			_, err = execCmd(
+				"go", "tool", "cover",
+				"-html="+coverPath,
+				"-o", path.Join(ctx.tmpDir, "gobpfld.cover.html"),
+			)
+			if err != nil {
+				return fmt.Errorf("make html coverage report: %w", err)
+			}
+		}
+	}
+
+	copyFiles = []string{}
+	if flagCover {
+		copyFiles = append(copyFiles, "gobpfld.cover")
+		if flagHTMLReport {
+			copyFiles = append(copyFiles, "gobpfld.cover.html")
+		}
+	}
+
+	// If there are no output files
+	if len(copyFiles) == 0 {
+		return nil
+	}
+
+	outDir := path.Join(flagOutputDir, ctx.envName)
+
+	printlnVerbose("STAT:", outDir)
+	// If the directory exists, remove it
+	if _, err = os.Stat(outDir); err == nil {
+		printlnVerbose("RM:", outDir)
+		os.RemoveAll(outDir)
+	}
+
+	printlnVerbose("MKDIR:", outDir)
+	err = os.MkdirAll(outDir, 0755)
+	if err != nil {
+		return fmt.Errorf("make output dir: %w", err)
+	}
+
+	for _, fileName := range copyFiles {
+		err = copyFile(path.Join(ctx.tmpDir, fileName), path.Join(outDir, fileName))
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -795,12 +892,12 @@ type testStatus string
 
 const (
 	// has not (yet) been run
-	statusUntested testStatus = "UNTESTED"
+	// statusUntested testStatus = "UNTESTED"
 	// tested and passed
 	statusPass testStatus = "PASS"
 	// tested and failed
 	statusFail testStatus = "FAIL"
-	// skiped testing, due to -short flag or kernel incompatibility
+	// skipped testing, due to -short flag or kernel incompatibility
 	statusSkip testStatus = "SKIP"
 )
 

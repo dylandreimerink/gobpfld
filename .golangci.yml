@@ -1,6 +1,7 @@
 run:
   skip-dirs:
-    - "cmd" # Commands are not part of the library, just examples at the moment
+    - "cmd/examples" # Commands are not part of the library, just examples at the moment
+    - "cmd/test"
   tests: false
 
 linters-settings:
@@ -43,6 +44,8 @@ linters-settings:
       - github.com/dylandreimerink/gobpfld
       - github.com/alecthomas/participle/v2
       - github.com/spf13/cobra
+      - golang.org/x/tools/cover
+      - github.com/dylandreimerink/gocovmerge
 
 linters:
   # please, do not use `enable-all`: it's deprecated and will be removed soon.
