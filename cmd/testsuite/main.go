@@ -192,17 +192,30 @@ func buildAndRunTests(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// TODO generate HTML report + rest results in matrix (optionally)
-
-	for env, envResults := range results {
-		if envFailed[env] {
-			fmt.Println("FAIL:", env)
-		} else {
-			fmt.Println("PASS:", env)
+	if flagHTMLReport {
+		htmlPath := path.Join(flagOutputDir, "report.html")
+		printlnVerbose("OPEN:", htmlPath)
+		htmlFile, err := os.Create(htmlPath)
+		if err != nil {
+			return fmt.Errorf("create html report: %w", err)
 		}
+		defer htmlFile.Close()
 
-		for _, testResult := range envResults {
-			fmt.Printf("  %s: %s (%s)\n", testResult.Status, testResult.Name, testResult.Duration)
+		err = renderHTMLReport(results, htmlFile)
+		if err != nil {
+			return fmt.Errorf("render html report: %w", err)
+		}
+	} else {
+		for env, envResults := range results {
+			if envFailed[env] {
+				fmt.Println("FAIL:", env)
+			} else {
+				fmt.Println("PASS:", env)
+			}
+
+			for _, testResult := range envResults {
+				fmt.Printf("  %s: %s (%s)\n", testResult.Status, testResult.Name, testResult.Duration)
+			}
 		}
 	}
 
