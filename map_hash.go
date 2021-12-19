@@ -112,7 +112,7 @@ func (m *HashMap) GetAndDeleteBatch(
 
 func (m *HashMap) Iterator() MapIterator {
 	// If the kernel doesn't have support for batch lookup, use single lookup
-	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapLookupBatch) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapBatchOps) {
 		return &singleLookupIterator{
 			BPFMap: m,
 		}

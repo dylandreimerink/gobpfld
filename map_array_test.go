@@ -10,6 +10,7 @@ import (
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
+	"github.com/dylandreimerink/gobpfld/kernelsupport"
 )
 
 const (
@@ -91,6 +92,11 @@ func TestArrayMap_SingleGetSet_HappyPath(t *testing.T) {
 
 // Tests that getting and setting of single keys work for a mmaped array map
 func TestArrayMapMMAP_SingleGetSet_HappyPath(t *testing.T) {
+	// We can only perform this test if the kernel we are running on supports it
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapMMap) {
+		t.Skip("Skip because the feature is not supported by current kernel version")
+	}
+
 	const maxEntries = 1000
 	arrayMap := ArrayMap{
 		AbstractMap: AbstractMap{
@@ -109,6 +115,11 @@ func TestArrayMapMMAP_SingleGetSet_HappyPath(t *testing.T) {
 }
 
 func testArraymap_BatchGetSet_happyPath(t *testing.T, arrayMap *ArrayMap, maxEntries int) {
+	// We can only perform this test if the kernel we are running on supports it
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapBatchOps) {
+		t.Skip("Skip because the feature is not supported by current kernel version")
+	}
+
 	err := arrayMap.Load()
 	if err != nil {
 		t.Fatal(err)
@@ -213,6 +224,11 @@ func TestArrayMapMMap_BulkGetSet_HappyPath(t *testing.T) {
 }
 
 func TestArrayMapMMap_BulkGetSet_Edgecases(t *testing.T) {
+	// We can only perform this test if the kernel we are running on supports it
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapMMap) {
+		t.Skip("Skip because the feature is not supported by current kernel version")
+	}
+
 	const maxEntries = 1000
 	arrayMap := ArrayMap{
 		AbstractMap: AbstractMap{

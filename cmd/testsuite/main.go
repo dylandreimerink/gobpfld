@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -13,7 +14,9 @@ import (
 	"os/user"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
@@ -40,6 +43,8 @@ var (
 	flagRun       string
 	flagTestEnvs  []string
 	flagKeepTmp   bool
+	flagShort     bool
+	flagFailFast  bool
 )
 
 func testCmd() *cobra.Command {
@@ -55,6 +60,8 @@ func testCmd() *cobra.Command {
 	f.BoolVar(&flagCover, "cover", false, "Enable coverage analysis")
 	f.StringVar(&flagCoverMode, "covermode", "set", "Set the mode for coverage analysis for the package[s]"+
 		" being tested. The default is \"set\" unless -race is enabled, in which case it is \"atomic\".")
+	f.BoolVar(&flagShort, "short", false, "Tell long-running tests to shorten their run time.")
+	f.BoolVar(&flagFailFast, "failfast", false, "Do not start new tests after the first test failure.")
 	f.StringVar(&flagRun, "run", "", "Run only those tests and examples matching the regular expression."+
 		"For tests, the regular expression is split by unbracketed slash (/) "+
 		"characters into a sequence of regular expressions, and each part "+
@@ -120,28 +127,6 @@ func buildAndRunTests(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error while elevating: %w", err)
 	}
 
-	buildFlags := []string{
-		"test",              // invoke the test sub-command
-		"-c",                // Compile the binary, but don't execute it
-		"-tags", "bpftests", // Include tests that use the BPF syscall
-	}
-
-	if flagVerbose {
-		buildFlags = append(buildFlags, "-v")
-	}
-
-	if flagCover {
-		buildFlags = append(buildFlags, "-cover")
-	}
-
-	if flagCoverMode != "" {
-		buildFlags = append(buildFlags, "-covermode", flagCoverMode)
-	}
-
-	if flagRun != "" {
-		buildFlags = append(buildFlags, "-run", flagRun)
-	}
-
 	environments := flagTestEnvs
 	if len(environments) == 0 {
 		for env := range availableEnvs {
@@ -166,53 +151,159 @@ func buildAndRunTests(cmd *cobra.Command, args []string) error {
 	// Sort environments so we always execute them in the same order.
 	sort.Strings(environments)
 
+	results := make(map[string]map[string]testResult)
+	// TODO pre-fill with a list of tests gotten via the `go test {pkgname} -list '.*'` command
+
+	// TODO run tests in goroutine and display progress bar (in non-verbose mode)
+
+	envFailed := make(map[string]bool)
+
 	for _, curEnvName := range environments {
-		err := testEnvironment(curEnvName, buildFlags)
+		envResults, err := testEnvironment(&testCtx{
+			envName: curEnvName,
+		})
+		// TODO merge maps once results is pre-filled
+		results[curEnvName] = envResults
 		if err != nil {
-			return err
+			if !errors.Is(err, errTestsFailed) {
+				return err
+			}
+
+			envFailed[curEnvName] = true
+
+			// If we want to fail fast, don't test any other environments, report what we have
+			if flagFailFast {
+				break
+			}
 		}
+	}
+
+	// TODO generate HTML report + rest results in matrix (optionally)
+
+	for env, envResults := range results {
+		if envFailed[env] {
+			fmt.Println("FAIL: ", env)
+		} else {
+			fmt.Println("PASS: ", env)
+		}
+
+		for _, testResult := range envResults {
+			fmt.Printf("  %s: %s (%s)\n", testResult.Status, testResult.Name, testResult.Duration)
+		}
+	}
+
+	// If there is at least one failed environment, return a non-0 exit code
+	if len(envFailed) != 0 {
+		os.Exit(2)
 	}
 
 	return nil
 }
 
-func testEnvironment(envName string, buildFlags []string) error {
-	curEnv := availableEnvs[envName]
+var errTestsFailed = errors.New("one or more tests failed")
 
-	printlnVerbose("=== Running tests for", envName, "===")
+type testCtx struct {
+	// Set before testEnvironment
+	envName string
+
+	// Set by testEnvironment
+	results     map[string]testResult
+	curEnv      testEnv
+	tmpDir      string
+	executables []string
+
+	// Set by buildVMDiskImg
+	diskPath string
+
+	// Set by downloadLinux
+	bzPath     string
+	initrdPath string
+}
+
+func testEnvironment(ctx *testCtx) (map[string]testResult, error) {
+	ctx.curEnv = availableEnvs[ctx.envName]
+	ctx.results = make(map[string]testResult)
+
+	printlnVerbose("=== Running tests for", ctx.envName, "===")
 
 	// example: /tmp/bpftestsuite-amd64-1099045701
-	tmpDir, err := os.MkdirTemp(os.TempDir(), strings.Join([]string{"bpftestsuite", curEnv.arch, "*"}, "-"))
+	var err error
+	ctx.tmpDir, err = os.MkdirTemp(os.TempDir(), strings.Join([]string{"bpftestsuite", ctx.curEnv.arch, "*"}, "-"))
 	if err != nil {
-		return fmt.Errorf("error while making a temporary directory: %w", err)
+		return ctx.results, fmt.Errorf("error while making a temporary directory: %w", err)
 	}
 
-	printlnVerbose("Using tempdir:", tmpDir)
+	printlnVerbose("Using tempdir:", ctx.tmpDir)
 
 	// cleanup the temp dir after we are done, unless the user wan't to keep it
 	if !flagKeepTmp {
 		defer func() {
 			printlnVerbose("--- Cleaning up tmp dir ---")
-			err := os.RemoveAll(tmpDir)
+			err := os.RemoveAll(ctx.tmpDir)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "error while cleaning up tmp dir '%s': %s", tmpDir, err.Error())
+				fmt.Fprintf(os.Stderr, "error while cleaning up tmp dir '%s': %s", ctx.tmpDir, err.Error())
 			}
-			printlnVerbose("RM:", tmpDir)
+			printlnVerbose("RM:", ctx.tmpDir)
 		}()
 	}
 
-	envVars := append(
-		os.Environ(),          // Append to existing ENV vars
-		"GOARCH="+curEnv.arch, // Set target architecture
-		"CGO_ENABLED=0",       // Disable CGO (to trigger static compilation)
-	)
+	err = buildTestBinaries(ctx)
+	if err != nil {
+		return ctx.results, fmt.Errorf("buildTestBinaries: %w", err)
+	}
 
+	err = genVMRunScript(ctx)
+	if err != nil {
+		return ctx.results, fmt.Errorf("genVMRunScript: %w", err)
+	}
+
+	err = buildVMDiskImg(ctx)
+	if err != nil {
+		return ctx.results, fmt.Errorf("buildVMDiskImg: %w", err)
+	}
+
+	err = downloadLinux(ctx)
+	if err != nil {
+		return ctx.results, fmt.Errorf("downloadLinux: %w", err)
+	}
+
+	err = runTestInVM(ctx)
+	if err != nil {
+		return ctx.results, fmt.Errorf("runTestInVM: %w", err)
+	}
+
+	err = extractData(ctx)
+	if err != nil {
+		return ctx.results, fmt.Errorf("extractData: %w", err)
+	}
+
+	err = processResults(ctx)
+	if err != nil {
+		return ctx.results, fmt.Errorf("processResults: %w", err)
+	}
+
+	return ctx.results, nil
+}
+
+func buildTestBinaries(ctx *testCtx) error {
 	printlnVerbose("--- Build test binaries ---")
 
-	executables := make([]string, 0, len(packages))
+	envVars := append(
+		os.Environ(),              // Append to existing ENV vars
+		"GOARCH="+ctx.curEnv.arch, // Set target architecture
+		"CGO_ENABLED=0",           // Disable CGO (to trigger static compilation)
+	)
+
+	buildFlags := []string{
+		"test",              // invoke the test sub-command
+		"-c",                // Compile the binary, but don't execute it
+		"-tags", "bpftests", // Include tests that use the BPF syscall
+	}
+
+	ctx.executables = make([]string, 0, len(packages))
 	for _, pkg := range packages {
 		pkgName := strings.Join([]string{path.Base(pkg), "test"}, ".")
-		execPath := path.Join(tmpDir, pkgName)
+		execPath := path.Join(ctx.tmpDir, pkgName)
 
 		arguments := append(
 			buildFlags,
@@ -220,16 +311,22 @@ func testEnvironment(envName string, buildFlags []string) error {
 			pkg,
 		)
 
-		_, err = execEnvCmd(envVars, "go", arguments...)
+		_, err := execEnvCmd(envVars, "go", arguments...)
 		if err != nil {
 			return fmt.Errorf("error while building tests: %w", err)
 		}
 
 		// If a package contains no tests, no executable is generated
 		if _, err := os.Stat(execPath); err == nil {
-			executables = append(executables, pkgName)
+			ctx.executables = append(ctx.executables, pkgName)
 		}
 	}
+
+	return nil
+}
+
+func genVMRunScript(ctx *testCtx) error {
+	printlnVerbose("--- Generate VM run script ---")
 
 	// Make a buffer for the actual script which will execute the tests inside the VM
 	scriptBuf := bytes.Buffer{}
@@ -237,17 +334,28 @@ func testEnvironment(envName string, buildFlags []string) error {
 
 	// The the location where the disk will be mounted in the VM
 	const vmPath = "/mnt/root"
-	for _, execName := range executables {
-		flags := make([]string, 0)
+	for _, execName := range ctx.executables {
+		flags := []string{
+			// Always return verbose output, it contains info about which tests actually ran or were skipped
+			"-test.v",
+		}
 
-		// TODO generate runtime flags
+		// TODO cover flags
+
+		if flagFailFast {
+			flags = append(flags, "-test.failfast")
+		}
+
+		if flagShort {
+			flags = append(flags, "-test.short")
+		}
 
 		// Run script, write stdout to "$exec.results", write stderr to "$exec.error" and the exit code to "$exec.exit"
 		fmt.Fprintf(
 			&scriptBuf,
 			"%s %s > %s 2> %s\necho $? > %s\n",
 			path.Join(vmPath, execName),
-			strings.Join(flags, ", "),
+			strings.Join(flags, " "),
 			path.Join(vmPath, execName+".results"),
 			path.Join(vmPath, execName+".error"),
 			path.Join(vmPath, execName+".exit"),
@@ -259,19 +367,24 @@ func testEnvironment(envName string, buildFlags []string) error {
 	fmt.Fprintln(&scriptBuf, "poweroff -f")
 
 	// Write the shell script
-	printlnVerbose("--- Generate VM run script ---")
 	printlnVerbose(scriptBuf.String())
-	err = os.WriteFile(path.Join(tmpDir, "run.sh"), scriptBuf.Bytes(), 0755)
+	err := os.WriteFile(path.Join(ctx.tmpDir, "run.sh"), scriptBuf.Bytes(), 0755)
 	if err != nil {
 		return fmt.Errorf("error while writing run script: %w", err)
 	}
 
+	return nil
+}
+
+const mntPath = "/mnt/bpftestdisk"
+
+func buildVMDiskImg(ctx *testCtx) error {
 	printlnVerbose("--- Build VM disk image ---")
 
-	diskPath := path.Join(tmpDir, "disk.img")
+	ctx.diskPath = path.Join(ctx.tmpDir, "disk.img")
 	// Create a 256MB(should be plenty) raw disk which we will later use to add the test executables to the VM
 	// and later get back the test results
-	_, err = execCmd("qemu-img", "create", diskPath, "256M")
+	_, err := execCmd("qemu-img", "create", ctx.diskPath, "256M")
 	if err != nil {
 		return fmt.Errorf("error while creating qemu image: %w", err)
 	}
@@ -279,7 +392,7 @@ func testEnvironment(envName string, buildFlags []string) error {
 	// Add master boot record partition table to raw image
 	_, err = execCmd(
 		"parted",
-		"-s", diskPath,
+		"-s", ctx.diskPath,
 		"mklabel msdos",
 		"mkpart primary ext2 2048s 100%",
 	)
@@ -288,13 +401,11 @@ func testEnvironment(envName string, buildFlags []string) error {
 	}
 
 	// Create a loop device from the disk file which will allow us to mount it
-	loopDevBytes, err := execCmd("losetup", "--partscan", "--show", "--find", diskPath)
+	loopDevBytes, err := execCmd("losetup", "--partscan", "--show", "--find", ctx.diskPath)
 	if err != nil {
 		return fmt.Errorf("error while creating loop device: %w", err)
 	}
 	loopDev := strings.TrimSpace(string(loopDevBytes))
-
-	const mntPath = "/mnt/bpftestdisk"
 
 	printlnVerbose("MKDIR: ", mntPath)
 	err = os.Mkdir(mntPath, 0755)
@@ -323,9 +434,9 @@ func testEnvironment(envName string, buildFlags []string) error {
 	}
 
 	// Copy all executables and the run script to the new disk
-	copyFiles := append(executables, "run.sh")
+	copyFiles := append(ctx.executables, "run.sh")
 	for _, fileName := range copyFiles {
-		tmpPath := path.Join(tmpDir, fileName)
+		tmpPath := path.Join(ctx.tmpDir, fileName)
 		mntPath := path.Join(mntPath, fileName)
 
 		err = copyFile(tmpPath, mntPath)
@@ -346,21 +457,25 @@ func testEnvironment(envName string, buildFlags []string) error {
 		fmt.Fprintf(os.Stderr, "Error while deleting loop device '%s': %s", loopDev, err.Error())
 	}
 
+	return nil
+}
+
+func downloadLinux(ctx *testCtx) error {
 	printlnVerbose("--- Checking/downloading bzImage and initrd ---")
 
 	const cacheDir = "/var/cache/bpfld"
 	printlnVerbose("MKDIR", cacheDir)
-	err = os.MkdirAll(cacheDir, 0755)
+	err := os.MkdirAll(cacheDir, 0755)
 	if err != nil {
 		return fmt.Errorf("error while creating cache directory: %w", err)
 	}
 
-	bzFilename := fmt.Sprintf("%s-%s.bzImage", curEnv.arch, curEnv.kernel)
-	bzPath := path.Join(cacheDir, bzFilename)
+	bzFilename := fmt.Sprintf("%s-%s.bzImage", ctx.curEnv.arch, ctx.curEnv.kernel)
+	ctx.bzPath = path.Join(cacheDir, bzFilename)
 	dlBZ := false
 
-	printlnVerbose("CHECKSUM:", bzPath)
-	bzFile, err := os.Open(bzPath)
+	printlnVerbose("CHECKSUM:", ctx.bzPath)
+	bzFile, err := os.Open(ctx.bzPath)
 	if err != nil {
 		dlBZ = true
 	} else {
@@ -375,8 +490,8 @@ func testEnvironment(envName string, buildFlags []string) error {
 
 		bzHash := h.Sum(nil)
 
-		printlnVerbose("GET: ", curEnv.bzImageURL+".sha256")
-		resp, err := http.Get(curEnv.bzImageURL + ".sha256")
+		printlnVerbose("GET: ", ctx.curEnv.bzImageURL+".sha256")
+		resp, err := http.Get(ctx.curEnv.bzImageURL + ".sha256")
 		if err != nil {
 			return fmt.Errorf("error while downloading bzImage hash: %w", err)
 		}
@@ -400,14 +515,14 @@ func testEnvironment(envName string, buildFlags []string) error {
 	// If we can't stat the bzImage in the cache dir, download it
 	if dlBZ {
 		err = func() error {
-			printlnVerbose("DOWNLOAD: ", curEnv.bzImageURL)
-			resp, err := http.Get(curEnv.bzImageURL)
+			printlnVerbose("DOWNLOAD: ", ctx.curEnv.bzImageURL)
+			resp, err := http.Get(ctx.curEnv.bzImageURL)
 			if err != nil {
 				return fmt.Errorf("error while downloading bzImage: %w", err)
 			}
 			defer resp.Body.Close()
 
-			bzFile, err = os.OpenFile(bzPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+			bzFile, err = os.OpenFile(ctx.bzPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 			if err != nil {
 				return fmt.Errorf("error while creating bzImage: %w", err)
 			}
@@ -426,11 +541,11 @@ func testEnvironment(envName string, buildFlags []string) error {
 	}
 
 	const initrdURL = "https://github.com/dylandreimerink/bpfci/raw/master/dist/initrd.gz"
-	initrdPath := path.Join(cacheDir, "initrd.gz")
+	ctx.initrdPath = path.Join(cacheDir, "initrd.gz")
 	dlInitrd := false
 
-	printlnVerbose("CHECKSUM:", initrdPath)
-	initrdFile, err := os.Open(initrdPath)
+	printlnVerbose("CHECKSUM:", ctx.initrdPath)
+	initrdFile, err := os.Open(ctx.initrdPath)
 	if err != nil {
 		dlInitrd = true
 	} else {
@@ -476,7 +591,7 @@ func testEnvironment(envName string, buildFlags []string) error {
 			}
 			defer resp.Body.Close()
 
-			initrdFile, err = os.OpenFile(initrdPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+			initrdFile, err = os.OpenFile(ctx.initrdPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 			if err != nil {
 				return fmt.Errorf("error while creating initrd: %w", err)
 			}
@@ -494,38 +609,59 @@ func testEnvironment(envName string, buildFlags []string) error {
 		}
 	}
 
-	// TODO setup bridge and tap devices
+	return nil
+}
 
+func runTestInVM(ctx *testCtx) error {
+	// TODO setup bridge and tap devices
 	printlnVerbose("--- Starting test run in VM ---")
 
 	arguments := []string{
 		"-m", "4G", // Give the VM 4GB RAM, should be plenty
-		"-kernel", bzPath, // Start kernel for the given environment
-		"-initrd", initrdPath, // Use this initial ram disk (which will call our run.sh after setup)
-		"-drive", "format=raw,file=" + diskPath, // Use the created disk as a drive
+		"-kernel", ctx.bzPath, // Start kernel for the given environment
+		"-initrd", ctx.initrdPath, // Use this initial ram disk (which will call our run.sh after setup)
+		"-drive", "format=raw,file=" + ctx.diskPath, // Use the created disk as a drive
 		"-netdev", "tap,id=bpfnet0,ifname=bpfci-tap1,script=no,downscript=no",
 		"-device", "e1000,mac=de:ad:be:ef:00:01,netdev=bpfnet0", // Add a E1000 NIC
 		"-append", "root=/dev/sda1",
 		// TODO run with no-graphics and capture kernel output
 	}
-	_, err = execCmd("qemu-system-x86_64", arguments...)
+	_, err := execCmd("qemu-system-x86_64", arguments...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error while starting VM: %s", err.Error())
 	}
 
+	return nil
+}
+
+func extractData(ctx *testCtx) error {
 	printlnVerbose("--- Remounting disk ---")
 
 	// Create a loop device from the disk file which will allow us to mount it
-	loopDevBytes, err = execCmd("losetup", "--partscan", "--show", "--find", diskPath)
+	loopDevBytes, err := execCmd("losetup", "--partscan", "--show", "--find", ctx.diskPath)
 	if err != nil {
 		return fmt.Errorf("error while creating loop device: %w", err)
 	}
-	loopDev = strings.TrimSpace(string(loopDevBytes))
+	loopDev := strings.TrimSpace(string(loopDevBytes))
 	defer func() {
 		// Remove the loop device
 		_, err = execCmd("losetup", "-d", loopDev)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error while deleting loop device '%s': %s", loopDev, err.Error())
+		}
+	}()
+
+	printlnVerbose("MKDIR: ", mntPath)
+	err = os.Mkdir(mntPath, 0755)
+	if err != nil && err != fs.ErrExist {
+		return fmt.Errorf("error while making mnt dir: %w", err)
+	}
+	defer func() {
+		// Remove the mount path
+		printlnVerbose("RM:", mntPath)
+		err = os.Remove(mntPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error while deleting mount dir '%s': %s", mntPath, err.Error())
 		}
 	}()
 
@@ -542,10 +678,8 @@ func testEnvironment(envName string, buildFlags []string) error {
 		}
 	}()
 
-	printlnVerbose("--- Processing results ---")
-
-	copyFiles = []string{}
-	for _, execName := range executables {
+	copyFiles := []string{}
+	for _, execName := range ctx.executables {
 		copyFiles = append(copyFiles, execName+".results")
 		copyFiles = append(copyFiles, execName+".error")
 		copyFiles = append(copyFiles, execName+".exit")
@@ -553,17 +687,128 @@ func testEnvironment(envName string, buildFlags []string) error {
 		// TODO add files depending on flags
 	}
 
-	// TODO move results to in memory zip file for this environment, instead of tmp dir
 	for _, fileName := range copyFiles {
-		err = copyFile(path.Join(mntPath, fileName), path.Join(tmpDir, fileName))
+		err = copyFile(path.Join(mntPath, fileName), path.Join(ctx.tmpDir, fileName))
 		if err != nil {
 			return err
 		}
 	}
 
-	// TODO give user feedback based on results
+	// TODO move result files like traces and profiles to an output directory
 
 	return nil
+}
+
+func processResults(ctx *testCtx) error {
+	printlnVerbose("--- Processing results ---")
+
+	exitWithErr := false
+
+	for _, execName := range ctx.executables {
+		exitPath := path.Join(ctx.tmpDir, execName+".exit")
+		errCodeBytes, err := os.ReadFile(exitPath)
+		if err != nil {
+			return fmt.Errorf("read exit code file '%s': %w", exitPath, err)
+		}
+
+		exitCode, err := strconv.Atoi(strings.TrimSpace(string(errCodeBytes)))
+		if err != nil {
+			return fmt.Errorf("exit code file atoi '%s': %w", exitPath, err)
+		}
+
+		resultPath := path.Join(ctx.tmpDir, execName+".results")
+		testResults, err := os.ReadFile(resultPath)
+		if err != nil {
+			return fmt.Errorf("read results file '%s': %w", resultPath, err)
+		}
+
+		// Get back the package name from the executable name
+		pkg := strings.TrimSuffix(execName, ".test")
+
+		// If error code == 0, the executable returned without errors
+		if exitCode != 0 {
+			printlnVerbose(fmt.Sprintf("%s FAIL\nTests exited with code '%d'", pkg, exitCode))
+			exitWithErr = true
+
+			errorPath := path.Join(ctx.tmpDir, execName+".error")
+			testError, err := os.ReadFile(errorPath)
+			if err != nil {
+				return fmt.Errorf("read error file '%s': %w", errorPath, err)
+			}
+
+			fmt.Printf("Stdout:\n%s\n", string(testResults))
+			fmt.Printf("Stderr:\n%s\n", string(testError))
+		}
+
+		for _, line := range strings.Split(string(testResults), "\n") {
+			const (
+				passPrefix = "--- PASS:"
+				failPrefix = "--- FAIL:"
+				skipPrefix = "--- SKIP:"
+			)
+
+			var status testStatus
+
+			if strings.HasPrefix(line, passPrefix) {
+				line = strings.TrimSpace(strings.TrimPrefix(line, passPrefix))
+				status = statusPass
+			} else if strings.HasPrefix(line, failPrefix) {
+				line = strings.TrimSpace(strings.TrimPrefix(line, failPrefix))
+				status = statusFail
+			} else if strings.HasPrefix(line, skipPrefix) {
+				line = strings.TrimSpace(strings.TrimPrefix(line, skipPrefix))
+				status = statusSkip
+			} else {
+				continue
+			}
+
+			parts := strings.Split(line, " ")
+			if len(parts) < 2 {
+				fmt.Fprintln(os.Stderr, "unexpected test results(parts < 2)")
+				continue
+			}
+
+			testName := parts[0]
+			durationStr := strings.Trim(parts[1], "()")
+			duration, err := time.ParseDuration(durationStr)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "unexpected test results:", err.Error())
+				continue
+			}
+
+			ctx.results[testName] = testResult{
+				Name:     testName,
+				Status:   status,
+				Duration: duration,
+			}
+		}
+	}
+
+	if exitWithErr {
+		return errTestsFailed
+	}
+
+	return nil
+}
+
+type testStatus string
+
+const (
+	// has not (yet) been run
+	statusUntested testStatus = "UNTESTED"
+	// tested and passed
+	statusPass testStatus = "PASS"
+	// tested and failed
+	statusFail testStatus = "FAIL"
+	// skiped testing, due to -short flag or kernel incompatibility
+	statusSkip testStatus = "SKIP"
+)
+
+type testResult struct {
+	Name     string
+	Status   testStatus
+	Duration time.Duration
+	// TODO return sub-test data?
 }
 
 func copyFile(from, to string) error {

@@ -23,10 +23,7 @@ const (
 	KFeatAPIMapBPFRW
 	KFeatAPIMapFreeze
 	KFeatAPIMapMMap
-	KFeatAPIMapLookupBatch
-	KFeatAPIMapUpdateBatch
-	KFeatAPIMapDeleteBatch
-	KFeatAPIMapLookupAndDeleteBatch
+	KFeatAPIMapBatchOps
 	// 4.4 OBJ_PIN and OBJ_GET
 	KFeatAPIObjPinGet
 	// 4.10 PROG_ATTACH and PROG_DETACH
@@ -82,43 +79,40 @@ func (as APISupport) Has(flags APISupport) bool {
 }
 
 var apiSupportToString = map[APISupport]string{
-	KFeatAPIBasic:                   "Map create, map lookup, map update, map getnext, prog load",
-	KFeatAPIMapGetNextNull:          "Map get next null",
-	KFeatAPIMapNumaCreate:           "Map NUMA create",
-	KFeatAPIMapSyscallRW:            "Map syscall R/W",
-	KFeatAPIMapName:                 "Map name",
-	KFeatAPIMapLookupAndDelete:      "Map lookup and delete",
-	KFeatAPIMapZeroSeed:             "Map zero seed",
-	KFeatAPIMapLock:                 "Map lock",
-	KFeatAPIMapBPFRW:                "Map BPF R/W",
-	KFeatAPIMapFreeze:               "Map freeze",
-	KFeatAPIMapMMap:                 "Map MMap",
-	KFeatAPIMapLookupBatch:          "Map lookup batch",
-	KFeatAPIMapUpdateBatch:          "Map update batch",
-	KFeatAPIMapDeleteBatch:          "Map delete batch",
-	KFeatAPIMapLookupAndDeleteBatch: "Map lookup and delete batch",
-	KFeatAPIObjPinGet:               "Object pin/get",
-	KFeatAPIProgramAttachDetach:     "Program attach/detach",
-	KFeatAPIProgramTestRun:          "Program test run",
-	KFeatAPIProgramGetNextID:        "Program get next ID",
-	KFeatAPIMapGetNextID:            "Map get next ID",
-	KFeatAPIProgramGetFDByID:        "Program get FD by ID",
-	KFeatAPIMapGetFDByID:            "Map get FD by ID",
-	KFeatAPIObjectGetInfoByFD:       "Object get info by FD",
-	KFeatAPIProgramQuery:            "Program query",
-	KFeatAPIRawTracepointOpen:       "Raw tracepoint open",
-	KFeatAPIBTFLoad:                 "BTF load",
-	KFeatAPIBTFGetFDByID:            "BTF get FD by ID",
-	KFeatAPITaskFDQuery:             "Task FD query",
-	KFeatAPIBTFGetNextID:            "BTF get next ID",
-	KFeatAPILinkCreate:              "Link create",
-	KFeatAPILinkUpdate:              "Link update",
-	KFeatAPILinkGetFDByID:           "Link get FD by ID",
-	KFeatAPILinkGetNextID:           "Link get next ID",
-	KFeatAPIEnableStats:             "Enable stats",
-	KFeatAPIIterCreate:              "Iterator create",
-	KFeatAPILinkDetach:              "Link detach",
-	KFeatAPIProgBindMap:             "Prog bind map",
+	KFeatAPIBasic:               "Map create, map lookup, map update, map getnext, prog load",
+	KFeatAPIMapGetNextNull:      "Map get next null",
+	KFeatAPIMapNumaCreate:       "Map NUMA create",
+	KFeatAPIMapSyscallRW:        "Map syscall R/W",
+	KFeatAPIMapName:             "Map name",
+	KFeatAPIMapLookupAndDelete:  "Map lookup and delete",
+	KFeatAPIMapZeroSeed:         "Map zero seed",
+	KFeatAPIMapLock:             "Map lock",
+	KFeatAPIMapBPFRW:            "Map BPF R/W",
+	KFeatAPIMapFreeze:           "Map freeze",
+	KFeatAPIMapMMap:             "Map MMap",
+	KFeatAPIMapBatchOps:         "Map batch ops",
+	KFeatAPIObjPinGet:           "Object pin/get",
+	KFeatAPIProgramAttachDetach: "Program attach/detach",
+	KFeatAPIProgramTestRun:      "Program test run",
+	KFeatAPIProgramGetNextID:    "Program get next ID",
+	KFeatAPIMapGetNextID:        "Map get next ID",
+	KFeatAPIProgramGetFDByID:    "Program get FD by ID",
+	KFeatAPIMapGetFDByID:        "Map get FD by ID",
+	KFeatAPIObjectGetInfoByFD:   "Object get info by FD",
+	KFeatAPIProgramQuery:        "Program query",
+	KFeatAPIRawTracepointOpen:   "Raw tracepoint open",
+	KFeatAPIBTFLoad:             "BTF load",
+	KFeatAPIBTFGetFDByID:        "BTF get FD by ID",
+	KFeatAPITaskFDQuery:         "Task FD query",
+	KFeatAPIBTFGetNextID:        "BTF get next ID",
+	KFeatAPILinkCreate:          "Link create",
+	KFeatAPILinkUpdate:          "Link update",
+	KFeatAPILinkGetFDByID:       "Link get FD by ID",
+	KFeatAPILinkGetNextID:       "Link get next ID",
+	KFeatAPIEnableStats:         "Enable stats",
+	KFeatAPIIterCreate:          "Iterator create",
+	KFeatAPILinkDetach:          "Link detach",
+	KFeatAPIProgBindMap:         "Prog bind map",
 }
 
 func (as APISupport) String() string {

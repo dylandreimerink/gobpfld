@@ -594,7 +594,7 @@ func BTFGetNextID(attr *BPFAttrGetID) error {
 // is set to the number of successfully processed elements.
 func MapLookupBatch(attr *BPFAttrMapBatch) error {
 	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
-	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapLookupBatch) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapBatchOps) {
 		return fmt.Errorf("batch lookup not supported: %w", ErrNotSupported)
 	}
 
@@ -619,7 +619,7 @@ func MapLookupBatch(attr *BPFAttrMapBatch) error {
 //	  and values of the deleted elements.
 func MapLookupBatchAndDelete(attr *BPFAttrMapBatch) error {
 	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
-	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapLookupAndDeleteBatch) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapBatchOps) {
 		return fmt.Errorf("batch lookup and delete not supported: %w", ErrNotSupported)
 	}
 
@@ -657,7 +657,7 @@ func MapLookupBatchAndDelete(attr *BPFAttrMapBatch) error {
 // is set to the number of successfully processed elements.
 func MapUpdateBatch(attr *BPFAttrMapBatch) error {
 	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
-	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapUpdateBatch) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapBatchOps) {
 		return fmt.Errorf("batch update not supported: %w", ErrNotSupported)
 	}
 
@@ -703,7 +703,7 @@ func MapUpdateBatch(attr *BPFAttrMapBatch) error {
 // deleted.
 func MapDeleteBatch(attr *BPFAttrMapBatch) error {
 	// If the user attempts to use a unsupported feature, tell them to avoid unexpected behavior
-	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapDeleteBatch) {
+	if !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapBatchOps) {
 		return fmt.Errorf("batch lookup and delete not supported: %w", ErrNotSupported)
 	}
 

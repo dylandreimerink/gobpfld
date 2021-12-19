@@ -25,9 +25,15 @@ func testPerCPUArraymap_SingleGetSet_happyPath(t *testing.T, arrayMap *PerCPUArr
 	// Just a simple go slice used to verify BPF map behavior.
 	verificationMap := make([]uint64, maxEntries*cpuCount)
 
+	// Test with less iterations in short mode
+	iter := 100000
+	if testing.Short() {
+		iter = 1000
+	}
+
 	// In a loop, read random values from both maps and compare them, then update that key in both maps for later
 	// iterations.
-	for i := 0; i < 1000000; i++ {
+	for i := 0; i < iter; i++ {
 		// Give us a random key that is sometimes(+5) outside of the map
 		randKey := rand.Int31n(int32(maxEntries + 5))
 
@@ -109,9 +115,15 @@ func testPerCPUArrayMap_BatchGetSet_happyPath(t *testing.T, arrayMap *PerCPUArra
 	// Just a simple go slice used to verify BPF map behavior.
 	verificationMap := make([]uint64, maxEntries*cpuCount)
 
+	// Test with less iterations in short mode
+	iter := 10000
+	if testing.Short() {
+		iter = 1000
+	}
+
 	// In a loop, read random values from both maps and compare them, then update that key in both maps for later
 	// iterations.
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < iter; i++ {
 		batchSize := rand.Intn(maxEntries + 2)
 		keys := make([]uint32, batchSize)
 		values := make([]uint64, batchSize*cpuCount)
@@ -170,9 +182,8 @@ func testPerCPUArrayMap_BatchGetSet_happyPath(t *testing.T, arrayMap *PerCPUArra
 // Tests that getting and setting of bulk keys work for a normal array map
 func TestPerCPUArrayMap_BulkGetSet_HappyPath(t *testing.T) {
 	// We can only perform this test if the kernel we are running on supports it
-	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapPerCPUArrayBatchOps |
-		kernelsupport.KFeatMapPerCPUArrayBatchOps) {
-		return
+	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapPerCPUArrayBatchOps) {
+		t.Skip("Skip because the feature is not supported by kernel")
 	}
 
 	const maxEntries = 1000

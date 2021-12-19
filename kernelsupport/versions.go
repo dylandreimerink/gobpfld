@@ -216,9 +216,8 @@ var featureMinVersion = []kernelFeatureVersion{
 	{
 		version: kernelVersion{major: 5, minor: 6},
 		features: KernelFeatures{
-			Map: KFeatMapStructOps,
-			API: KFeatAPIMapLookupBatch | KFeatAPIMapUpdateBatch | KFeatAPIMapDeleteBatch |
-				KFeatAPIMapLookupAndDeleteBatch,
+			Map:     KFeatMapStructOps,
+			API:     KFeatAPIMapBatchOps,
 			Program: KFeatProgStructOps | KFeatProgExt,
 		},
 	},
