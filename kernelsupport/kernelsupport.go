@@ -27,7 +27,7 @@ var CurrentFeatures = MustGetKernelFeatures()
 
 // MustGetKernelFeatures runs GetKernelFeatures but panics if any error is detected
 func MustGetKernelFeatures() KernelFeatures {
-	features, err := GetKernelFeatures()
+	features, err := getKernelFeatures(true)
 	if err != nil {
 		panic(err)
 	}
@@ -37,6 +37,10 @@ func MustGetKernelFeatures() KernelFeatures {
 // GetKernelFeatures returns a list of kernel features for the kernel on which
 // the current program is currently running.
 func GetKernelFeatures() (KernelFeatures, error) {
+	return getKernelFeatures(false)
+}
+
+func getKernelFeatures(must bool) (KernelFeatures, error) {
 	var utsname syscall.Utsname
 	err := syscall.Uname(&utsname)
 	if err != nil {
@@ -53,7 +57,7 @@ func GetKernelFeatures() (KernelFeatures, error) {
 	}
 	release := string(releaseBytes)
 
-	version, err := parseKernelVersion(release)
+	version, err := parseKernelVersion(release, true)
 	if err != nil {
 		return KernelFeatures{}, err
 	}
@@ -140,7 +144,7 @@ func (kv kernelVersion) Higher(cmp kernelVersion) bool {
 	return false
 }
 
-func parseKernelVersion(release string) (version kernelVersion, err error) {
+func parseKernelVersion(release string, must bool) (version kernelVersion, err error) {
 	parts := strings.Split(release, "-")
 
 	// The base version is before the -, discard anything after the -
@@ -149,7 +153,12 @@ func parseKernelVersion(release string) (version kernelVersion, err error) {
 	if len(baseParts) > 2 {
 		version.patch, err = strconv.Atoi(baseParts[2])
 		if err != nil {
-			return version, fmt.Errorf("error while parsing kernel patch version '%s': %w", baseParts[2], err)
+			// The patch version is not critically important in most cases. If 'must' is true this would result
+			// in a panic, instread ignore the error.
+			// A malformed patch version is possible with incorrect kernel parameters, so handle it gracefully
+			if !must {
+				return version, fmt.Errorf("error while parsing kernel patch version '%s': %w", baseParts[2], err)
+			}
 		}
 	}
 
@@ -162,7 +171,7 @@ func parseKernelVersion(release string) (version kernelVersion, err error) {
 
 	version.major, err = strconv.Atoi(baseParts[0])
 	if err != nil {
-		return version, fmt.Errorf("error while parsing kernel patch version '%s': %w", baseParts[0], err)
+		return version, fmt.Errorf("error while parsing kernel major version '%s': %w", baseParts[0], err)
 	}
 
 	return version, nil
