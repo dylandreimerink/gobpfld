@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -86,7 +85,7 @@ func testCmd() *cobra.Command {
 		"run too, so that -run=X/Y matches and runs and reports the result "+
 		"of all tests matching X, even those without sub-tests matching Y, "+
 		"because it must run them to look for those sub-tests.")
-	f.StringArrayVar(&flagTestEnvs, "test-env", nil, "If set, tests will only be ran in the given environments")
+	f.StringArrayVar(&flagTestEnvs, "env", nil, "If set, tests will only be ran in the given environments")
 	return c
 }
 
@@ -125,6 +124,11 @@ var availableEnvs = map[string]testEnv{
 		arch:       "amd64",
 		kernel:     "5.15.5",
 		bzImageURL: "https://github.com/dylandreimerink/bpfci/raw/master/dist/amd64-5.15.5-bzImage",
+	},
+	"linux-5.4.167-amd64": {
+		arch:       "amd64",
+		kernel:     "5.4.167",
+		bzImageURL: "https://github.com/dylandreimerink/bpfci/raw/master/dist/amd64-5.4.167-bzImage",
 	},
 	// "linux-5.15.5-arm64": {
 	// 	arch:   "arm64",
@@ -166,7 +170,35 @@ func buildAndRunTests(cmd *cobra.Command, args []string) error {
 	sort.Strings(environments)
 
 	results := make(map[string]map[string]testResult)
-	// TODO pre-fill with a list of tests gotten via the `go test {pkgname} -list '.*'` command
+	for _, pkg := range packages {
+		// Test* to exclude benchmarks(for now)
+		testsStr, err := execCmd("go", "test", pkg, "-list", "Test*")
+		if err != nil {
+			return fmt.Errorf("listing tests: %w", err)
+		}
+
+		lines := strings.Split(string(testsStr), "\n")
+		if len(lines) > 2 {
+			lines = lines[:len(lines)-2]
+		} else {
+			lines = nil
+		}
+
+		for _, env := range environments {
+			testMap := results[env]
+			if testMap == nil {
+				testMap = make(map[string]testResult)
+			}
+
+			for _, test := range lines {
+				testMap[test] = testResult{
+					Name:   test,
+					Status: statusUntested,
+				}
+			}
+			results[env] = testMap
+		}
+	}
 
 	// TODO run tests in goroutine and display progress bar (in non-verbose mode)
 
@@ -176,8 +208,9 @@ func buildAndRunTests(cmd *cobra.Command, args []string) error {
 		envResults, err := testEnvironment(&testCtx{
 			envName: curEnvName,
 		})
-		// TODO merge maps once results is pre-filled
-		results[curEnvName] = envResults
+		for k, v := range envResults {
+			results[curEnvName][k] = v
+		}
 		if err != nil {
 			if !errors.Is(err, errTestsFailed) {
 				return err
@@ -729,7 +762,7 @@ func extractData(ctx *testCtx) error {
 	for _, fileName := range copyFiles {
 		err = copyFile(path.Join(mntPath, fileName), path.Join(ctx.tmpDir, fileName))
 		if err != nil {
-			return err
+			fmt.Fprintln(os.Stderr, "error while copying:", err.Error())
 		}
 	}
 
@@ -739,7 +772,8 @@ func extractData(ctx *testCtx) error {
 		for _, execName := range ctx.executables {
 			profiles, err := cover.ParseProfiles(path.Join(ctx.tmpDir, execName+".cover"))
 			if err != nil {
-				log.Fatalf("failed to parse profiles: %v", err)
+				fmt.Fprintln(os.Stderr, "failed to parse profiles:", err.Error())
+				continue
 			}
 			for _, p := range profiles {
 				merged = gocovmerge.AddProfile(merged, p)
@@ -905,7 +939,7 @@ type testStatus string
 
 const (
 	// has not (yet) been run
-	// statusUntested testStatus = "UNTESTED"
+	statusUntested testStatus = "UNTESTED"
 	// tested and passed
 	statusPass testStatus = "PASS"
 	// tested and failed

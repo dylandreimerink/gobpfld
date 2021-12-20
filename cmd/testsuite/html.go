@@ -35,6 +35,7 @@ func renderHTMLReport(testResults map[string]map[string]testResult, out io.Write
 		tests[i] = testsMap
 		i++
 	}
+	sort.Strings(tests)
 
 	err = tpl.Execute(out, htmlData{
 		Envs:         envs,
@@ -70,6 +71,10 @@ var htmlTpl = `<html>
 				border-style: solid;
 			}
 
+			.test-matrix td.result {
+				border-width: 1px 0px 0px 1px;
+			}
+
 			td.PASS {
 				background-color: #50CC50;
 			}
@@ -80,6 +85,10 @@ var htmlTpl = `<html>
 
 			td.SKIP {
 				background-color: #FFC107;
+			}
+
+			td.UNTESTED {
+				background-color: #BDBDBD;
 			}
 		</style>
 	</head>
@@ -102,7 +111,7 @@ var htmlTpl = `<html>
 						<td>{{$test}}</td>
 					{{range $ii, $env := $.Envs}}
 					{{with $res := index (index $.TestResults $env) $test}}
-						<td class="{{$res.Status}}">{{$res.Status}}</td>
+						<td class="{{$res.Status}} result">{{$res.Status}}</td>
 					{{end}}
 					{{end}}
 					</tr>
