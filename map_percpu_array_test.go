@@ -1,3 +1,4 @@
+//go:build bpftests
 // +build bpftests
 
 package gobpfld

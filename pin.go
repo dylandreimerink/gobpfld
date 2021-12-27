@@ -26,7 +26,7 @@ func PinFD(relativePath string, fd bpfsys.BPFfd) error {
 	// Create directories if any are missing
 	err := os.MkdirAll(path.Dir(sysPath), 0644)
 	if err != nil {
-		return fmt.Errorf("error while making directories: %w", err)
+		return fmt.Errorf("error while making directories: %w, make sure bpffs is mounted at '%s'", err, BPFSysPath)
 	}
 
 	cPath := cstr.StringToCStrBytes(sysPath)

@@ -102,7 +102,7 @@ var packages = []string{
 	"github.com/dylandreimerink/gobpfld/internal/syscall",
 
 	// this package may contain complex tests which have no other logical place.
-	"github.com/dylandreimerink/gobpfld/cmd/testsuite",
+	"github.com/dylandreimerink/gobpfld/cmd/testsuite/integration",
 }
 
 func printlnVerbose(args ...interface{}) {
@@ -173,7 +173,7 @@ func buildAndRunTests(cmd *cobra.Command, args []string) error {
 	results := make(map[string]map[string]testResult)
 	for _, pkg := range packages {
 		// Test* to exclude benchmarks(for now)
-		testsStr, err := execCmd("go", "test", pkg, "-list", "Test*")
+		testsStr, err := execCmd("go", "test", pkg, "-tags", "bpftests", "-list", "Test*")
 		if err != nil {
 			return fmt.Errorf("listing tests: %w", err)
 		}
@@ -365,6 +365,7 @@ func buildTestBinaries(ctx *testCtx) error {
 	// the test binary.
 	if flagCover {
 		buildFlags = append(buildFlags, "-covermode", flagCoverMode)
+		buildFlags = append(buildFlags, "-coverpkg", strings.Join(packages, ","))
 	}
 
 	ctx.executables = make([]string, 0, len(packages))
