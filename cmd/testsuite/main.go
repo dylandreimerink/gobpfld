@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/dylandreimerink/gocovmerge"
+	"github.com/dylandreimerink/tarp"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
 	"golang.org/x/tools/cover"
@@ -794,11 +795,7 @@ func extractData(ctx *testCtx) error {
 		}
 
 		if flagHTMLReport {
-			_, err = execCmd(
-				"go", "tool", "cover",
-				"-html="+coverPath,
-				"-o", path.Join(ctx.tmpDir, "gobpfld.cover.html"),
-			)
+			err = tarp.GenerateHTMLReport([]string{coverPath}, path.Join(ctx.tmpDir, "gobpfld.cover.html"))
 			if err != nil {
 				return fmt.Errorf("make html coverage report: %w", err)
 			}
