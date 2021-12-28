@@ -28,7 +28,14 @@ func (m *ArrayMap) Load() error {
 		return fmt.Errorf("map type in definition must be BPF_MAP_TYPE_ARRAY when using an ArrayMap")
 	}
 
-	err := m.load()
+	// If the mmapable flag is set
+	mmapable := m.Definition.Flags&bpftypes.BPFMapFlagsMMapable != 0
+
+	if mmapable && !kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapMMap) {
+		return fmt.Errorf("flag bpftypes.BPFMapFlagsMMapable set, but current kernel version doesn't support mmapping")
+	}
+
+	err := m.load(nil)
 	if err != nil {
 		return fmt.Errorf("error while loading map: %w", err)
 	}
@@ -49,8 +56,7 @@ func (m *ArrayMap) Load() error {
 		mmapLen = pz
 	}
 
-	// If the mmapable flag is set
-	if m.Definition.Flags&bpftypes.BPFMapFlagsMMapable != 0 {
+	if mmapable {
 		// This first mmap allocates memory which is not yet mapped to the BPF map yet.
 		m.memoryMapped, err = syscall.Mmap(
 			-1,

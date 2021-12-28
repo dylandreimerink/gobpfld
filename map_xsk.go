@@ -25,7 +25,7 @@ func (m *XSKMap) Load() error {
 	}
 
 	m.userspaceMap = make(map[uint32]*XSKSocket)
-	err := m.load()
+	err := m.load(nil)
 	if err != nil {
 		return err
 	}

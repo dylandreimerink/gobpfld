@@ -948,7 +948,8 @@ const (
 	// BPFMapFlagsPreserveElems is a flag that signals the kernel to share perf_event among processes
 	BPFMapFlagsPreserveElems
 	// BPFMapFlagsInnerMap  is a flag that signals the kernel to create a map that is suitable to be an inner map
-	// with dynamic max entries
+	// with dynamic max entries. Map-in-map types created without this flag can only ever contain maps with
+	// a number of max entries equal to the inner map definition used during loading of the outer map.
 	BPFMapFlagsInnerMap
 	// BPFMapFlagsMax is a pseudo flag used for iteration within the library and should not be used
 	BPFMapFlagsMax

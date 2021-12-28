@@ -22,7 +22,7 @@ func (m *PerCPUArrayMap) Load() error {
 		return fmt.Errorf("map type in definition must be BPF_MAP_TYPE_PERCPU_ARRAY when using an PerCPUArrayMap")
 	}
 
-	err := m.load()
+	err := m.load(nil)
 	if err != nil {
 		return err
 	}

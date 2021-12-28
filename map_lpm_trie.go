@@ -28,7 +28,7 @@ func (m *LPMTrieMap) Load() error {
 		return fmt.Errorf("LPM trie map type is not supported by the current kernel version")
 	}
 
-	err := m.load()
+	err := m.load(nil)
 	if err != nil {
 		return err
 	}

@@ -45,15 +45,17 @@ func (m *ArrayOfMapsMap) Load() error {
 
 // loadPseudoInnerMap will load a map into the kernel with m.InnerMapDef as definition and returns the FD for this map.
 func (m *ArrayOfMapsMap) loadPseudoInnerMap() (*AbstractMap, error) {
-	// Set the inner map flag
-	m.InnerMapDef.Flags |= bpftypes.BPFMapFlagsInnerMap
+	if kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapDynamicInnerMap) {
+		// Set the inner map flag
+		m.InnerMapDef.Flags |= bpftypes.BPFMapFlagsInnerMap
+	}
 
 	innerMap := &AbstractMap{
 		Name:       MustNewObjName("pseudoinnermap"),
 		Definition: m.InnerMapDef,
 	}
 
-	return innerMap, innerMap.load()
+	return innerMap, innerMap.load(nil)
 }
 
 // loadArrayOfMaps will first create a pseudo map, the FD of which we need to pass when loading the outermap to provide
@@ -71,22 +73,12 @@ func (m *ArrayOfMapsMap) loadArrayOfMaps() error {
 	// Copy the def so it can't be changed after loading
 	m.innerMapDef = m.InnerMapDef
 
-	attr := &bpfsys.BPFAttrMapCreate{
-		MapName:    m.Name.GetCstr(),
-		MapType:    m.Definition.Type,
-		KeySize:    m.Definition.KeySize,
-		ValueSize:  m.Definition.ValueSize,
-		MaxEntries: m.Definition.MaxEntries,
-		MapFlags:   m.Definition.Flags,
-		InnerMapFD: innerMap.fd,
-	}
-
-	m.fd, err = bpfsys.MapCreate(attr)
+	err = m.load(func(attr *bpfsys.BPFAttrMapCreate) {
+		attr.InnerMapFD = innerMap.fd
+	})
 	if err != nil {
-		return fmt.Errorf("bpf syscall error: %w", err)
+		return fmt.Errorf("load: %w", err)
 	}
-
-	m.loaded = true
 
 	// After the outer map has been loaded, the inner map type info is copied so we can unload the pseudo inner map.
 	err = innerMap.close()
@@ -124,14 +116,14 @@ func (m *ArrayOfMapsMap) Set(key uint32, value BPFMap, flags bpfsys.BPFAttrMapEl
 	}
 
 	def := value.GetDefinition()
-	if def.Flags&bpftypes.BPFMapFlagsInnerMap == 0 {
-		return fmt.Errorf("only maps loaded with the BPFMapFlagsInnerMap flag can be set as inner map")
+	if def.Flags&bpftypes.BPFMapFlagsInnerMap != 0 {
+		// If the inner map flag is set, max entries can be ignored when comparing inner maps.
+		// Since the Equal function doesn't take this edge case
+		// into account we will just make the MaxEntries of def equal.
+		// This doesn't update the actual value of the map since we are working with a copy of the definition
+		def.MaxEntries = m.innerMapDef.MaxEntries
 	}
 
-	// Max entries can be ignored when comparing inner maps. Since the Equal function doesn't take this edge case
-	// into account we will just make the MaxEntries of def equal.
-	// This doesn't update the actual value of the map since we are working with a copy of the definition
-	def.MaxEntries = m.innerMapDef.MaxEntries
 	if !def.Equal(m.innerMapDef) {
 		return fmt.Errorf("map definition of the 'value' doesn't match the inner map definition")
 	}

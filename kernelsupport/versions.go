@@ -251,7 +251,7 @@ var featureMinVersion = []kernelFeatureVersion{
 	{
 		version: kernelVersion{major: 5, minor: 10},
 		features: KernelFeatures{
-			Map: KFeatMapINodeStorage,
+			Map: KFeatMapINodeStorage | KFeatMapDynamicInnerMap,
 			API: KFeatAPIProgBindMap,
 		},
 	},

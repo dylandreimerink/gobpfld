@@ -17,7 +17,7 @@ type HashMap struct {
 
 func (m *HashMap) Load() error {
 	// NOTE: do not enforce definition type of map since hash map is currently still a catch all map type
-	err := m.load()
+	err := m.load(nil)
 	if err != nil {
 		return err
 	}

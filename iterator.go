@@ -23,7 +23,7 @@ type MapIterator interface {
 	// The value of key should not be modified between the first call to Next and discarding of the iterator since
 	// it is reused. Doing so may cause skipped entries, duplicate entries, or error opon calling Next.
 	Init(key, value interface{}) error
-	// Next assignes the next value to the key and value last passed via the Init func.
+	// Next assigns the next value to the key and value last passed via the Init func.
 	// True is returned if key and value was updated.
 	// If updated is false and err is nil, all values from the iterator were read.
 	// On error a iterator should also be considered empty and can be discarded.
@@ -55,7 +55,12 @@ func MapIterForEach(iter MapIterator, key, value interface{}, callback func(key,
 	}
 
 	var updated bool
-	for updated, err = iter.Next(); updated && err == nil; updated, err = iter.Next() {
+	for {
+		updated, err = iter.Next()
+		if err != nil || !updated {
+			break
+		}
+
 		err = callback(key, value)
 		if err != nil {
 			return fmt.Errorf("callback: %w", err)
@@ -237,7 +242,6 @@ func (bli *batchLookupIterator) Init(key, value interface{}) error {
 
 	bli.attr = bpfsys.BPFAttrMapBatch{
 		MapFD:    bli.am.fd,
-		InBatch:  uintptr(unsafe.Pointer(&bli.inBatch)),
 		OutBatch: uintptr(unsafe.Pointer(&bli.outBatch)),
 		Keys:     bli.keyBuf.Pointer(),
 		Values:   bli.valueBuf.Pointer(),
@@ -286,6 +290,11 @@ func (bli *batchLookupIterator) Next() (updated bool, err error) {
 		if bli.bufLen == 0 {
 			bli.done = true
 			return false, nil
+		}
+
+		// Set the address of the in batch, only applicable after the first run
+		if bli.attr.InBatch == 0 {
+			bli.attr.InBatch = uintptr(unsafe.Pointer(&bli.inBatch))
 		}
 
 		bli.inBatch = bli.outBatch
@@ -387,8 +396,8 @@ type singleMapLookupIterator struct {
 	// clone of the map so it can't change during iteration
 	am    *AbstractMap
 	key   uintptr
-	value interface{}
-	fd    bpfsys.BPFfd
+	value *BPFMap
+	id    uint32
 	attr  bpfsys.BPFAttrMapElem
 	done  bool
 }
@@ -415,11 +424,11 @@ func (sli *singleMapLookupIterator) Init(key, value interface{}) error {
 		return fmt.Errorf("toKeyPtr: %w", err)
 	}
 
-	if _, ok := sli.value.(*BPFMap); !ok {
+	mPtr, ok := value.(*BPFMap)
+	if !ok {
 		return fmt.Errorf("value is not of type *BPFMap")
 	}
-
-	sli.value = value
+	sli.value = mPtr
 
 	return nil
 }
@@ -450,26 +459,21 @@ func (sli *singleMapLookupIterator) Next() (updated bool, err error) {
 	}
 
 	sli.attr.Key = sli.attr.Value_NextKey
-	sli.attr.Value_NextKey = uintptr(unsafe.Pointer(&sli.fd))
+	sli.attr.Value_NextKey = uintptr(unsafe.Pointer(&sli.id))
 
 	err = bpfsys.MapLookupElem(&sli.attr)
 	if err != nil {
 		sli.done = true
-		return false, err
+		return false, fmt.Errorf("map lookup elem: %w", err)
 	}
 
-	valPtr, ok := sli.value.(*BPFMap)
-	if !ok {
-		return false, fmt.Errorf("value is not of type *BPFMap")
-	}
-
-	*valPtr, err = MapFromFD(sli.fd)
+	*sli.value, err = MapFromID(sli.id)
 	if err != nil {
 		sli.done = true
-		return false, err
+		return false, fmt.Errorf("map from fd: %w", err)
 	}
 
-	return true, err
+	return true, nil
 }
 
 // TODO implement for Queue and Stack maps

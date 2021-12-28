@@ -20,7 +20,7 @@ func (m *ProgArrayMap) Load() error {
 		return fmt.Errorf("map type in definition must be BPF_MAP_TYPE_PROG_ARRAY when using an ProgArrayMap")
 	}
 
-	err := m.load()
+	err := m.load(nil)
 	if err != nil {
 		return err
 	}

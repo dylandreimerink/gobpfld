@@ -368,6 +368,10 @@ func buildTestBinaries(ctx *testCtx) error {
 		buildFlags = append(buildFlags, "-coverpkg", strings.Join(packages, ","))
 	}
 
+	if flagRun != "" {
+		buildFlags = append(buildFlags, "-run", flagRun)
+	}
+
 	ctx.executables = make([]string, 0, len(packages))
 	for _, pkg := range packages {
 		pkgName := strings.Join([]string{path.Base(pkg), "test"}, ".")
@@ -418,6 +422,10 @@ func genVMRunScript(ctx *testCtx) error {
 
 		if flagShort {
 			flags = append(flags, "-test.short")
+		}
+
+		if flagRun != "" {
+			flags = append(flags, "-test.run", flagRun)
 		}
 
 		// Run script, write stdout to "$exec.results", write stderr to "$exec.error" and the exit code to "$exec.exit"

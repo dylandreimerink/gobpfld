@@ -44,7 +44,8 @@ const (
 	KFeatMapPerCPUArrayBatchOps
 	// KFeatMapLPMTrieBatchOps means batch operations are supported on LPM trie's
 	KFeatMapLPMTrieBatchOps
-
+	// KFeatMapDynamicInnerMap means that inner-maps of map-in-map types can have dynamic size
+	KFeatMapDynamicInnerMap
 	// An end marker for enumeration, not an actual feature flag
 	kFeatMapMax //nolint:revive // leading k is used to stay consistent with exported vars
 )

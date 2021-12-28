@@ -36,7 +36,7 @@ type AbstractMap struct {
 }
 
 // Load validates and loads the userspace map definition into the kernel.
-func (m *AbstractMap) load() error {
+func (m *AbstractMap) load(changeAttr func(attr *bpfsys.BPFAttrMapCreate)) error {
 	err := m.Definition.Validate()
 	if err != nil {
 		return err
@@ -77,6 +77,10 @@ func (m *AbstractMap) load() error {
 		// to the user that they need to use these helpers to get type info.
 		// NOTE side note, we might be able to generate type info from the loader program, should be an alternative
 		// since it requires providing type information before loading the maps.
+	}
+
+	if changeAttr != nil {
+		changeAttr(attr)
 	}
 
 	m.fd, err = bpfsys.MapCreate(attr)
@@ -240,7 +244,7 @@ func (m *AbstractMap) toKeyPtr(key interface{}) (uintptr, error) {
 
 	if keyType.Elem().Size() != uintptr(m.Definition.KeySize) {
 		return 0, fmt.Errorf(
-			"key type size(%d) doesn't match size of bfp key(%d)",
+			"key type size(%d) doesn't match size of bpf key(%d)",
 			keyType.Elem().Size(),
 			m.Definition.KeySize,
 		)
