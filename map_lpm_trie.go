@@ -52,7 +52,7 @@ func (m *LPMTrieMap) Close() error {
 	return m.close()
 }
 
-func (m *LPMTrieMap) Get(key LPMTrieMap, value interface{}) error {
+func (m *LPMTrieMap) Get(key LPMTrieKey, value interface{}) error {
 	return m.get(key, value)
 }
 
@@ -102,14 +102,17 @@ func (m *LPMTrieMap) checkLPMKeyBatch(keys interface{}) error {
 		return fmt.Errorf("keys argument must be a pointer to an array or slice")
 	}
 
-	if !elem.Implements(reflect.TypeOf((LPMTrieKey)(nil))) {
+	// Check if a pointer to elements of the slice would implement LPMTrieKey
+	var keyInterface LPMTrieKey
+	elemPtr := reflect.PtrTo(elem)
+	if !elemPtr.Implements(reflect.TypeOf(&keyInterface).Elem()) {
 		return fmt.Errorf("keys argument must be a pointer to an array or slice op LPMKey elements")
 	}
 
 	return nil
 }
 
-func (m *LPMTrieMap) Set(key LPMTrieMap, value interface{}, flags bpfsys.BPFAttrMapElemFlags) error {
+func (m *LPMTrieMap) Set(key LPMTrieKey, value interface{}, flags bpfsys.BPFAttrMapElemFlags) error {
 	return m.set(key, value, flags)
 }
 
@@ -133,7 +136,7 @@ func (m *LPMTrieMap) SetBatch(
 	return m.setBatch(keys, values, flags, maxBatchSize)
 }
 
-func (m *LPMTrieMap) Delete(key LPMTrieMap) error {
+func (m *LPMTrieMap) Delete(key LPMTrieKey) error {
 	return m.delete(key)
 }
 
@@ -172,7 +175,7 @@ func (m *LPMTrieMap) Iterator() MapIterator {
 // LPMKeyFromNetwork converts an net.IPNet struct into an LPMTrieKey
 func LPMKeyFromNetwork(n net.IPNet) LPMTrieKey {
 	ones, _ := n.Mask.Size()
-	if n.IP.To16() == nil {
+	if n.IP.To4() != nil {
 		key := &LPMTrieIPv4Key{
 			Prefix: uint32(ones),
 		}
