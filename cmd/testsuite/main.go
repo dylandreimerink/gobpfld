@@ -41,8 +41,9 @@ func rootCmd() *cobra.Command {
 }
 
 var (
-	flagVerbose bool
-	flagKeepTmp bool
+	flagVerbose    bool
+	flagKeepTmp    bool
+	flagNoPowerOff bool
 
 	flagOutputDir  string
 	flagCover      bool
@@ -67,6 +68,8 @@ func testCmd() *cobra.Command {
 		"commands will be called verbosely as well, thus outputting extra information")
 	f.BoolVar(&flagKeepTmp, "keep-tmp", false, "If set, the temporary directories will not be deleted after the test"+
 		"run so intermediate files can be inspected")
+	f.BoolVar(&flagNoPowerOff, "no-poweroff", false, "If set, the VM will not power off automatically, allowing manual"+
+		" inspection")
 
 	f.StringVarP(&flagOutputDir, "output-dir", "o", "./gobpfld-test-results", "Path to the directory where the result "+
 		"files are stored (report, coverage, profiling, tracing)")
@@ -440,9 +443,11 @@ func genVMRunScript(ctx *testCtx) error {
 		)
 	}
 
-	// The last command is the poweroff command(busybox shutdown command), this will cause the VM to exit
-	// after all tests have been ran.
-	fmt.Fprintln(&scriptBuf, "poweroff -f")
+	if !flagNoPowerOff {
+		// The last command is the poweroff command(busybox shutdown command), this will cause the VM to exit
+		// after all tests have been ran.
+		fmt.Fprintln(&scriptBuf, "poweroff -f")
+	}
 
 	// Write the shell script
 	printlnVerbose(scriptBuf.String())

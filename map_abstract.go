@@ -55,12 +55,12 @@ func (m *AbstractMap) load(changeAttr func(attr *bpfsys.BPFAttrMapCreate)) error
 	if m.BTF != nil && m.BTFMapType != nil {
 		// Load BTF if not already loaded
 		if !m.BTF.loaded {
-			_, err = m.BTF.Load(BTFLoadOpts{
-				LogLevel: bpftypes.BPFLogLevelBasic,
+			var log string
+			log, err = m.BTF.Load(BTFLoadOpts{
+				LogLevel: bpftypes.BPFLogLevelVerbose,
 			})
 			if err != nil {
-				// TODO make custom error type which includes the verifier log
-				return fmt.Errorf("load BTF: %w", err)
+				return fmt.Errorf("load BTF: %w\nLog: %s", err, log)
 			}
 		}
 

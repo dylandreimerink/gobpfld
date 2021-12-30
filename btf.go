@@ -12,6 +12,8 @@ import (
 	"github.com/dylandreimerink/gobpfld/internal/cstr"
 )
 
+// TODO re-serialize BTF funcs from Go types, this allows us update the bytes when
+//      necessary(https://github.com/cilium/ebpf/issues/43), and to load BTF types generated in Go.
 // TODO add field to store kernel structure ID's (for map BTFVMLinuxValueTypeID)
 // TODO Add global registry for BTF objects to translate IDs to FDs
 // TODO Add fuzzing, we should never get panics only errors, critical for stability of library users. (go 1.18)
