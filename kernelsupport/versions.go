@@ -219,6 +219,7 @@ var featureMinVersion = []kernelFeatureVersion{
 			Map:     KFeatMapStructOps,
 			API:     KFeatAPIMapBatchOps,
 			Program: KFeatProgStructOps | KFeatProgExt,
+			Misc:    KFeatBTFFuncScope,
 		},
 	},
 	{

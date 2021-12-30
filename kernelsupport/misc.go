@@ -12,7 +12,12 @@ const (
 	// KFeatMiscXSKRingFlags indicates that the kernel version has flags in AF_XDP rings
 	// https://github.com/torvalds/linux/commit/77cd0d7b3f257fd0e3096b4fdcff1a7d38e99e10
 	KFeatMiscXSKRingFlags MiscSupport = iota
-	kFeatMiscMax                      //nolint:revive // leading k is used to stay consistent with exported vars
+	// KFeatBTFFuncScope indicates that the kernel doesn't require BTF FUNC types to have a vlen of 0.
+	// Since kernel 5.6, the scope of functions is encoded in vlen.
+	// https://github.com/cilium/ebpf/issues/43
+	// https://github.com/llvm/llvm-project/commit/fbb64aa69835c8e3e9efe0afc8a73058b5a0fb3c
+	KFeatBTFFuncScope
+	kFeatMiscMax //nolint:revive // leading k is used to stay consistent with exported vars
 )
 
 // Has returns true if 'as' has all the specified flags

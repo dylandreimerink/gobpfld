@@ -173,6 +173,7 @@ func (bpfElf *bpfELF) processBTF() error {
 		if section != nil {
 			sizeType := bpfElf.BTF.rawType[dataSec.sizeOffset : dataSec.sizeOffset+4]
 			bpfElf.BTF.btfHdr.byteOrder.PutUint32(sizeType, uint32(section.Size))
+			dataSec.Size = uint32(section.Size)
 
 			for _, variable := range dataSec.Variables {
 				for _, sym := range symbols {
@@ -190,6 +191,7 @@ func (bpfElf *bpfELF) processBTF() error {
 					// The value of the symbol is the offset from the start of the section
 					offset := bpfElf.BTF.rawType[variable.offsetOffset : variable.offsetOffset+4]
 					bpfElf.BTF.btfHdr.byteOrder.PutUint32(offset, uint32(sym.Value))
+
 					break
 				}
 			}

@@ -10,10 +10,9 @@ import (
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"github.com/dylandreimerink/gobpfld/internal/cstr"
+	"github.com/dylandreimerink/gobpfld/kernelsupport"
 )
 
-// TODO re-serialize BTF funcs from Go types, this allows us update the bytes when
-//      necessary(https://github.com/cilium/ebpf/issues/43), and to load BTF types generated in Go.
 // TODO add field to store kernel structure ID's (for map BTFVMLinuxValueTypeID)
 // TODO Add global registry for BTF objects to translate IDs to FDs
 // TODO Add fuzzing, we should never get panics only errors, critical for stability of library users. (go 1.18)
@@ -42,15 +41,15 @@ type BTF struct {
 	// Contains the full, raw BTF header, string and type bytes.
 	// Used to load into the kernel.
 	rawType []byte
-	// Contains just the strings table, used for offset to string translation
-	stringsTbl []byte
+
+	StringsTbl StringTbl
 
 	// The parsed BTF EXT header
 	btfExtHdr *btfExtHeader
 
-	// Indicates if the program is already loaded into the kernel
+	// Indicates if the BTF is already loaded into the kernel
 	loaded bool
-	// The file descriptor of the program assigned by the kernel
+	// The file descriptor of the BTF assigned by the kernel
 	fd bpfsys.BPFfd
 }
 
@@ -87,11 +86,16 @@ func (btf *BTF) Load(opts BTFLoadOpts) (string, error) {
 		opts.LogSize = defaultBPFVerifierLogSize
 	}
 
+	serialized, err := btf.SerializeBTF()
+	if err != nil {
+		return "", fmt.Errorf("btf serialization: %w", err)
+	}
+
 	verifierLogBytes := make([]byte, opts.LogSize)
 
 	attr := bpfsys.BPFAttrBTFLoad{
-		BTF:         uintptr(unsafe.Pointer(&btf.rawType[0])),
-		BTFSize:     uint32(len(btf.rawType)),
+		BTF:         uintptr(unsafe.Pointer(&serialized[0])),
+		BTFSize:     uint32(len(serialized)),
 		BTFLogBuf:   uintptr(unsafe.Pointer(&verifierLogBytes[0])),
 		BTFLogSize:  uint32(opts.LogSize),
 		BTFLogLevel: opts.LogLevel,
@@ -130,7 +134,7 @@ func (btf *BTF) ParseBTF(btfBytes []byte) error {
 
 	stringsStart := headerOffset + btf.btfHdr.StringOffset
 	stringsEnd := headerOffset + btf.btfHdr.StringOffset + btf.btfHdr.StringLength
-	btf.stringsTbl = btfBytes[stringsStart:stringsEnd]
+	btf.StringsTbl = StringTblFromBlob(btfBytes[stringsStart:stringsEnd])
 
 	if btfLen < int(headerOffset+btf.btfHdr.TypeOffset+btf.btfHdr.TypeLength) {
 		return fmt.Errorf("byte sequence shorten than indicated type offset + length")
@@ -166,7 +170,7 @@ func (btf *BTF) ParseBTF(btfBytes []byte) error {
 			NameOffset: read32(),
 			Info:       read32(),
 			SizeType:   read32(),
-		}).ToCommonType(btf.stringsTbl)
+		}).ToCommonType(&btf.StringsTbl)
 
 		// The current amount of elements is equal to the index of the next element.
 		ct.TypeID = len(btf.Types)
@@ -202,7 +206,7 @@ func (btf *BTF) ParseBTF(btfBytes []byte) error {
 			ct.Size = ct.sizeType
 			members := make([]BTFMember, ct.VLen)
 			for i := 0; i < int(ct.VLen); i++ {
-				members[i].Name = stringsOffsetToName(btf.stringsTbl, read32())
+				members[i].Name = btf.StringsTbl.GetStringAtOffset(int(read32()))
 				members[i].typeID = read32()
 
 				// https://elixir.bootlin.com/linux/v5.15.3/source/include/uapi/linux/btf.h#L132
@@ -233,7 +237,7 @@ func (btf *BTF) ParseBTF(btfBytes []byte) error {
 			ct.Size = ct.sizeType
 			options := make([]BTFEnumOption, ct.VLen)
 			for i := 0; i < int(ct.VLen); i++ {
-				options[i].Name = stringsOffsetToName(btf.stringsTbl, read32())
+				options[i].Name = btf.StringsTbl.GetStringAtOffset(int(read32()))
 				options[i].Value = int32(read32())
 			}
 
@@ -275,7 +279,7 @@ func (btf *BTF) ParseBTF(btfBytes []byte) error {
 		case BTF_KIND_FUNC_PROTO:
 			params := make([]BTFFuncProtoParam, ct.VLen)
 			for i := 0; i < int(ct.VLen); i++ {
-				params[i].Name = stringsOffsetToName(btf.stringsTbl, read32())
+				params[i].Name = btf.StringsTbl.GetStringAtOffset(int(read32()))
 				params[i].typeID = read32()
 			}
 
@@ -372,6 +376,9 @@ func (btf *BTF) ParseBTF(btfBytes []byte) error {
 
 		case *BTFFuncProtoType:
 			t.Type = btf.Types[t.sizeType]
+			for i, param := range t.Params {
+				t.Params[i].Type = btf.Types[param.typeID]
+			}
 
 		case *BTFVarType:
 			t.Type = btf.Types[t.sizeType]
@@ -429,7 +436,7 @@ func (btf *BTF) ParseBTFExt(btfBytes []byte) error {
 	funcRecordSize := read32()
 	for off < len(funcs) {
 		sectionOffset := read32()
-		sectionName := stringsOffsetToName(btf.stringsTbl, sectionOffset)
+		sectionName := btf.StringsTbl.GetStringAtOffset(int(sectionOffset))
 		numInfo := read32()
 		for i := 0; i < int(numInfo); i++ {
 			if funcRecordSize < 8 {
@@ -477,7 +484,7 @@ func (btf *BTF) ParseBTFExt(btfBytes []byte) error {
 	lineRecordSize := read32()
 	for off < len(lines) {
 		sectionOffset := read32()
-		sectionName := stringsOffsetToName(btf.stringsTbl, sectionOffset)
+		sectionName := btf.StringsTbl.GetStringAtOffset(int(sectionOffset))
 		numInfo := read32()
 		for i := 0; i < int(numInfo); i++ {
 			if lineRecordSize < 16 {
@@ -490,9 +497,9 @@ func (btf *BTF) ParseBTFExt(btfBytes []byte) error {
 			}
 			l.InstructionOffset = btf.btfExtHdr.byteOrder.Uint32(lines[off : off+4])
 			l.FileNameOffset = btf.btfExtHdr.byteOrder.Uint32(lines[off+4 : off+8])
-			l.FileName = stringsOffsetToName(btf.stringsTbl, l.FileNameOffset)
+			l.FileName = btf.StringsTbl.GetStringAtOffset(int(l.FileNameOffset))
 			l.LineOffset = btf.btfExtHdr.byteOrder.Uint32(lines[off+8 : off+12])
-			l.Line = stringsOffsetToName(btf.stringsTbl, l.LineOffset)
+			l.Line = btf.StringsTbl.GetStringAtOffset(int(l.LineOffset))
 			col := btf.btfExtHdr.byteOrder.Uint32(lines[off+12 : off+16])
 			l.LineNumber = col >> 10
 			l.ColumnNumber = col & 0x3FF
@@ -508,6 +515,106 @@ func (btf *BTF) ParseBTFExt(btfBytes []byte) error {
 	}
 
 	return nil
+}
+
+// SerializeBTF takes the contents BTF.Types and serializes it into a byte slice which can be loaded into the kernel
+func (btf *BTF) SerializeBTF() ([]byte, error) {
+	var buf bytes.Buffer
+
+	const hdrLen = 6 * 4
+
+	// Empty header, patched later
+	buf.Write(make([]byte, hdrLen))
+
+	btf.StringsTbl.Serialize()
+
+	for _, t := range btf.Types[1:] {
+		b, err := t.Serialize(&btf.StringsTbl, btf.btfHdr.byteOrder)
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(b)
+	}
+
+	typeOff := uint32(0)
+	typeLen := uint32(buf.Len() - hdrLen)
+	strOff := typeLen
+	strLen := uint32(len(btf.StringsTbl.btfStringBlob))
+
+	buf.Write(btf.StringsTbl.btfStringBlob)
+
+	bytes := buf.Bytes()
+
+	btf.btfHdr.byteOrder.PutUint16(bytes[0:2], btfMagic)
+	// TODO hard code version/flags or get them from the exported fields in BTF
+	bytes[2] = btf.btfHdr.Version
+	bytes[3] = btf.btfHdr.Flags
+	btf.btfHdr.byteOrder.PutUint32(bytes[4:8], hdrLen)
+
+	btf.btfHdr.byteOrder.PutUint32(bytes[8:12], typeOff)
+	btf.btfHdr.byteOrder.PutUint32(bytes[12:16], typeLen)
+	btf.btfHdr.byteOrder.PutUint32(bytes[16:20], strOff)
+	btf.btfHdr.byteOrder.PutUint32(bytes[20:24], strLen)
+
+	return bytes, nil
+}
+
+type StringTbl struct {
+	Strings       []string
+	offsets       map[string]int
+	btfStringBlob []byte
+}
+
+func StringTblFromBlob(blob []byte) StringTbl {
+	tbl := StringTbl{
+		offsets:       make(map[string]int),
+		btfStringBlob: blob,
+	}
+
+	off := 0
+	for _, s := range bytes.Split(blob, []byte{0}) {
+		name := string(s)
+		tbl.Strings = append(tbl.Strings, name)
+		tbl.offsets[name] = off
+		off += len(s) + 1
+	}
+	// Dirty fix, since we use split, the last element will register as ""
+	// This will reset the map entry so an empty string will always give offset 0
+	tbl.offsets[""] = 0
+	tbl.Strings = tbl.Strings[:len(tbl.Strings)-1]
+
+	return tbl
+}
+
+func (st *StringTbl) Serialize() {
+	st.offsets = make(map[string]int, len(st.Strings))
+	var buf bytes.Buffer
+	for _, s := range st.Strings {
+		st.offsets[s] = buf.Len()
+		buf.WriteString(s)
+		buf.WriteByte(0)
+	}
+	st.btfStringBlob = buf.Bytes()
+}
+
+func (st *StringTbl) GetStringAtOffset(offset int) string {
+	// TODO implement stricter parsing and throw errors instead of returning empty strings.
+	// NOTE current code relies on the fact that offset == 0 will return a "" which is still valid.
+	//   only throw errors on offsets outside of the `strings` bounds
+	var name string
+	if offset < len(st.btfStringBlob) {
+		idx := bytes.IndexByte(st.btfStringBlob[offset:], 0x00)
+		if idx == -1 {
+			name = string(st.btfStringBlob[offset:])
+		} else {
+			name = string(st.btfStringBlob[offset : offset+idx])
+		}
+	}
+	return name
+}
+
+func (st *StringTbl) StrToOffset(str string) int {
+	return st.offsets[str]
 }
 
 // BTFFunc the go version of bpf_func_info. Which is used to link a instruction offset to a function type.
@@ -591,6 +698,7 @@ type BTFType interface {
 	GetID() int
 	GetKind() BTFKind
 	GetName() string
+	Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error)
 }
 
 // BTFIntType is the type of KIND_INT, it represents a integer type.
@@ -602,6 +710,22 @@ type BTFIntType struct {
 	Offset uint8
 	// The number of actual bits held by this int type
 	Bits uint8
+}
+
+func (t *BTFIntType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	commonBytes := (commonType{
+		Name:     t.Name,
+		KindFlag: 0,
+		Kind:     BTF_KIND_INT,
+		VLen:     0,
+		sizeType: t.Size,
+	}.ToBTFType(strTbl).ToBytes(order))
+
+	// TODO validate t.Encoding, t.Offset, t.Bits
+
+	typeBytes := uint32sToBytes(order, uint32(t.Encoding)<<24|uint32(t.Offset)<<16|uint32(t.Bits))
+
+	return append(commonBytes, typeBytes...), nil
 }
 
 // BTFIntEncoding is used to indicate what the integer encodes, used to determine how to pretty print an integer.
@@ -632,6 +756,16 @@ type BTFPtrType struct {
 	commonType
 }
 
+func (t *BTFPtrType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	return (commonType{
+		Name:     "",
+		KindFlag: 0,
+		Kind:     BTF_KIND_PTR,
+		VLen:     0,
+		sizeType: uint32(t.Type.GetID()),
+	}.ToBTFType(strTbl).ToBytes(order)), nil
+}
+
 // BTFArrayType is the type for KIND_ARR, which represents a array
 type BTFArrayType struct {
 	commonType
@@ -643,6 +777,21 @@ type BTFArrayType struct {
 	indexTypeID uint32
 	// The number of elements in the array
 	NumElements uint32
+}
+
+func (t *BTFArrayType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	commonBytes := (commonType{
+		Name:     "",
+		KindFlag: 0,
+		Kind:     BTF_KIND_ARRAY,
+		VLen:     0,
+		sizeType: 0,
+	}.ToBTFType(strTbl).ToBytes(order))
+
+	// TODO Perform lookup of t.Type and t.IndexType, since structs created without parting ELF can't set the
+	//      non-exported values.
+
+	return append(commonBytes, uint32sToBytes(order, t.typeID, t.indexTypeID, t.NumElements)...), nil
 }
 
 // BTFStructType is the type for KIND_STRUCT, which represents a structure.
@@ -744,11 +893,73 @@ func (t *BTFStructType) Verify() error {
 	return nil
 }
 
+func (t *BTFStructType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	var buf bytes.Buffer
+
+	const sizeOfMember = 4
+	buf.Write((commonType{
+		Name:     t.Name,
+		KindFlag: t.KindFlag,
+		Kind:     BTF_KIND_STRUCT,
+		VLen:     uint16(len(t.Members)),
+		sizeType: uint32(len(t.Members) * sizeOfMember),
+	}.ToBTFType(strTbl).ToBytes(order)))
+
+	for _, member := range t.Members {
+		var offset uint32
+		if t.KindFlag == 1 {
+			offset = member.BitfieldSize<<24 | (member.BitOffset & 0xffffff)
+		} else {
+			offset = member.BitOffset
+		}
+
+		buf.Write(uint32sToBytes(
+			order,
+			uint32(strTbl.StrToOffset(member.Name)),
+			member.typeID, // TODO resolve from member.Type instead of relying on internal type
+			offset,
+		))
+	}
+
+	return buf.Bytes(), nil
+}
+
 // BTFUnionType is the type for KIND_UNION, which represents a union, where all members occupy the same memory.
 type BTFUnionType struct {
 	commonType
 	// The individual members / fields of the union.
 	Members []BTFMember
+}
+
+func (t *BTFUnionType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	var buf bytes.Buffer
+
+	const sizeOfMember = 4
+	buf.Write((commonType{
+		Name:     t.Name,
+		KindFlag: t.KindFlag,
+		Kind:     BTF_KIND_UNION,
+		VLen:     uint16(len(t.Members)),
+		sizeType: uint32(len(t.Members) * sizeOfMember),
+	}.ToBTFType(strTbl).ToBytes(order)))
+
+	for _, member := range t.Members {
+		var offset uint32
+		if t.KindFlag == 1 {
+			offset = member.BitfieldSize<<24 | (member.BitOffset & 0xffffff)
+		} else {
+			offset = member.BitOffset
+		}
+
+		buf.Write(uint32sToBytes(
+			order,
+			uint32(strTbl.StrToOffset(member.Name)),
+			member.typeID, // TODO resolve from member.Type instead of relying on internal type
+			offset,
+		))
+	}
+
+	return buf.Bytes(), nil
 }
 
 // BTFMember is a member of a struct or union.
@@ -767,6 +978,27 @@ type BTFEnumType struct {
 	Options []BTFEnumOption
 }
 
+func (t *BTFEnumType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.Write((commonType{
+		Name:     t.Name,
+		KindFlag: 0,
+		Kind:     BTF_KIND_ENUM,
+		VLen:     uint16(len(t.Options)),
+		sizeType: 4,
+	}.ToBTFType(strTbl).ToBytes(order)))
+
+	for _, option := range t.Options {
+		buf.Write(uint32sToBytes(
+			order,
+			uint32(strTbl.StrToOffset(option.Name)),
+			uint32(option.Value),
+		))
+	}
+
+	return buf.Bytes(), nil
+}
+
 type BTFEnumOption struct {
 	Name  string
 	Value int32
@@ -776,25 +1008,131 @@ type BTFForwardType struct {
 	commonType
 }
 
+func (t *BTFForwardType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	return (commonType{
+		Name:     t.Name,
+		KindFlag: t.KindFlag,
+		Kind:     BTF_KIND_FWD,
+		VLen:     0,
+		sizeType: 0,
+	}.ToBTFType(strTbl).ToBytes(order)), nil
+}
+
 type BTFTypeDefType struct {
 	commonType
+}
+
+func (t *BTFTypeDefType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	return (commonType{
+		Name:     t.Name,
+		KindFlag: 0,
+		Kind:     BTF_KIND_TYPEDEF,
+		VLen:     0,
+		sizeType: uint32(t.Type.GetID()), // TODO resolve ID based on index in BTF.Types
+	}.ToBTFType(strTbl).ToBytes(order)), nil
 }
 
 type BTFVolatileType struct {
 	commonType
 }
 
+func (t *BTFVolatileType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	return (commonType{
+		Name:     "",
+		KindFlag: 0,
+		Kind:     BTF_KIND_VOLATILE,
+		VLen:     0,
+		sizeType: uint32(t.Type.GetID()), // TODO resolve ID based on index in BTF.Types
+	}.ToBTFType(strTbl).ToBytes(order)), nil
+}
+
 type BTFConstType struct {
 	commonType
+}
+
+func (t *BTFConstType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	return (commonType{
+		Name:     "",
+		KindFlag: 0,
+		Kind:     BTF_KIND_CONST,
+		VLen:     0,
+		sizeType: uint32(t.Type.GetID()), // TODO resolve ID based on index in BTF.Types
+	}.ToBTFType(strTbl).ToBytes(order)), nil
 }
 
 type BTFRestrictType struct {
 	commonType
 }
 
+func (t *BTFRestrictType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	return (commonType{
+		Name:     "",
+		KindFlag: 0,
+		Kind:     BTF_KIND_RESTRICT,
+		VLen:     0,
+		sizeType: uint32(t.Type.GetID()), // TODO resolve ID based on index in BTF.Types
+	}.ToBTFType(strTbl).ToBytes(order)), nil
+}
+
+// A BTFFuncType defines not a type, but a subprogram (function) whose signature is defined by type.
+// The subprogram is thus an instance of that type.
+// The KIND_FUNC may in turn be referenced by a func_info in the 4.2 .BTF.ext section (ELF) or in the arguments
+// to 3.3 BPF_PROG_LOAD (ABI).
+type BTFFuncType struct {
+	commonType
+}
+
+func (t *BTFFuncType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	vlen := uint16(0)
+	if kernelsupport.CurrentFeatures.Misc.Has(kernelsupport.KFeatBTFFuncScope) {
+		vlen = t.VLen
+	}
+
+	return (commonType{
+		Name:     t.Name,
+		KindFlag: 0,
+		Kind:     BTF_KIND_FUNC,
+		VLen:     vlen,
+		sizeType: uint32(t.Type.GetID()), // TODO resolve ID based on index in BTF.Types
+	}.ToBTFType(strTbl).ToBytes(order)), nil
+}
+
 type BTFFuncProtoType struct {
 	commonType
 	Params []BTFFuncProtoParam
+}
+
+func (t *BTFFuncProtoType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	var buf bytes.Buffer
+
+	buf.Write((commonType{
+		Name:     t.Name,
+		KindFlag: t.KindFlag,
+		Kind:     BTF_KIND_FUNC_PROTO,
+		VLen:     uint16(len(t.Params)),
+		sizeType: uint32(t.Type.GetID()),
+	}.ToBTFType(strTbl).ToBytes(order)))
+
+	for _, param := range t.Params {
+		buf.Write(uint32sToBytes(
+			order,
+			uint32(strTbl.StrToOffset(param.Name)),
+		))
+
+		if param.Type == nil {
+			buf.Write(uint32sToBytes(
+				order,
+				0,
+			))
+		} else {
+			buf.Write(uint32sToBytes(
+				order,
+				uint32(param.Type.GetID()),
+			))
+		}
+	}
+
+	return buf.Bytes(), nil
 }
 
 type BTFFuncProtoParam struct {
@@ -808,12 +1146,47 @@ type BTFVarType struct {
 	Linkage uint32
 }
 
+func (t *BTFVarType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	commonBytes := (commonType{
+		Name:     t.Name,
+		KindFlag: 0,
+		Kind:     BTF_KIND_VAR,
+		VLen:     0,
+		sizeType: uint32(t.Type.GetID()),
+	}.ToBTFType(strTbl).ToBytes(order))
+
+	return append(commonBytes, uint32sToBytes(order, t.Linkage)...), nil
+}
+
 type BTFDataSecType struct {
 	commonType
 	Variables []BTFDataSecVariable
 
 	// Offset from the start of the types byte slice to the SizeType field
 	sizeOffset int
+}
+
+func (t *BTFDataSecType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	var buf bytes.Buffer
+
+	buf.Write((commonType{
+		Name:     t.Name,
+		KindFlag: 0,
+		Kind:     BTF_KIND_DATASEC,
+		VLen:     uint16(len(t.Variables)),
+		sizeType: t.Size,
+	}.ToBTFType(strTbl).ToBytes(order)))
+
+	for _, v := range t.Variables {
+		buf.Write(uint32sToBytes(
+			order,
+			uint32(v.Type.GetID()),
+			v.Offset,
+			v.Size,
+		))
+	}
+
+	return buf.Bytes(), nil
 }
 
 type BTFDataSecVariable struct {
@@ -830,6 +1203,16 @@ type BTFFloatType struct {
 	commonType
 }
 
+func (t *BTFFloatType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	return (commonType{
+		Name:     t.Name,
+		KindFlag: 0,
+		Kind:     BTF_KIND_FLOAT,
+		VLen:     0,
+		sizeType: t.Size,
+	}.ToBTFType(strTbl).ToBytes(order)), nil
+}
+
 // BTFDeclTagType The name_off encodes btf_decl_tag attribute string.
 // The type should be struct, union, func, var or typedef.
 // For var or typedef type, btf_decl_tag.component_idx must be -1.
@@ -840,6 +1223,18 @@ type BTFFloatType struct {
 type BTFDeclTagType struct {
 	commonType
 	ComponentIdx uint32
+}
+
+func (t *BTFDeclTagType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	commonBytes := (commonType{
+		Name:     t.Name,
+		KindFlag: 0,
+		Kind:     BTF_KIND_DECL_TAG,
+		VLen:     0,
+		sizeType: uint32(t.Type.GetID()),
+	}.ToBTFType(strTbl).ToBytes(order))
+
+	return append(commonBytes, uint32sToBytes(order, t.ComponentIdx)...), nil
 }
 
 // BTFVoidType is not an actual type in BTF, it is used as type ID 0.
@@ -857,12 +1252,8 @@ func (vt *BTFVoidType) GetName() string {
 	return ""
 }
 
-// A BTFFuncType defines not a type, but a subprogram (function) whose signature is defined by type.
-// The subprogram is thus an instance of that type.
-// The KIND_FUNC may in turn be referenced by a func_info in the 4.2 .BTF.ext section (ELF) or in the arguments
-// to 3.3 BPF_PROG_LOAD (ABI).
-type BTFFuncType struct {
-	commonType
+func (vt *BTFVoidType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error) {
+	return nil, nil
 }
 
 // BTFKind is an enum indicating what kind of type is indicated
@@ -953,6 +1344,10 @@ type commonHeader struct {
 	HeaderLength uint32
 }
 
+// Magic number of BTF
+// https://elixir.bootlin.com/linux/v5.15.3/source/include/uapi/linux/btf.h#L8
+const btfMagic = 0xEB9F
+
 func parseCommonHeader(btf []byte) (commonHeader, uint32, error) {
 	btfLen := len(btf)
 	if btfLen < 8 {
@@ -974,10 +1369,6 @@ func parseCommonHeader(btf []byte) (commonHeader, uint32, error) {
 		off = off + 4
 		return v
 	}
-
-	// Magic number of BTF
-	// https://elixir.bootlin.com/linux/v5.15.3/source/include/uapi/linux/btf.h#L8
-	const btfMagic = 0xEB9F
 
 	magic := hdr.byteOrder.Uint16(btf[off : off+2])
 	// If the read magic number doesn't match, switch encoding
@@ -1117,31 +1508,23 @@ type btfType struct {
 	SizeType uint32
 }
 
-func stringsOffsetToName(strings []byte, offset uint32) string {
-	// TODO implement stricter parsing and throw errors instead of returning empty strings.
-	// NOTE current code relies on the fact that offset == 0 will return a "" which is still valid.
-	//   only throw errors on offsets outside of the `strings` bounds
-	var name string
-	if int(offset) < len(strings) {
-		idx := bytes.IndexByte(strings[offset:], 0x00)
-		if idx == -1 {
-			name = string(strings[offset:])
-		} else {
-			name = string(strings[offset : int(offset)+idx])
-		}
-	}
-	return name
-}
-
-func (bt btfType) ToCommonType(strings []byte) commonType {
+func (bt btfType) ToCommonType(strTbl *StringTbl) commonType {
 	// TODO add links to clarify shifts and masks
 	return commonType{
-		Name:     stringsOffsetToName(strings, bt.NameOffset),
+		Name:     strTbl.GetStringAtOffset(int(bt.NameOffset)),
 		VLen:     uint16((bt.Info) & 0xffff),
 		Kind:     BTFKind(((bt.Info) >> 24) & 0x1f),
 		KindFlag: uint8(bt.Info >> 31),
 		sizeType: bt.SizeType,
 	}
+}
+
+func (bt btfType) ToBytes(order binary.ByteOrder) []byte {
+	ret := make([]byte, 12)
+	order.PutUint32(ret[0:4], bt.NameOffset)
+	order.PutUint32(ret[4:8], bt.Info)
+	order.PutUint32(ret[8:12], bt.SizeType)
+	return ret
 }
 
 type commonType struct {
@@ -1165,4 +1548,23 @@ func (ct *commonType) GetID() int {
 
 func (ct *commonType) GetName() string {
 	return ct.Name
+}
+
+func (ct commonType) ToBTFType(strTbl *StringTbl) btfType {
+	bt := btfType{
+		NameOffset: uint32(strTbl.StrToOffset(ct.Name)),
+		Info: (uint32(ct.KindFlag&0b00000001) << 31) |
+			(uint32(ct.Kind&0x1f) << 24) |
+			uint32(ct.VLen),
+		SizeType: ct.sizeType,
+	}
+	return bt
+}
+
+func uint32sToBytes(bo binary.ByteOrder, ints ...uint32) []byte {
+	b := make([]byte, 4*len(ints))
+	for i := 0; i < len(ints); i++ {
+		bo.PutUint32(b[i*4:(i+1)*4], ints[i])
+	}
+	return b
 }
