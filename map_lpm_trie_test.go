@@ -22,6 +22,9 @@ func TestLPMTrieMapHappyPath(t *testing.T) {
 	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapLPMTrie) {
 		t.Skip("LPM tree not supported by current kernel version")
 	}
+	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapLPMTrieNextKey) {
+		t.Skip("LPM tree iteration not supported by current kernel version")
+	}
 
 	const maxEntries = 128
 
@@ -103,18 +106,23 @@ func TestLPMTrieMapHappyPath(t *testing.T) {
 			v uint64
 		)
 		var iter MapIterator = &singleLookupIterator{BPFMap: m}
+
+		// If batch ops in LPM maps are supported, use a batch iterator half of the time
 		if kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapLPMTrieBatchOps) && rand.Int()%2 == 0 {
 			iter = &batchLookupIterator{BPFMap: m}
 		}
 
-		iter.Init(&k, &v)
+		err = iter.Init(&k, &v)
+		if err != nil {
+			t.Fatal(err)
+		}
 		for {
 			updated, err := iter.Next()
-			if !updated {
-				break
-			}
 			if err != nil {
 				t.Fatal(err)
+			}
+			if !updated {
+				break
 			}
 
 			verifyValue, ok := verificationMap[k]

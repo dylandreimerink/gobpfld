@@ -22,6 +22,9 @@ const (
 	KFeatMapLRUHash
 	KFeatMapLRUPerCPUHash
 	KFeatMapLPMTrie
+	// KFeatMapLPMTrieNextKey indicates that the MapGetNextKey command is for the LPM trie map type is implemented
+	// by the kernel.
+	KFeatMapLPMTrieNextKey
 	KFeatMapArrayOfMaps
 	KFeatMapHashOfMaps
 	KFeatMapNetdevArray
@@ -67,6 +70,7 @@ var mapSupportToString = map[MapSupport]string{
 	KFeatMapLRUHash:              "LRU hash",
 	KFeatMapLRUPerCPUHash:        "LRU per CPU hash",
 	KFeatMapLPMTrie:              "LPM trie",
+	KFeatMapLPMTrieNextKey:       "LPM trie next key",
 	KFeatMapArrayOfMaps:          "Array of maps",
 	KFeatMapHashOfMaps:           "Hash of maps",
 	KFeatMapNetdevArray:          "Netdev array",

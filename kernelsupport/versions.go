@@ -1,7 +1,7 @@
 package kernelsupport
 
 type kernelFeatureVersion struct {
-	version  kernelVersion
+	version  KernelVersion
 	features KernelFeatures
 }
 
@@ -9,20 +9,20 @@ type kernelFeatureVersion struct {
 // largely based on https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 var featureMinVersion = []kernelFeatureVersion{
 	{
-		version: kernelVersion{major: 3, minor: 16},
+		version: KernelVersion{Major: 3, Minor: 16},
 		features: KernelFeatures{
 			Arch: KFeatArchx86_64,
 		},
 	},
 	{
-		version: kernelVersion{major: 3, minor: 18},
+		version: KernelVersion{Major: 3, Minor: 18},
 		features: KernelFeatures{
 			Arch: KFeatArchARM64,
 			API:  KFeatAPIBasic,
 		},
 	},
 	{
-		version: kernelVersion{major: 3, minor: 19},
+		version: KernelVersion{Major: 3, Minor: 19},
 		features: KernelFeatures{
 			Map:     KFeatMapHash | KFeatMapArray,
 			Program: KFeatProgSocketFilter,
@@ -30,44 +30,44 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 1},
+		version: KernelVersion{Major: 4, Minor: 1},
 		features: KernelFeatures{
 			Arch:    KFeatArchs390,
 			Program: KFeatProgKProbe | KFeatProgSchedCLS | KFeatProgSchedACT,
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 2},
+		version: KernelVersion{Major: 4, Minor: 2},
 		features: KernelFeatures{
 			Map: KFeatMapTailCall,
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 3},
+		version: KernelVersion{Major: 4, Minor: 3},
 		features: KernelFeatures{
 			Map: KFeatMapPerfEvent,
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 4},
+		version: KernelVersion{Major: 4, Minor: 4},
 		features: KernelFeatures{
 			API: KFeatAPIObjPinGet,
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 6},
+		version: KernelVersion{Major: 4, Minor: 6},
 		features: KernelFeatures{
 			Map: KFeatMapPerCPUHash | KFeatMapPerCPUArray | KFeatMapStackTrace,
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 7},
+		version: KernelVersion{Major: 4, Minor: 7},
 		features: KernelFeatures{
 			Program: KFeatProgTracepoint,
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 8},
+		version: KernelVersion{Major: 4, Minor: 8},
 		features: KernelFeatures{
 			Arch:    KFeatArchPP64,
 			Map:     KFeatMapCGroupArray,
@@ -75,13 +75,13 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 9},
+		version: KernelVersion{Major: 4, Minor: 9},
 		features: KernelFeatures{
 			Program: KFeatProgPerfEvent,
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 10},
+		version: KernelVersion{Major: 4, Minor: 10},
 		features: KernelFeatures{
 			Map: KFeatMapLRUHash | KFeatMapLRUPerCPUHash,
 			Program: KFeatProgCGroupSKB | KFeatProgCGroupSocket | KFeatProgLWTIn |
@@ -91,13 +91,13 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 11},
+		version: KernelVersion{Major: 4, Minor: 11},
 		features: KernelFeatures{
 			Map: KFeatMapLPMTrie,
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 12},
+		version: KernelVersion{Major: 4, Minor: 12},
 		features: KernelFeatures{
 			Arch: KFeatArchSparc64,
 			Map:  KFeatMapArrayOfMaps | KFeatMapHashOfMaps,
@@ -105,7 +105,7 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 13},
+		version: KernelVersion{Major: 4, Minor: 13},
 		features: KernelFeatures{
 			Arch:    KFeatArchMIPS,
 			Program: KFeatProgSocketOps,
@@ -115,7 +115,7 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 14},
+		version: KernelVersion{Major: 4, Minor: 14},
 		features: KernelFeatures{
 			Arch:    KFeatArchARM32,
 			Map:     KFeatMapNetdevArray | KFeatMapSocketArray,
@@ -125,7 +125,7 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 15},
+		version: KernelVersion{Major: 4, Minor: 15},
 		features: KernelFeatures{
 			Map:     KFeatMapCPU,
 			API:     KFeatAPIMapSyscallRW | KFeatAPIMapName | KFeatAPIProgramQuery,
@@ -134,7 +134,13 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 17},
+		version: KernelVersion{Major: 4, Minor: 16},
+		features: KernelFeatures{
+			Map: KFeatMapLPMTrieNextKey,
+		},
+	},
+	{
+		version: KernelVersion{Major: 4, Minor: 17},
 		features: KernelFeatures{
 			Program: KFeatProgSKMsg | KFeatProgRawTracepoint | KFeatProgCGroupSocketAddr,
 			Attach: KFeatAttachSKMsgVerdict | KFeatAttachCGroupInetBind |
@@ -143,7 +149,7 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 18},
+		version: KernelVersion{Major: 4, Minor: 18},
 		features: KernelFeatures{
 			Arch:    KFeatArchx86,
 			Map:     KFeatMapAFXDP | KFeatMapSocketHash,
@@ -153,14 +159,14 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 19},
+		version: KernelVersion{Major: 4, Minor: 19},
 		features: KernelFeatures{
 			Map:     KFeatMapCGroupStorage | KFeatMapReuseportSocketArray,
 			Program: KFeatProgSKReusePort,
 		},
 	},
 	{
-		version: kernelVersion{major: 4, minor: 20},
+		version: KernelVersion{Major: 4, Minor: 20},
 		features: KernelFeatures{
 			Map:     KFeatMapPerCPUCGroupStorage | KFeatMapQueue | KFeatMapStack,
 			API:     KFeatAPIMapLookupAndDelete,
@@ -169,20 +175,20 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 5, minor: 0},
+		version: KernelVersion{Major: 5, Minor: 0},
 		features: KernelFeatures{
 			API: KFeatAPIMapZeroSeed,
 		},
 	},
 	{
-		version: kernelVersion{major: 5, minor: 1},
+		version: KernelVersion{Major: 5, Minor: 1},
 		features: KernelFeatures{
 			Arch: KFeatArchRiscVRV64G,
 			API:  KFeatAPIMapLock,
 		},
 	},
 	{
-		version: kernelVersion{major: 5, minor: 2},
+		version: KernelVersion{Major: 5, Minor: 2},
 		features: KernelFeatures{
 			Map:     KFeatMapSocketLocalStorage,
 			API:     KFeatAPIMapBPFRW | KFeatAPIMapFreeze,
@@ -191,14 +197,14 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 5, minor: 3},
+		version: KernelVersion{Major: 5, Minor: 3},
 		features: KernelFeatures{
 			Program: KFeatProgCgroupSocketOpt,
 			Attach:  KFeatAttachCGroupGetSetSocket,
 		},
 	},
 	{
-		version: kernelVersion{major: 5, minor: 4},
+		version: KernelVersion{Major: 5, Minor: 4},
 		features: KernelFeatures{
 			Map:  KFeatMapNetdevHash,
 			API:  KFeatAPIBTFGetNextID,
@@ -206,7 +212,7 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 5, minor: 5},
+		version: KernelVersion{Major: 5, Minor: 5},
 		features: KernelFeatures{
 			API:     KFeatAPIMapMMap,
 			Program: KFeatProgTracing,
@@ -214,7 +220,7 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 5, minor: 6},
+		version: KernelVersion{Major: 5, Minor: 6},
 		features: KernelFeatures{
 			Map:     KFeatMapStructOps,
 			API:     KFeatAPIMapBatchOps,
@@ -223,7 +229,7 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 5, minor: 7},
+		version: KernelVersion{Major: 5, Minor: 7},
 		features: KernelFeatures{
 			Arch:    KFeatArchRiscVRV32G,
 			Program: KFeatProgLSM,
@@ -232,7 +238,7 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 5, minor: 8},
+		version: KernelVersion{Major: 5, Minor: 8},
 		features: KernelFeatures{
 			Map: KFeatMapRingBuffer,
 			Attach: KFeatAttachTraceIter | KFeatAttachCGroupINetGetPeerName |
@@ -241,7 +247,7 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 5, minor: 9},
+		version: KernelVersion{Major: 5, Minor: 9},
 		features: KernelFeatures{
 			Program: KFeatProgSKLookup,
 			Attach: KFeatAttachCGroupInetSocketRelease | KFeatAttachXDPCPUMap |
@@ -250,20 +256,20 @@ var featureMinVersion = []kernelFeatureVersion{
 		},
 	},
 	{
-		version: kernelVersion{major: 5, minor: 10},
+		version: KernelVersion{Major: 5, Minor: 10},
 		features: KernelFeatures{
 			Map: KFeatMapINodeStorage | KFeatMapDynamicInnerMap,
 			API: KFeatAPIProgBindMap,
 		},
 	},
 	{
-		version: kernelVersion{major: 5, minor: 11},
+		version: KernelVersion{Major: 5, Minor: 11},
 		features: KernelFeatures{
 			Map: KFeatMapTaskStorage,
 		},
 	},
 	{
-		version: kernelVersion{major: 5, minor: 13},
+		version: KernelVersion{Major: 5, Minor: 13},
 		features: KernelFeatures{
 			Map: KFeatMapPerCPUArrayBatchOps | KFeatMapLPMTrieBatchOps,
 		},

@@ -134,6 +134,11 @@ var availableEnvs = map[string]testEnv{
 		kernel:     "5.4.167",
 		bzImageURL: "https://github.com/dylandreimerink/bpfci/raw/master/dist/amd64-5.4.167-bzImage",
 	},
+	"linux-4.14.260-amd64": {
+		arch:       "amd64",
+		kernel:     "4.14.260",
+		bzImageURL: "https://github.com/dylandreimerink/bpfci/raw/master/dist/amd64-4.14.260-bzImage",
+	},
 	// "linux-5.15.5-arm64": {
 	// 	arch:   "arm64",
 	// 	kernel: "5.15.5",
@@ -170,7 +175,6 @@ func buildAndRunTests(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
-	// Sort environments so we always execute them in the same order.
 	sort.Strings(environments)
 
 	results := make(map[string]map[string]testResult)

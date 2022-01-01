@@ -73,6 +73,20 @@ func MapIterForEach(iter MapIterator, key, value interface{}, callback func(key,
 	return nil
 }
 
+var _ MapIterator = (*singleLookupIterator)(nil)
+
+type errIterator struct {
+	err error
+}
+
+func (ei *errIterator) Init(key, value interface{}) error {
+	return ei.err
+}
+
+func (ei *errIterator) Next() (updated bool, err error) {
+	return false, ei.err
+}
+
 // ErrIteratorDone indicates that Next has been called on an iterator which is done iterating
 var ErrIteratorDone = errors.New("iterator is done")
 
@@ -144,7 +158,7 @@ func (sli *singleLookupIterator) Next() (updated bool, err error) {
 			return false, nil
 		}
 
-		return false, err
+		return false, fmt.Errorf("map get next: %w", err)
 	}
 
 	sli.attr.Key = sli.attr.Value_NextKey
@@ -153,10 +167,10 @@ func (sli *singleLookupIterator) Next() (updated bool, err error) {
 	err = bpfsys.MapLookupElem(&sli.attr)
 	if err != nil {
 		sli.done = true
-		return false, err
+		return false, fmt.Errorf("map lookup: %w", err)
 	}
 
-	return true, err
+	return true, nil
 }
 
 var _ MapIterator = (*batchLookupIterator)(nil)

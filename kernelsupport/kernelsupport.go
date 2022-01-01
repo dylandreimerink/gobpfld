@@ -25,6 +25,10 @@ type KernelFeatures struct {
 // change during the lifetime. Using this singleton saves a lot of performance.
 var CurrentFeatures = MustGetKernelFeatures()
 
+// CurrentVersion is a singleton containing the result of MustGetKernelVersion. Assuming the kernel version doesn't
+// change during the lifetime. Using this singleton saves a lot of performance.
+var CurrentVersion = MustGetKernelVersion()
+
 // MustGetKernelFeatures runs GetKernelFeatures but panics if any error is detected
 func MustGetKernelFeatures() KernelFeatures {
 	features, err := getKernelFeatures(true)
@@ -41,23 +45,7 @@ func GetKernelFeatures() (KernelFeatures, error) {
 }
 
 func getKernelFeatures(must bool) (KernelFeatures, error) {
-	var utsname syscall.Utsname
-	err := syscall.Uname(&utsname)
-	if err != nil {
-		return KernelFeatures{}, fmt.Errorf("error while calling syscall.Uname: %w", err)
-	}
-
-	releaseBytes := make([]byte, len(utsname.Release))
-	for i, v := range utsname.Release {
-		if v == 0x00 {
-			releaseBytes = releaseBytes[:i]
-			break
-		}
-		releaseBytes[i] = byte(v)
-	}
-	release := string(releaseBytes)
-
-	version, err := parseKernelVersion(release, true)
+	utsname, version, err := getKernelVersion(must)
 	if err != nil {
 		return KernelFeatures{}, err
 	}
@@ -111,47 +99,94 @@ func getKernelFeatures(must bool) (KernelFeatures, error) {
 	return features, nil
 }
 
-type kernelVersion struct {
-	major int
-	minor int
-	patch int
+// MustGetKernelVersion runs GetKernelFeatures but panics if any error is detected
+func MustGetKernelVersion() KernelVersion {
+	_, features, err := getKernelVersion(true)
+	if err != nil {
+		panic(err)
+	}
+	return features
+}
+
+func GetKernelVersion() (KernelVersion, error) {
+	_, version, err := getKernelVersion(false)
+	return version, err
+}
+
+func getKernelVersion(must bool) (*syscall.Utsname, KernelVersion, error) {
+	var utsname syscall.Utsname
+	err := syscall.Uname(&utsname)
+	if err != nil {
+		return nil, KernelVersion{}, fmt.Errorf("error while calling syscall.Uname: %w", err)
+	}
+
+	releaseBytes := make([]byte, len(utsname.Release))
+	for i, v := range utsname.Release {
+		if v == 0x00 {
+			releaseBytes = releaseBytes[:i]
+			break
+		}
+		releaseBytes[i] = byte(v)
+	}
+	release := string(releaseBytes)
+
+	version, err := ParseKernelVersion(release, true)
+	if err != nil {
+		return nil, version, err
+	}
+
+	return &utsname, version, err
+}
+
+func Version(major, minor, patch int) KernelVersion {
+	return KernelVersion{
+		Major: major,
+		Minor: minor,
+		Patch: patch,
+	}
+}
+
+type KernelVersion struct {
+	Major int
+	Minor int
+	Patch int
 }
 
 // Higher returns true if the 'cmp' version is higher than the 'kv' version
-func (kv kernelVersion) Higher(cmp kernelVersion) bool {
-	if kv.major > cmp.major {
+func (kv KernelVersion) Higher(cmp KernelVersion) bool {
+	if kv.Major > cmp.Major {
 		return true
 	}
-	if kv.major < cmp.major {
+	if kv.Major < cmp.Major {
 		return false
 	}
 
 	// Majors are equal
 
-	if kv.minor > cmp.minor {
+	if kv.Minor > cmp.Minor {
 		return true
 	}
-	if kv.minor < cmp.minor {
+	if kv.Minor < cmp.Minor {
 		return false
 	}
 
 	// Minors are equal
 
-	if kv.patch >= cmp.patch {
+	if kv.Patch >= cmp.Patch {
 		return true
 	}
 
 	return false
 }
 
-func parseKernelVersion(release string, must bool) (version kernelVersion, err error) {
+func ParseKernelVersion(release string, must bool) (version KernelVersion, err error) {
 	parts := strings.Split(release, "-")
 
 	// The base version is before the -, discard anything after the -
 	base := parts[0]
 	baseParts := strings.Split(base, ".")
 	if len(baseParts) > 2 {
-		version.patch, err = strconv.Atoi(baseParts[2])
+		version.Patch, err = strconv.Atoi(baseParts[2])
 		if err != nil {
 			// The patch version is not critically important in most cases. If 'must' is true this would result
 			// in a panic, instread ignore the error.
@@ -163,13 +198,13 @@ func parseKernelVersion(release string, must bool) (version kernelVersion, err e
 	}
 
 	if len(baseParts) > 1 {
-		version.minor, err = strconv.Atoi(baseParts[1])
+		version.Minor, err = strconv.Atoi(baseParts[1])
 		if err != nil {
 			return version, fmt.Errorf("error while parsing kernel minor version '%s': %w", baseParts[1], err)
 		}
 	}
 
-	version.major, err = strconv.Atoi(baseParts[0])
+	version.Major, err = strconv.Atoi(baseParts[0])
 	if err != nil {
 		return version, fmt.Errorf("error while parsing kernel major version '%s': %w", baseParts[0], err)
 	}

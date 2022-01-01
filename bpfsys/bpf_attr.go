@@ -4,6 +4,7 @@ import (
 	"unsafe"
 
 	"github.com/dylandreimerink/gobpfld/bpftypes"
+	"github.com/dylandreimerink/gobpfld/kernelsupport"
 )
 
 type BPFAttribute interface {
@@ -92,18 +93,96 @@ func (amb *BPFAttrMapBatch) Size() uintptr {
 	return unsafe.Sizeof(*amb)
 }
 
-type BPFAttrProgramLoad struct {
-	ProgramType   bpftypes.BPFProgType // one of enum bpf_prog_type
-	InsnCnt       uint32               // the amount of bpf instruction in program
-	Insns         uintptr              // pointer to the bpf instructions
-	License       uintptr              // Pointer to string containing the license
-	LogLevel      bpftypes.BPFLogLevel // verbosity level of verifier
-	LogSize       uint32               // size of user buffer
-	LogBuf        uintptr              // pointer to buffer where verifier log will be written to
-	KernelVersion uint32               // not used
-	ProgFlags     bpftypes.BPFProgLoadFlags
-	ProgName      [bpftypes.BPF_OBJ_NAME_LEN]byte
-	ProgIFIndex   uint32 // ifindex of netdev to prep for
+type bpfAttrProgramLoad3_18 struct {
+	ProgramType bpftypes.BPFProgType // one of enum bpf_prog_type
+	InsnCnt     uint32               // the amount of bpf instruction in program
+	Insns       uintptr              // pointer to the bpf instructions
+	License     uintptr              // Pointer to string containing the license
+	LogLevel    bpftypes.BPFLogLevel // verbosity level of verifier
+	LogSize     uint32               // size of user buffer
+	LogBuf      uintptr              // pointer to buffer where verifier log will be written to
+}
+
+type bpfAttrProgramLoad4_1 struct {
+	ProgramType bpftypes.BPFProgType // one of enum bpf_prog_type
+	InsnCnt     uint32               // the amount of bpf instruction in program
+	Insns       uintptr              // pointer to the bpf instructions
+	License     uintptr              // Pointer to string containing the license
+	LogLevel    bpftypes.BPFLogLevel // verbosity level of verifier
+	LogSize     uint32               // size of user buffer
+	LogBuf      uintptr              // pointer to buffer where verifier log will be written to
+
+	KernelVersion uint32 // not used
+}
+
+type bpfAttrProgramLoad4_12 struct {
+	ProgramType bpftypes.BPFProgType // one of enum bpf_prog_type
+	InsnCnt     uint32               // the amount of bpf instruction in program
+	Insns       uintptr              // pointer to the bpf instructions
+	License     uintptr              // Pointer to string containing the license
+	LogLevel    bpftypes.BPFLogLevel // verbosity level of verifier
+	LogSize     uint32               // size of user buffer
+	LogBuf      uintptr              // pointer to buffer where verifier log will be written to
+
+	KernelVersion uint32 // not used
+
+	ProgFlags bpftypes.BPFProgLoadFlags
+}
+
+type bpfAttrProgramLoad4_15 struct {
+	ProgramType bpftypes.BPFProgType // one of enum bpf_prog_type
+	InsnCnt     uint32               // the amount of bpf instruction in program
+	Insns       uintptr              // pointer to the bpf instructions
+	License     uintptr              // Pointer to string containing the license
+	LogLevel    bpftypes.BPFLogLevel // verbosity level of verifier
+	LogSize     uint32               // size of user buffer
+	LogBuf      uintptr              // pointer to buffer where verifier log will be written to
+
+	KernelVersion uint32 // not used
+
+	ProgFlags bpftypes.BPFProgLoadFlags
+
+	ProgName    [bpftypes.BPF_OBJ_NAME_LEN]byte
+	ProgIFIndex uint32 // ifindex of netdev to prep for
+}
+
+type bpfAttrProgramLoad4_17 struct {
+	ProgramType bpftypes.BPFProgType // one of enum bpf_prog_type
+	InsnCnt     uint32               // the amount of bpf instruction in program
+	Insns       uintptr              // pointer to the bpf instructions
+	License     uintptr              // Pointer to string containing the license
+	LogLevel    bpftypes.BPFLogLevel // verbosity level of verifier
+	LogSize     uint32               // size of user buffer
+	LogBuf      uintptr              // pointer to buffer where verifier log will be written to
+
+	KernelVersion uint32 // not used
+
+	ProgFlags bpftypes.BPFProgLoadFlags
+
+	ProgName    [bpftypes.BPF_OBJ_NAME_LEN]byte
+	ProgIFIndex uint32 // ifindex of netdev to prep for
+
+	// For some prog types expected attach type must be known at
+	// load time to verify attach type specific parts of prog
+	// (context accesses, allowed helpers, etc).
+	ExpectedAttachType bpftypes.BPFAttachType
+}
+
+type bpfAttrProgramLoad5_0 struct {
+	ProgramType bpftypes.BPFProgType // one of enum bpf_prog_type
+	InsnCnt     uint32               // the amount of bpf instruction in program
+	Insns       uintptr              // pointer to the bpf instructions
+	License     uintptr              // Pointer to string containing the license
+	LogLevel    bpftypes.BPFLogLevel // verbosity level of verifier
+	LogSize     uint32               // size of user buffer
+	LogBuf      uintptr              // pointer to buffer where verifier log will be written to
+
+	KernelVersion uint32 // not used
+
+	ProgFlags bpftypes.BPFProgLoadFlags
+
+	ProgName    [bpftypes.BPF_OBJ_NAME_LEN]byte
+	ProgIFIndex uint32 // ifindex of netdev to prep for
 
 	// For some prog types expected attach type must be known at
 	// load time to verify attach type specific parts of prog
@@ -117,17 +196,75 @@ type BPFAttrProgramLoad struct {
 	LineInfoRecSize uint32  // userspace bpf_line_info size
 	LineInfo        uintptr // line info
 	LineInfoCnt     uint32  // number of bpf_line_info records
-	AttachBTFID     uint32  // in-kernel BTF type id to attach to
+}
+
+type bpfAttrProgramLoad5_5 struct {
+	ProgramType bpftypes.BPFProgType // one of enum bpf_prog_type
+	InsnCnt     uint32               // the amount of bpf instruction in program
+	Insns       uintptr              // pointer to the bpf instructions
+	License     uintptr              // Pointer to string containing the license
+	LogLevel    bpftypes.BPFLogLevel // verbosity level of verifier
+	LogSize     uint32               // size of user buffer
+	LogBuf      uintptr              // pointer to buffer where verifier log will be written to
+
+	KernelVersion uint32 // not used
+
+	ProgFlags bpftypes.BPFProgLoadFlags
+
+	ProgName    [bpftypes.BPF_OBJ_NAME_LEN]byte
+	ProgIFIndex uint32 // ifindex of netdev to prep for
+
+	// For some prog types expected attach type must be known at
+	// load time to verify attach type specific parts of prog
+	// (context accesses, allowed helpers, etc).
+	ExpectedAttachType bpftypes.BPFAttachType
+
+	ProgBTFFD       BPFfd   // fd pointing to BTF type data
+	FuncInfoRecSize uint32  // userspace bpf_func_info size
+	FuncInfo        uintptr // func info
+	FuncInfoCnt     uint32  // number of bpf_func_info records
+	LineInfoRecSize uint32  // userspace bpf_line_info size
+	LineInfo        uintptr // line info
+	LineInfoCnt     uint32  // number of bpf_line_info records
+
+	AttachBTFID uint32 // in-kernel BTF type id to attach to
 	// valid prog_fd to attach to bpf prog or valid module BTF object fd or 0 to attach to vmlinux
 	AttachProgFD_AttachBTFObjFD uint32
 }
+
+type BPFAttrProgramLoad bpfAttrProgramLoad5_5
 
 func (amb *BPFAttrProgramLoad) ToPtr() unsafe.Pointer {
 	return unsafe.Pointer(amb)
 }
 
+// Size returns the size of the struct, we always pass a pointer to the full struct, but the kernel will only
+// read up to the given amount of bytes. The kernel will throw an error if the size is larger than it expects
+// thus we have to return different sizes depending on the current kernel version.
+//
+// We use internal structs to calculate the size, we do this since the same struct might be a different size
+// depending on the architecture(32/64 bit addresses).
 func (amb *BPFAttrProgramLoad) Size() uintptr {
-	return unsafe.Sizeof(*amb)
+	var size uintptr
+
+	switch {
+	case kernelsupport.CurrentVersion.Higher(kernelsupport.Version(5, 5, 0)):
+		size = unsafe.Sizeof(bpfAttrProgramLoad5_5{})
+	case kernelsupport.CurrentVersion.Higher(kernelsupport.Version(5, 0, 0)):
+		size = unsafe.Sizeof(bpfAttrProgramLoad5_0{})
+	case kernelsupport.CurrentVersion.Higher(kernelsupport.Version(4, 17, 0)):
+		size = unsafe.Sizeof(bpfAttrProgramLoad4_17{})
+	case kernelsupport.CurrentVersion.Higher(kernelsupport.Version(4, 15, 0)):
+		size = unsafe.Sizeof(bpfAttrProgramLoad4_15{})
+	case kernelsupport.CurrentVersion.Higher(kernelsupport.Version(4, 12, 0)):
+		size = unsafe.Sizeof(bpfAttrProgramLoad4_12{})
+	case kernelsupport.CurrentVersion.Higher(kernelsupport.Version(4, 1, 0)):
+		size = unsafe.Sizeof(bpfAttrProgramLoad4_1{})
+	default:
+		size = unsafe.Sizeof(bpfAttrProgramLoad3_18{})
+	}
+
+	return size
 }
 
 // BPFAttrObj is used as attribute in the BPF_OBJ_* commands

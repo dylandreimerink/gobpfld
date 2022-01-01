@@ -10,6 +10,7 @@ import (
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	bpfSyscall "github.com/dylandreimerink/gobpfld/internal/syscall"
+	"github.com/dylandreimerink/gobpfld/kernelsupport"
 )
 
 // AbstractMap is a base struct which implements BPFMap however it lacks any features for interacting
@@ -43,7 +44,6 @@ func (m *AbstractMap) load(changeAttr func(attr *bpfsys.BPFAttrMapCreate)) error
 	}
 
 	attr := &bpfsys.BPFAttrMapCreate{
-		MapName:    m.Name.GetCstr(),
 		MapType:    m.Definition.Type,
 		KeySize:    m.Definition.KeySize,
 		ValueSize:  m.Definition.ValueSize,
@@ -51,8 +51,12 @@ func (m *AbstractMap) load(changeAttr func(attr *bpfsys.BPFAttrMapCreate)) error
 		MapFlags:   m.Definition.Flags,
 	}
 
-	// If BTF info is available
-	if m.BTF != nil && m.BTFMapType != nil {
+	if kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIMapName) {
+		attr.MapName = m.Name.GetCstr()
+	}
+
+	// If BTF info is available and the current kernel supports it
+	if m.BTF != nil && m.BTFMapType != nil && kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIBTFLoad) {
 		// Load BTF if not already loaded
 		if !m.BTF.loaded {
 			var log string

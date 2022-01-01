@@ -5,6 +5,8 @@ import (
 	"html/template"
 	"io"
 	"sort"
+
+	"github.com/dylandreimerink/gobpfld/kernelsupport"
 )
 
 func renderHTMLReport(testResults map[string]map[string]testResult, out io.Writer) error {
@@ -20,7 +22,21 @@ func renderHTMLReport(testResults map[string]map[string]testResult, out io.Write
 	for k := range testResults {
 		envs = append(envs, k)
 	}
-	sort.Strings(envs)
+
+	// Sort environments from oldest to newest
+	sort.Slice(envs, func(i, j int) bool {
+		iV, err := kernelsupport.ParseKernelVersion(availableEnvs[envs[i]].kernel, true)
+		if err != nil {
+			panic(err)
+		}
+
+		jV, err := kernelsupport.ParseKernelVersion(availableEnvs[envs[j]].kernel, true)
+		if err != nil {
+			panic(err)
+		}
+
+		return jV.Higher(iV)
+	})
 
 	testsMap := make(map[string]bool)
 	for _, t := range testResults {

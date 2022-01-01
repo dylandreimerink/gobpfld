@@ -159,6 +159,14 @@ func (m *LPMTrieMap) DeleteBatch(
 }
 
 func (m *LPMTrieMap) Iterator() MapIterator {
+	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapLPMTrieNextKey) {
+		return &errIterator{
+			// TODO provide this feature by maintaining a map of all keys in userspace and returning a custom
+			//  iterator.
+			err: fmt.Errorf("current kernel version doesn't support LPM map iteration"),
+		}
+	}
+
 	// If the kernel doesn't have support for batch lookup, use single lookup
 	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapLPMTrieBatchOps) {
 		return &singleLookupIterator{

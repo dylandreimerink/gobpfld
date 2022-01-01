@@ -101,7 +101,8 @@ func (p *AbstractBPFProgram) load(attr bpfsys.BPFAttrProgramLoad) (log string, e
 		}
 	}
 
-	if p.BTF != nil {
+	// If we have BTF info and the kernel supports BTF loading
+	if p.BTF != nil && kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIBTFLoad) {
 		// Load BTF if not already loaded
 		if !p.BTF.loaded {
 			_, err = p.BTF.Load(BTFLoadOpts{
