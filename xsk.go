@@ -790,6 +790,10 @@ type XSKSocket struct {
 }
 
 func NewXSKSocket(settings XSKSettings) (_ *XSKSocket, err error) {
+	if !kernelsupport.CurrentFeatures.Map.Has(kernelsupport.KFeatMapAFXDP) {
+		return nil, fmt.Errorf("XSK/AF_XDP is not supported by the current kernel version")
+	}
+
 	if settings.FrameCount == 0 {
 		settings.FrameCount = defaultFrameCount
 	}

@@ -629,7 +629,7 @@ func downloadLinux(ctx *testCtx) error {
 		}
 	}
 
-	const initrdURL = "https://github.com/dylandreimerink/bpfci/raw/master/dist/initrd.gz"
+	const initrdURL = "https://github.com/dylandreimerink/bpfci/raw/master/dist/amd64-initrd.gz"
 	ctx.initrdPath = path.Join(cacheDir, "initrd.gz")
 	dlInitrd := false
 
