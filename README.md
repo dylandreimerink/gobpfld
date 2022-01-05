@@ -98,13 +98,13 @@ Features/tasks in this list are commonly used/requested because they are used in
 * Support stack map
 * Support ringbuffer map
 * Attach to tc (traffic control)
-* (partially implemented) Linux kernel version detection (so programs can programmatically decide which features they can use, then error, warn or be backwards compatible)
+* ~~Linux kernel version detection (so programs can programmatically decide which features they can use, then error, warn or be backwards compatible)~~
 * Library testing framework (We need some way to guarantee the library works, and stays working)
   * ~~Library+kernel testing, verify the ABI is implemented correctly~~
   * Fuzzing, we parse a lot like ELF files, eBPF programs, assembly. Panics are not desirable.
   * Race condition testing
   * Cross architecture testing, [QEMU](https://www.qemu.org/) supports [emulation](https://www.qemu.org/docs/master/system/index.html) of other architectures which we should be able to use to test architectures like ARM and RISC-V without dedicated testing hardware.
-  * ~~Cross kernel version testing, we should run the tests on a number of kernels, both older and newer, to test version dependant fallbacks and kernel ABI issues. ~~
+  * ~~Cross kernel version testing, we should run the tests on a number of kernels, both older and newer, to test version dependant fallbacks and kernel ABI issues.~~
 
 ### Should have
 

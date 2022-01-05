@@ -16,7 +16,7 @@ import (
 // This example command is a pure go replacement for the userpace program of the Basic03 program from
 // xdp-tutorial. https://github.com/xdp-project/xdp-tutorial/tree/master/basic03-map-counter
 // This example has no options but does demonstrate program loading from ELF, attaching to a interface, and interacting with a map
-func TestIntergrationXDPstats(t *testing.T) {
+func TestIntegrationXDPstats(t *testing.T) {
 	elfFileBytes, err := ebpf.ReadFile("ebpf/xdp_stats_test")
 	if err != nil {
 		t.Fatal(err)

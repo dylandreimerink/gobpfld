@@ -171,11 +171,9 @@ func (bpfElf *bpfELF) processBTF() error {
 
 		section := bpfElf.elfFile.Section(dataSec.Name)
 		if section != nil {
-			sizeType := bpfElf.BTF.rawType[dataSec.sizeOffset : dataSec.sizeOffset+4]
-			bpfElf.BTF.btfHdr.byteOrder.PutUint32(sizeType, uint32(section.Size))
 			dataSec.Size = uint32(section.Size)
 
-			for _, variable := range dataSec.Variables {
+			for i, variable := range dataSec.Variables {
 				for _, sym := range symbols {
 					// Ignore any symbols which are not for the current section
 					if len(bpfElf.elfFile.Sections) <= int(sym.Section) ||
@@ -189,8 +187,7 @@ func (bpfElf *bpfELF) processBTF() error {
 					}
 
 					// The value of the symbol is the offset from the start of the section
-					offset := bpfElf.BTF.rawType[variable.offsetOffset : variable.offsetOffset+4]
-					bpfElf.BTF.btfHdr.byteOrder.PutUint32(offset, uint32(sym.Value))
+					dataSec.Variables[i].Offset = uint32(sym.Value)
 
 					break
 				}
@@ -256,7 +253,7 @@ func (bpfElf *bpfELF) parseProgBits(sectionIndex int, section *elf.Section) erro
 	case "license":
 		bpfElf.license = cstr.BytesToString(data)
 
-	case "maps":
+	case "maps", ".maps":
 		err := bpfElf.parseMaps(sectionIndex, section)
 		if err != nil {
 			return fmt.Errorf("parse maps: %w", err)
@@ -570,6 +567,7 @@ func (bpfElf *bpfELF) linkAndRelocate() error {
 		// Handle relocation entries which can includes:
 		//  - Map references(need to be resolved at load time)
 		//  - BPF to BPF function calls (can be resolved here)
+		//  - Global data (.data, .bss, .rodata)
 		for _, relocEntry := range progRelocTable {
 			section := bpfElf.elfFile.Sections[relocEntry.Symbol.Section]
 
@@ -601,7 +599,29 @@ func (bpfElf *bpfELF) linkAndRelocate() error {
 				continue
 			}
 
-			if section.Name == "maps" {
+			// Global data relocation
+			if section.Name == ".data" || section.Name == ".rodata" || section.Name == ".bss" {
+				// symbols, err := bpfElf.elfFile.Symbols()
+				// if err != nil {
+				// 	return fmt.Errorf("get symbols: %w", err)
+				// }
+
+				// sectionData, err := section.Data()
+				// spew.Dump(sectionData)
+
+				// sectionRel := bpfElf.relTables[section.Name]
+				// spew.Dump(section.Name, symbols[relocEntry.Symbol.Section])
+				// spew.Dump(program.BTFLines)
+
+				// spew.Dump(ebpf.Decode([]ebpf.RawInstruction{
+				// 	program.Instructions[progOff/ebpf.BPFInstSize],
+				// 	program.Instructions[(progOff/ebpf.BPFInstSize)+1],
+				// }))
+
+				// spew.Dump(sectionData[relocEntry])
+			}
+
+			if section.Name == "maps" || section.Name == ".maps" {
 				// The map name is the name of the symbol truncated to BPF_OBJ_NAME_LEN
 				mapName := relocEntry.Symbol.Name
 				if bpfElf.settings.TruncateNames && len(mapName) > bpftypes.BPF_OBJ_NAME_LEN-1 {
@@ -854,7 +874,7 @@ type elfRelocEntry struct {
 
 func (e *elfRelocEntry) AbsoluteOffset() (uint64, error) {
 	switch e.Type {
-	case r_bpf_64_64:
+	case r_bpf_64_64, r_bpf_none:
 		// Just the absolute offset from the beginning of the program section
 		return e.Off, nil
 	case r_bpf_64_32:

@@ -902,7 +902,7 @@ func (t *BTFStructType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]
 		KindFlag: t.KindFlag,
 		Kind:     BTF_KIND_STRUCT,
 		VLen:     uint16(len(t.Members)),
-		sizeType: uint32(len(t.Members) * sizeOfMember),
+		sizeType: t.sizeType,
 	}.ToBTFType(strTbl).ToBytes(order)))
 
 	for _, member := range t.Members {
@@ -940,7 +940,7 @@ func (t *BTFUnionType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]b
 		KindFlag: t.KindFlag,
 		Kind:     BTF_KIND_UNION,
 		VLen:     uint16(len(t.Members)),
-		sizeType: uint32(len(t.Members) * sizeOfMember),
+		sizeType: t.sizeType,
 	}.ToBTFType(strTbl).ToBytes(order)))
 
 	for _, member := range t.Members {

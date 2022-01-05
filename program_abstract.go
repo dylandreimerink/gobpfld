@@ -106,7 +106,7 @@ func (p *AbstractBPFProgram) load(attr bpfsys.BPFAttrProgramLoad) (log string, e
 		// Load BTF if not already loaded
 		if !p.BTF.loaded {
 			_, err = p.BTF.Load(BTFLoadOpts{
-				LogLevel: bpftypes.BPFLogLevelBasic,
+				LogLevel: bpftypes.BPFLogLevelVerbose,
 			})
 			if err != nil {
 				// TODO make custom error type which includes the verifier log
