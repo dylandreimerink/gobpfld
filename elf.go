@@ -501,10 +501,14 @@ func (bpfElf *bpfELF) parseMaps(sectionIndex int, section *elf.Section) error {
 // linkAndRelocate links data parsed from different ELF sections together and relocates any addresses/pointers
 // that have changed as result of the linking.
 func (bpfElf *bpfELF) linkAndRelocate() error {
-	// TODO this assumes all maps at this stage are data maps, which is a bad assumption.
-	//      restructure parsing phases to make this nicer
+	// FIXME this assumes all maps at this stage are data maps, which is a bad assumption.
+	//       restructure parsing phases to make this nicer
 	for name, bpfMap := range bpfElf.Maps {
-		dataMap := bpfMap.(*dataMap)
+		dataMap, ok := bpfMap.(*dataMap)
+		if !ok {
+			continue
+		}
+
 		dataMap.BTF = bpfElf.BTF
 		if bpfElf.BTF != nil {
 			dataSec := bpfElf.BTF.typesByName["."+name]
@@ -519,10 +523,10 @@ func (bpfElf *bpfELF) linkAndRelocate() error {
 	// Add BTF info to the abstract maps and resolve the actual map type, to be used during map loading.
 	for name, bpfMap := range bpfElf.AbstractMaps {
 		bpfMap.BTF = bpfElf.BTF
-		if bpfElf.BTF != nil {
-			// TODO resolve more information about the map from BTF
-			// bpfMap.BTFMapType = bpfElf.BTF.typesByName[name]
-		}
+		// if bpfElf.BTF != nil {
+		// TODO resolve more information about the map from BTF
+		// bpfMap.BTFMapType = bpfElf.BTF.typesByName[name]
+		// }
 
 		bpfElf.Maps[name] = bpfMapFromAbstractMap(bpfMap)
 	}
