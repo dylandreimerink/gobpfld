@@ -262,7 +262,11 @@ func bpfMapFromAbstractMap(am AbstractMap) BPFMap {
 		// TODO BPF_MAP_TYPE_CGROUP_STORAGE
 		// TODO BPF_MAP_TYPE_REUSEPORT_SOCKARRAY
 		// TODO BPF_MAP_TYPE_PERCPU_CGROUP_STORAGE
-		// TODO BPF_MAP_TYPE_QUEUE
+	case bpftypes.BPF_MAP_TYPE_QUEUE:
+		return &QueueMap{
+			AbstractMap: am,
+		}
+
 	case bpftypes.BPF_MAP_TYPE_STACK:
 		return &StackMap{
 			AbstractMap: am,

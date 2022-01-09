@@ -94,7 +94,7 @@ Features/tasks in this list are commonly used/requested because they are used in
 * Support dev and devhash map
 * Support sock and sockhash map
 * Support cpu map
-* Support queue map
+* ~~Support queue map~~
 * ~~Support stack map~~
 * Support ringbuffer map
 * Attach to tc (traffic control)
