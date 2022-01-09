@@ -37,10 +37,13 @@ type MapIterator interface {
 // for type information. If callback returns an error the iterator will stop iterating and return the error from
 // callback. Callback is always invoked with pointer types, even if non-pointer types were supplied to key and value.
 func MapIterForEach(iter MapIterator, key, value interface{}, callback func(key, value interface{}) error) error {
-	// If the key is not a pointer
-	if reflect.TypeOf(key).Kind() != reflect.Ptr {
-		// Create a new value with the same type as 'key' and set 'key' to its pointer
-		key = reflect.New(reflect.TypeOf(key)).Interface()
+	// Key can be nil for some map types like stacks an queues
+	if key != nil {
+		// If the key is not a pointer
+		if reflect.TypeOf(key).Kind() != reflect.Ptr {
+			// Create a new value with the same type as 'key' and set 'key' to its pointer
+			key = reflect.New(reflect.TypeOf(key)).Interface()
+		}
 	}
 
 	// / If the value is not a pointer
@@ -490,5 +493,62 @@ func (sli *singleMapLookupIterator) Next() (updated bool, err error) {
 	return true, nil
 }
 
-// TODO implement for Queue and Stack maps
-// type LookupAndDeleteIterator struct {}
+// lookupAndDeleteIterator uses the MapLookupAndDeleteElem commands to iterate over a map, delete all values in the
+// process. Using in stack and queue maps
+type lookupAndDeleteIterator struct {
+	// The map over which to iterate
+	BPFMap BPFMap
+
+	// clone of the map so it can't change during iteration
+	am   *AbstractMap
+	attr bpfsys.BPFAttrMapElem
+	done bool
+}
+
+func (ldi *lookupAndDeleteIterator) Init(key, value interface{}) error {
+	if ldi.BPFMap == nil {
+		return fmt.Errorf("BPFMap may not be nil")
+	}
+
+	// Copy the important features of the map so they are imutable from
+	// outside the package during iteration.
+	ldi.am = &AbstractMap{
+		Name:       ldi.BPFMap.GetName(),
+		loaded:     ldi.BPFMap.IsLoaded(),
+		fd:         ldi.BPFMap.GetFD(),
+		Definition: ldi.BPFMap.GetDefinition(),
+	}
+
+	ldi.attr.MapFD = ldi.am.fd
+
+	var err error
+	ldi.attr.Value_NextKey, err = ldi.am.toValuePtr(value)
+	if err != nil {
+		return fmt.Errorf("toValuePtr: %w", err)
+	}
+
+	return nil
+}
+
+// Next gets the next key from the map
+func (ldi *lookupAndDeleteIterator) Next() (updated bool, err error) {
+	if ldi.am == nil {
+		return false, fmt.Errorf("iterator not initialized")
+	}
+
+	if ldi.done {
+		return false, ErrIteratorDone
+	}
+
+	err = bpfsys.MapLookupAndDeleteElement(&ldi.attr)
+	if err != nil {
+		ldi.done = true
+		if sysErr, ok := err.(*bpfSyscall.Error); ok && sysErr.Errno == syscall.ENOENT {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("map lookup and delete: %w", err)
+	}
+
+	return true, nil
+}

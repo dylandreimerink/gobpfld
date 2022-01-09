@@ -218,9 +218,12 @@ func (m *AbstractMap) get(key interface{}, value interface{}) error {
 
 	var err error
 
-	attr.Key, err = m.toKeyPtr(key)
-	if err != nil {
-		return err
+	// key can be nil for some map types which don't have keys like stacks and queues
+	if key != nil {
+		attr.Key, err = m.toKeyPtr(key)
+		if err != nil {
+			return err
+		}
 	}
 
 	attr.Value_NextKey, err = m.toValuePtr(value)
@@ -431,9 +434,12 @@ func (m *AbstractMap) set(key interface{}, value interface{}, flags bpfsys.BPFAt
 
 	var err error
 
-	attr.Key, err = m.toKeyPtr(key)
-	if err != nil {
-		return err
+	// Key can be nil if the map type has no key like stacks and queues
+	if key != nil {
+		attr.Key, err = m.toKeyPtr(key)
+		if err != nil {
+			return err
+		}
 	}
 
 	attr.Value_NextKey, err = m.toValuePtr(value)
@@ -442,6 +448,39 @@ func (m *AbstractMap) set(key interface{}, value interface{}, flags bpfsys.BPFAt
 	}
 
 	err = bpfsys.MapUpdateElem(attr)
+	if err != nil {
+		return fmt.Errorf("bpf syscall error: %w", err)
+	}
+
+	return nil
+}
+
+func (m *AbstractMap) lookupAndDelete(key interface{}, value interface{}, flags bpfsys.BPFAttrMapElemFlags) error {
+	if !m.loaded {
+		return fmt.Errorf("can't write to an unloaded map")
+	}
+
+	attr := &bpfsys.BPFAttrMapElem{
+		MapFD: m.fd,
+		Flags: flags,
+	}
+
+	var err error
+
+	// Key can be nil if the map type has no key like stacks and queues
+	if key != nil {
+		attr.Key, err = m.toKeyPtr(key)
+		if err != nil {
+			return err
+		}
+	}
+
+	attr.Value_NextKey, err = m.toValuePtr(value)
+	if err != nil {
+		return err
+	}
+
+	err = bpfsys.MapLookupAndDeleteElement(attr)
 	if err != nil {
 		return fmt.Errorf("bpf syscall error: %w", err)
 	}

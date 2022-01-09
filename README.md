@@ -95,7 +95,7 @@ Features/tasks in this list are commonly used/requested because they are used in
 * Support sock and sockhash map
 * Support cpu map
 * Support queue map
-* Support stack map
+* ~~Support stack map~~
 * Support ringbuffer map
 * Attach to tc (traffic control)
 * ~~Linux kernel version detection (so programs can programmatically decide which features they can use, then error, warn or be backwards compatible)~~
