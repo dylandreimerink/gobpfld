@@ -194,6 +194,7 @@ var featureMinVersion = []kernelFeatureVersion{
 			API:     KFeatAPIMapBPFRW | KFeatAPIMapFreeze,
 			Program: KFeatProgCGroupSysctl | KFeatProgRawTracepointWritable,
 			Attach:  KFeatAttachCGroupSysctl | KFeatAttachCGroupUDPRecvMsg,
+			Misc:    KFeatGlobalData,
 		},
 	},
 	{

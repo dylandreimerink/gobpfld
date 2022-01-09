@@ -77,7 +77,7 @@ This is a list of features to be added later, just to keep track.
 
 Features/tasks in this list are commonly used/requested because they are used in common use cases / scenarios.
 
-* Data relocation from ELF files(static global variables)
+* ~~Data relocation from ELF files(static global variables)~~
 * ~~Attach to sockets~~
 * ~~Attach to kprobes~~
 * ~~Attach to kretprobes~~

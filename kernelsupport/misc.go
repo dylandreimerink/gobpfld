@@ -17,6 +17,10 @@ const (
 	// https://github.com/cilium/ebpf/issues/43
 	// https://github.com/llvm/llvm-project/commit/fbb64aa69835c8e3e9efe0afc8a73058b5a0fb3c
 	KFeatBTFFuncScope
+	// KFeatGlobalData indicates that the kernel supports global data sections.
+	// https://lwn.net/Articles/784936/
+	// https://github.com/torvalds/linux/commit/d8eca5bbb2be9bc7546f9e733786fa2f1a594c67
+	KFeatGlobalData
 	kFeatMiscMax //nolint:revive // leading k is used to stay consistent with exported vars
 )
 

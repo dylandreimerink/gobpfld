@@ -27,7 +27,7 @@ type AbstractMap struct {
 	// A reference to the BTF which contains the type of this map.
 	BTF *BTF
 	// The type of the map.
-	BTFMapType BTFType
+	BTFMapType BTFMap
 
 	// definition is an unexported copy of Definition which will be pinned as soon as the map is loaded
 	// to prevent the user from chaning the definition while the map is loaded.
@@ -56,7 +56,7 @@ func (m *AbstractMap) load(changeAttr func(attr *bpfsys.BPFAttrMapCreate)) error
 	}
 
 	// If BTF info is available and the current kernel supports it
-	if m.BTF != nil && m.BTFMapType != nil && kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIBTFLoad) {
+	if m.BTF != nil && kernelsupport.CurrentFeatures.API.Has(kernelsupport.KFeatAPIBTFLoad) {
 		// Load BTF if not already loaded
 		if !m.BTF.loaded {
 			var log string
@@ -75,12 +75,10 @@ func (m *AbstractMap) load(changeAttr func(attr *bpfsys.BPFAttrMapCreate)) error
 
 		attr.BTFFD = btfFd
 
-		// TODO we need to provide the typeID of the key an value type. But the bpf_map_def struct only has the
-		// key and value sizes. Libbpf has helpers to define maps, they most likey use these helpers to reference
-		// the key and value types. So we need to add support for the libbpf defined helpers, and communicate
-		// to the user that they need to use these helpers to get type info.
-		// NOTE side note, we might be able to generate type info from the loader program, should be an alternative
-		// since it requires providing type information before loading the maps.
+		if m.BTFMapType.Key != nil && m.BTFMapType.Value != nil {
+			attr.BTFKeyTypeID = uint32(m.BTFMapType.Key.GetID())
+			attr.BTFValueTypeID = uint32(m.BTFMapType.Value.GetID())
+		}
 	}
 
 	if changeAttr != nil {
@@ -275,7 +273,7 @@ func (m *AbstractMap) toValuePtr(value interface{}) (uintptr, error) {
 			arrayElem := elem.Elem()
 			if arrayElem.Size() != uintptr(m.Definition.ValueSize) {
 				return 0, fmt.Errorf(
-					"value array element type size(%d) doesn't match size of bfp value(%d)",
+					"value array element type size(%d) doesn't match size of bpf value(%d)",
 					arrayElem.Size(),
 					m.Definition.ValueSize,
 				)
@@ -296,7 +294,7 @@ func (m *AbstractMap) toValuePtr(value interface{}) (uintptr, error) {
 			sliceElemType := elem.Elem()
 			if sliceElemType.Size() != uintptr(m.Definition.ValueSize) {
 				return 0, fmt.Errorf(
-					"value slice element type size(%d) doesn't match size of bfp value(%d)",
+					"value slice element type size(%d) doesn't match size of bpf value(%d)",
 					sliceElemType.Size(),
 					m.Definition.ValueSize,
 				)
@@ -321,15 +319,48 @@ func (m *AbstractMap) toValuePtr(value interface{}) (uintptr, error) {
 		}
 	}
 
-	if elem.Size() != uintptr(m.Definition.ValueSize) {
-		return 0, fmt.Errorf(
-			"value type size(%d) doesn't match size of bfp value(%d)",
-			elem.Size(),
-			m.Definition.ValueSize,
-		)
-	}
+	switch elem.Kind() {
+	case reflect.Array:
+		// If an array was passed, make sure the total size of the array is equal to the size of the BPF value
+		arrayElem := elem.Elem()
+		totalSize := uint32(arrayElem.Size()) * uint32(elem.Len())
+		if totalSize != m.Definition.ValueSize {
+			return 0, fmt.Errorf(
+				"value array total size(%d) doesn't match size of bpf value size(%d)",
+				totalSize,
+				m.Definition.ValueSize,
+			)
+		}
 
-	return reflect.ValueOf(value).Pointer(), nil
+		return reflect.ValueOf(value).Pointer(), nil
+
+	case reflect.Slice:
+		// If a slice was passed, make sure the total size of the slice is equal to the size of the BPF value.
+		// And return a pointer to the underlying array
+		sliceElemType := elem.Elem()
+		sliceHdr := (*reflect.SliceHeader)(unsafe.Pointer(reflect.ValueOf(value).Pointer()))
+		totalSize := uint32(sliceHdr.Len) * uint32(sliceElemType.Size())
+		if totalSize != m.Definition.ValueSize {
+			return 0, fmt.Errorf(
+				"value slice total size(%d) doesn't match size of bpf value size(%d)",
+				totalSize,
+				m.Definition.ValueSize,
+			)
+		}
+
+		return sliceHdr.Data, nil
+
+	default:
+		if elem.Size() != uintptr(m.Definition.ValueSize) {
+			return 0, fmt.Errorf(
+				"value type size(%d) doesn't match size of bpf value(%d)",
+				elem.Size(),
+				m.Definition.ValueSize,
+			)
+		}
+
+		return reflect.ValueOf(value).Pointer(), nil
+	}
 }
 
 // getBatch fills the keys and values array/slice with the keys and values inside the map up to a maximum of
@@ -610,7 +641,7 @@ func (m *AbstractMap) toBatchKeysPtr(keys interface{}, maxBatchSize uint32) (uin
 		arrayElem := elem.Elem()
 		if arrayElem.Size() != uintptr(m.Definition.KeySize) {
 			return 0, fmt.Errorf(
-				"keys array element type size(%d) doesn't match size of bfp key(%d)",
+				"keys array element type size(%d) doesn't match size of bpf key(%d)",
 				arrayElem.Size(),
 				m.Definition.KeySize,
 			)
@@ -631,7 +662,7 @@ func (m *AbstractMap) toBatchKeysPtr(keys interface{}, maxBatchSize uint32) (uin
 		sliceElemType := elem.Elem()
 		if sliceElemType.Size() != uintptr(m.Definition.KeySize) {
 			return 0, fmt.Errorf(
-				"keys slice element type size(%d) doesn't match size of bfp key(%d)",
+				"keys slice element type size(%d) doesn't match size of bpf key(%d)",
 				sliceElemType.Size(),
 				m.Definition.KeySize,
 			)
@@ -675,7 +706,7 @@ func (m *AbstractMap) toBatchValuesPtr(values interface{}, maxBatchSize uint32) 
 		arrayElem := elem.Elem()
 		if arrayElem.Size() != uintptr(m.Definition.ValueSize) {
 			return 0, fmt.Errorf(
-				"values array element type size(%d) doesn't match size of bfp value(%d)",
+				"values array element type size(%d) doesn't match size of bpf value(%d)",
 				arrayElem.Size(),
 				m.Definition.ValueSize,
 			)
@@ -696,7 +727,7 @@ func (m *AbstractMap) toBatchValuesPtr(values interface{}, maxBatchSize uint32) 
 		sliceElemType := elem.Elem()
 		if sliceElemType.Size() != uintptr(m.Definition.ValueSize) {
 			return 0, fmt.Errorf(
-				"values slice element type size(%d) doesn't match size of bfp value(%d)",
+				"values slice element type size(%d) doesn't match size of bpf value(%d)",
 				sliceElemType.Size(),
 				m.Definition.ValueSize,
 			)

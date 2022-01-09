@@ -96,7 +96,15 @@ func (p *AbstractBPFProgram) load(attr bpfsys.BPFAttrProgramLoad) (log string, e
 			instIndex := offset / uint64(ebpf.BPFInstSize)
 			inst := &p.Instructions[instIndex]
 
-			inst.SetSourceReg(ebpf.BPF_PSEUDO_MAP_FD)
+			// BPF_PSEUDO_MAP_FD_VALUE is set if this is an access into a global data section.
+			// In this case, imm of the first inst contains the offset which must be moved to the second inst
+			if inst.GetSourceReg() == ebpf.BPF_PSEUDO_MAP_FD_VALUE {
+				inst2 := &p.Instructions[instIndex+1]
+				inst2.Imm = inst.Imm
+			} else {
+				inst.SetSourceReg(ebpf.BPF_PSEUDO_MAP_FD)
+			}
+
 			inst.Imm = int32(bpfMap.GetFD())
 		}
 	}

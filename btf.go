@@ -691,6 +691,12 @@ type BTFKernelLine struct {
 	LineCol           uint32
 }
 
+// BTFMap is a struct which describes a BPF map
+type BTFMap struct {
+	Key   BTFType
+	Value BTFType
+}
+
 // BTFType is a BTF type, each Kind has its own corresponding BTFType.
 type BTFType interface {
 	// Returns the TypeID of the type, which is determined by the position of the type within the encoded

@@ -124,18 +124,23 @@ func newBPFELF(elfFile *elf.File, settings ELFParseSettings) *bpfELF {
 // Parse the ELF file into the separate components which will need to be combined later
 func (bpfElf *bpfELF) parseElf() error {
 	for sectionIndex, section := range bpfElf.elfFile.Sections {
-		switch section.Type {
-		case elf.SHT_PROGBITS:
+		// TODO instead of making an exception for .bss, handle all datasections differently
+		if section.Type == elf.SHT_PROGBITS || section.Name == ".bss" {
 			err := bpfElf.parseProgBits(sectionIndex, section)
 			if err != nil {
 				return fmt.Errorf("parse prog bits: %w", err)
 			}
 
-		case elf.SHT_REL:
+			continue
+		}
+
+		if section.Type == elf.SHT_REL {
 			err := bpfElf.parseRelocationTables(section)
 			if err != nil {
 				return fmt.Errorf("parse relocation tables: %w", err)
 			}
+
+			continue
 		}
 	}
 
@@ -259,6 +264,12 @@ func (bpfElf *bpfELF) parseProgBits(sectionIndex int, section *elf.Section) erro
 			return fmt.Errorf("parse maps: %w", err)
 		}
 
+	case ".data", ".rodata", ".bss":
+		err := bpfElf.dataToMap(sectionIndex, section)
+		if err != nil {
+			return fmt.Errorf("data to map: %w", err)
+		}
+
 	case ".BTF":
 		// BTF type and string information
 
@@ -378,6 +389,45 @@ func (bpfElf *bpfELF) parseProgram(sectionIndex int, section *elf.Section) error
 	return nil
 }
 
+// The .data, .rodata, and .rss sections are loaded as maps with a single value containing the data blob
+// of the ELF section.
+func (bpfElf *bpfELF) dataToMap(sectionIndex int, section *elf.Section) error {
+	secData, err := section.Data()
+	if err != nil {
+		return fmt.Errorf("get section data: %w", err)
+	}
+
+	datasecMap := &dataMap{
+		AbstractMap: AbstractMap{
+			Definition: BPFMapDef{
+				Type:       bpftypes.BPF_MAP_TYPE_ARRAY,
+				KeySize:    4,
+				ValueSize:  uint32(len(secData)),
+				MaxEntries: 1,
+			},
+		},
+	}
+
+	datasecMap.initialData = secData
+
+	switch section.Name {
+	case ".rodata":
+		datasecMap.readOnly = true
+		datasecMap.Name = MustNewObjName("rodata")
+	case ".bss":
+		datasecMap.Name = MustNewObjName("bss")
+		// .bss is zero initialzed, the kernel will zero-init the map, so if we just don't write
+		// to it, we are good.
+		datasecMap.initialData = nil
+	case ".data":
+		datasecMap.Name = MustNewObjName("data")
+	}
+
+	bpfElf.Maps[datasecMap.Name.String()] = datasecMap
+
+	return nil
+}
+
 // parseMaps parses an ELF section as containing map data
 func (bpfElf *bpfELF) parseMaps(sectionIndex int, section *elf.Section) error {
 	data, err := section.Data()
@@ -451,14 +501,27 @@ func (bpfElf *bpfELF) parseMaps(sectionIndex int, section *elf.Section) error {
 // linkAndRelocate links data parsed from different ELF sections together and relocates any addresses/pointers
 // that have changed as result of the linking.
 func (bpfElf *bpfELF) linkAndRelocate() error {
-	// TODO process BTF relocations (Look into this, relocation entries don't seem to make sense for .rel.BTF)
-	//   https://patchwork.ozlabs.org/project/netdev/patch/20190807214001.872988-4-andriin@fb.com/
+	// TODO this assumes all maps at this stage are data maps, which is a bad assumption.
+	//      restructure parsing phases to make this nicer
+	for name, bpfMap := range bpfElf.Maps {
+		dataMap := bpfMap.(*dataMap)
+		dataMap.BTF = bpfElf.BTF
+		if bpfElf.BTF != nil {
+			dataSec := bpfElf.BTF.typesByName["."+name]
+			dataMap.BTFMapType = BTFMap{
+				Key:   &BTFVoidType{},
+				Value: dataSec,
+			}
+		}
+		bpfElf.Maps[name] = dataMap
+	}
 
 	// Add BTF info to the abstract maps and resolve the actual map type, to be used during map loading.
 	for name, bpfMap := range bpfElf.AbstractMaps {
 		bpfMap.BTF = bpfElf.BTF
 		if bpfElf.BTF != nil {
-			bpfMap.BTFMapType = bpfElf.BTF.typesByName[name]
+			// TODO resolve more information about the map from BTF
+			// bpfMap.BTFMapType = bpfElf.BTF.typesByName[name]
 		}
 
 		bpfElf.Maps[name] = bpfMapFromAbstractMap(bpfMap)
@@ -599,33 +662,21 @@ func (bpfElf *bpfELF) linkAndRelocate() error {
 				continue
 			}
 
-			// Global data relocation
-			if section.Name == ".data" || section.Name == ".rodata" || section.Name == ".bss" {
-				// symbols, err := bpfElf.elfFile.Symbols()
-				// if err != nil {
-				// 	return fmt.Errorf("get symbols: %w", err)
-				// }
+			globalData := section.Name == ".data" || section.Name == ".rodata" || section.Name == ".bss"
 
-				// sectionData, err := section.Data()
-				// spew.Dump(sectionData)
-
-				// sectionRel := bpfElf.relTables[section.Name]
-				// spew.Dump(section.Name, symbols[relocEntry.Symbol.Section])
-				// spew.Dump(program.BTFLines)
-
-				// spew.Dump(ebpf.Decode([]ebpf.RawInstruction{
-				// 	program.Instructions[progOff/ebpf.BPFInstSize],
-				// 	program.Instructions[(progOff/ebpf.BPFInstSize)+1],
-				// }))
-
-				// spew.Dump(sectionData[relocEntry])
-			}
-
-			if section.Name == "maps" || section.Name == ".maps" {
+			if section.Name == "maps" || section.Name == ".maps" || globalData {
 				// The map name is the name of the symbol truncated to BPF_OBJ_NAME_LEN
 				mapName := relocEntry.Symbol.Name
 				if bpfElf.settings.TruncateNames && len(mapName) > bpftypes.BPF_OBJ_NAME_LEN-1 {
 					mapName = mapName[:bpftypes.BPF_OBJ_NAME_LEN-1]
+				}
+
+				// the dot of the .data, .rodata, and .bss sections are removed
+				if globalData {
+					mapName = section.Name[1:]
+
+					firstInst := &program.Instructions[progOff/ebpf.BPFInstSize]
+					firstInst.SetSourceReg(ebpf.BPF_PSEUDO_MAP_FD_VALUE)
 				}
 
 				bpfMap, found := bpfElf.Maps[mapName]

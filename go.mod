@@ -4,7 +4,6 @@ go 1.16
 
 require (
 	github.com/alecthomas/participle/v2 v2.0.0-alpha6
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dylandreimerink/gocovmerge v1.0.0
 	github.com/dylandreimerink/tarp v0.1.2
 	github.com/spf13/cobra v1.3.0
