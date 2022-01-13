@@ -54,6 +54,25 @@ var (
 	flagFailFast bool
 	flagRun      string
 	flagTestEnvs []string
+
+	originalUid = func() int {
+		if os.Getenv("SUDO_UID") != "" {
+			uid, err := strconv.Atoi(os.Getenv("SUDO_UID"))
+			if err == nil {
+				return uid
+			}
+		}
+		return os.Getuid()
+	}()
+	originalGid = func() int {
+		if os.Getenv("SUDO_GID") != "" {
+			gid, err := strconv.Atoi(os.Getenv("SUDO_GID"))
+			if err == nil {
+				return gid
+			}
+		}
+		return os.Getgid()
+	}()
 )
 
 func testCmd() *cobra.Command {
@@ -241,6 +260,7 @@ func buildAndRunTests(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("create html report: %w", err)
 		}
 		defer htmlFile.Close()
+		defer os.Chown(htmlPath, originalUid, originalGid)
 
 		err = renderHTMLReport(results, htmlFile)
 		if err != nil {
@@ -528,7 +548,7 @@ func buildVMDiskImg(ctx *testCtx) error {
 		tmpPath := path.Join(ctx.tmpDir, fileName)
 		mntPath := path.Join(mntPath, fileName)
 
-		err = copyFile(tmpPath, mntPath)
+		err = copyFile(tmpPath, mntPath, 0755)
 		if err != nil {
 			return err
 		}
@@ -779,7 +799,7 @@ func extractData(ctx *testCtx) error {
 	}
 
 	for _, fileName := range copyFiles {
-		err = copyFile(path.Join(mntPath, fileName), path.Join(ctx.tmpDir, fileName))
+		err = copyFile(path.Join(mntPath, fileName), path.Join(ctx.tmpDir, fileName), 0644)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error while copying:", err.Error())
 		}
@@ -811,11 +831,19 @@ func extractData(ctx *testCtx) error {
 		if err != nil {
 			return fmt.Errorf("close combined coverfile: %w", err)
 		}
+		err = os.Chown(coverPath, originalUid, originalGid)
+		if err != nil {
+			return fmt.Errorf("chown combined coverfile: %w", err)
+		}
 
 		if flagHTMLReport {
 			err = tarp.GenerateHTMLReport([]string{coverPath}, path.Join(ctx.tmpDir, "gobpfld.cover.html"))
 			if err != nil {
 				return fmt.Errorf("make html coverage report: %w", err)
+			}
+			err = os.Chown(path.Join(ctx.tmpDir, "gobpfld.cover.html"), originalUid, originalGid)
+			if err != nil {
+				return fmt.Errorf("chown html coverage report: %w", err)
 			}
 		}
 	}
@@ -848,10 +876,28 @@ func extractData(ctx *testCtx) error {
 		return fmt.Errorf("make output dir: %w", err)
 	}
 
+	printlnVerbose("CHOWN:", flagOutputDir)
+	err = os.Chown(flagOutputDir, originalUid, originalGid)
+	if err != nil {
+		return fmt.Errorf("chown output dir: %w", err)
+	}
+
+	printlnVerbose("CHOWN:", outDir)
+	err = os.Chown(outDir, originalUid, originalGid)
+	if err != nil {
+		return fmt.Errorf("chown output dir: %w", err)
+	}
+
 	for _, fileName := range copyFiles {
-		err = copyFile(path.Join(ctx.tmpDir, fileName), path.Join(outDir, fileName))
+		err = copyFile(path.Join(ctx.tmpDir, fileName), path.Join(outDir, fileName), 0644)
 		if err != nil {
 			return err
+		}
+
+		printlnVerbose("CHOWN:", path.Join(outDir, fileName))
+		err = os.Chown(path.Join(outDir, fileName), originalUid, originalGid)
+		if err != nil {
+			return fmt.Errorf("chown output file: %w", err)
 		}
 	}
 
@@ -970,14 +1016,14 @@ type testResult struct {
 	// TODO return sub-test data?
 }
 
-func copyFile(from, to string) error {
+func copyFile(from, to string, perm fs.FileMode) error {
 	printlnVerbose("CP:", from, "->", to)
 	fromFile, err := os.Open(from)
 	if err != nil {
 		return fmt.Errorf("error while opening file: %w", err)
 	}
 
-	toFile, err := os.OpenFile(to, os.O_CREATE|os.O_WRONLY, 0755)
+	toFile, err := os.OpenFile(to, os.O_CREATE|os.O_WRONLY, perm)
 	if err != nil {
 		return fmt.Errorf("error while creating file: %w", err)
 	}
@@ -1039,17 +1085,38 @@ func elevate() error {
 
 	fmt.Println("This testsuit requires root privileges, attempting to elevate via sudo...")
 
-	// TODO: this does make the assumption sudo always lives at /usr/bin/sudo, we should search the PATH env var instead
-	// but could not find functionality in stdlib or a quick library to do this.
+	exec := lookupExec("sudo")
+	if exec == "" {
+		// Fallback if we can't resolve via PATH
+		exec = "/usr/bin/sudo"
+	}
 
 	// Elevate to root by execve'ing sudo with the current args. This should prompt the user for their sudo password
 	// and then continue executing this program(again from the start, since this process will be replaced)
 	// NOTE: The `--preserve-env=PATH` will make sure that the current PATH is preserved which is important since most
 	// users will not have setup root with the correct go environment variables.
-	err = unix.Exec("/usr/bin/sudo", append([]string{"sudo", "--preserve-env=PATH"}, os.Args...), os.Environ())
+	err = unix.Exec(exec, append([]string{"sudo", "--preserve-env=PATH"}, os.Args...), os.Environ())
 	if err != nil {
 		return fmt.Errorf("error execve'ing into sudo: %w", err)
 	}
 
 	return nil
+}
+
+// lookupExec performs a executable lookup based on the PATH environment variable
+func lookupExec(name string) string {
+	pathVar := os.Getenv("PATH")
+	exec := ""
+
+	for _, dir := range strings.Split(pathVar, ":") {
+		abs := path.Join(dir, name)
+		stat, err := os.Stat(abs)
+		if err != nil || stat.IsDir() {
+			continue
+		}
+		exec = abs
+		break
+	}
+
+	return exec
 }
