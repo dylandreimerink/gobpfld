@@ -129,6 +129,21 @@ func (s Size) String() string {
 	return "invalid"
 }
 
+func (s Size) Bytes() int {
+	switch s {
+	case BPF_W:
+		return 4
+	case BPF_H:
+		return 2
+	case BPF_B:
+		return 1
+	case BPF_DW:
+		return 8
+	}
+
+	return 0
+}
+
 // Register is a value used to indicate a source or destination register.
 // Registers are used to pass arguments to variables and as scrach room for.
 // See section 'BPF kernel internals' of https://www.kernel.org/doc/Documentation/networking/filter.rst
