@@ -297,6 +297,9 @@ const (
 	BPF_JSGE uint8 = 0x70
 	// BPF_CALL call a helper function or BPF to BPF call
 	BPF_CALL uint8 = 0x80
+	// BPF_CALLX call a helper function(indirect call), the ID of the helper is placed in a regisister indicated by
+	// imm. This call is illegal in the linux kernel, but can be emitted by clang when optimizations are disabled.
+	BPF_CALLX uint8 = 0x88
 	// BPF_EXIT exit the program
 	BPF_EXIT uint8 = 0x90
 	// BPF_JLT jump less than

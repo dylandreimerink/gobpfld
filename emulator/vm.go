@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dylandreimerink/gobpfld"
 	"github.com/dylandreimerink/gobpfld/ebpf"
 )
 
@@ -15,17 +16,23 @@ type VM struct {
 
 	Registers Registers
 	// A slice of frames, each frame is represented by a byte slice
-	StackFrames [][]byte
+	StackFrames []ValueMemory
+	// A stack of program counter values, each time a function bpf-to-bpf function call is made, we push the current PC.
+	// Each time we hit an exit, we pop a value, if no values are left, we exit.
+	CallStack       []int
+	HelperFunctions []HelperFunc
 
 	// A slice of eBPF programs
 	Programs [][]Instruction
+	Maps     []Map
 }
 
 func NewVM(settings VMSettings) (*VM, error) {
 	// TODO settings validation
 
 	vm := &VM{
-		settings: settings,
+		settings:        settings,
+		HelperFunctions: LinuxHelperFunctions(),
 	}
 
 	// Reset will make the VM ready to start execution of a program
@@ -57,6 +64,31 @@ func (vm *VM) AddRawProgram(prog []ebpf.RawInstruction) error {
 	}
 
 	return nil
+}
+
+func (vm *VM) AddMap(m Map) (int, error) {
+	err := m.Init()
+	if err != nil {
+		return -1, fmt.Errorf("map init: %w", err)
+	}
+
+	vm.Maps = append(vm.Maps, m)
+
+	return len(vm.Maps) - 1, nil
+}
+
+func (vm *VM) AddAbstractMap(am gobpfld.AbstractMap) (int, error) {
+	m, err := AbstractMapToVM(am)
+	if err != nil {
+		return -1, fmt.Errorf("abstract map to VM map: %w", err)
+	}
+
+	index, err := vm.AddMap(m)
+	if err != nil {
+		return -1, fmt.Errorf("add map: %w", err)
+	}
+
+	return index, nil
 }
 
 func (vm *VM) SetEntrypoint(index int) error {
@@ -137,8 +169,9 @@ func (vm *VM) err(err error) *VMError {
 // of the VM.
 func (vm *VM) Clone() *VM {
 	clone := &VM{
-		settings: vm.settings,
-		Programs: make([][]Instruction, len(vm.Programs)),
+		settings:    vm.settings,
+		Programs:    make([][]Instruction, len(vm.Programs)),
+		StackFrames: make([]ValueMemory, len(vm.StackFrames)),
 	}
 	// Reset will make new stack frames
 	clone.Reset()
@@ -147,7 +180,7 @@ func (vm *VM) Clone() *VM {
 
 	// Copy the stack frames
 	for i := range clone.StackFrames {
-		copy(clone.StackFrames[i], vm.StackFrames[i])
+		clone.StackFrames[i] = *(vm.StackFrames[i].Clone().(*ValueMemory))
 	}
 
 	// Copy the programs
@@ -176,22 +209,22 @@ func (vm *VM) Reset() {
 	vm.Registers.R9 = newIMM(0)
 
 	if vm.StackFrames == nil {
-		vm.StackFrames = make([][]byte, vm.settings.MaxStackFrames)
+		vm.StackFrames = make([]ValueMemory, vm.settings.MaxStackFrames)
 	}
 
 	for i := range vm.StackFrames {
-		if vm.StackFrames[i] == nil {
-			vm.StackFrames[i] = make([]byte, vm.settings.StackFrameSize)
+		if vm.StackFrames[i].Mapping == nil {
+			vm.StackFrames[i].Mapping = make([]RegisterValue, vm.settings.StackFrameSize)
 			continue
 		}
 		// Zero out the stack frames
-		for j := range vm.StackFrames[i] {
-			vm.StackFrames[i][j] = 0
+		for j := range vm.StackFrames[i].Mapping {
+			vm.StackFrames[i].Mapping[j] = nil
 		}
 	}
 
 	vm.Registers.R10 = FramePointer{
-		Memory:   vm.StackFrames[0],
+		Memory:   &vm.StackFrames[0],
 		Offset:   0,
 		Readonly: true,
 	}

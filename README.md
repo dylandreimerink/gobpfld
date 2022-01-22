@@ -134,7 +134,7 @@ Features/tasks in this list are cool to have but secondary to the primary goal o
 * Built-in XSK kernel program (like libbpf) (only useful for people intrested in full kernel bypass without additional logic in XDP/eBPF)
 * RISC-V support / testing (RISC-V has promise, would be cool, but not yet widely used)
 * x86_32 support / testing (32 bit is not very popular anymore, but maybe still useful for IOT or raspberry pi like machines)
-* Userspace VM (It would be cool to be able to run eBPF in Go, for testing or as plugin mechanism like LUA and WASM. But not an important feature related to eBPF loading)
+* ~~Userspace VM (It would be cool to be able to run eBPF in Go, for testing or as plugin mechanism like LUA and WASM. But not an important feature related to eBPF loading)~~
 * Userspace map caching (Depending on the map flags and eBPF program, maps can be cached in the userspace without requesting value via syscalls (userspace -> kernel only maps))
 
 ### Won't have

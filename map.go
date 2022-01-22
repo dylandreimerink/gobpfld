@@ -15,6 +15,9 @@ type BPFMap interface {
 	GetFD() bpfsys.BPFfd
 	IsLoaded() bool
 	GetDefinition() BPFMapDef
+	GetBTF() *BTF
+	GetBTFMapType() BTFMap
+	GetInitialData() map[interface{}]interface{}
 
 	// Pin pins the map to a location in the bpf filesystem, since the file system now also holds a reference
 	// to the map the original creator of the map can terminate without triggering the map to be closed as well.

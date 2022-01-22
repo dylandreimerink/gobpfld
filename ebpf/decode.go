@@ -770,6 +770,12 @@ func Decode(rawIns []RawInstruction) ([]Instruction, error) {
 				}
 			}
 
+		case BPF_JMP | BPF_CALLX:
+
+			inst = &CallHelperIndirect{
+				Register: Register(imm),
+			}
+
 			//
 
 		case BPF_JMP | BPF_EXIT:

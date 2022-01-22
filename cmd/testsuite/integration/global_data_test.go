@@ -5,6 +5,7 @@ package integration
 
 import (
 	"bytes"
+	"embed"
 	"math"
 	"os"
 	"strconv"
@@ -14,6 +15,10 @@ import (
 	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"github.com/dylandreimerink/gobpfld/kernelsupport"
 )
+
+// ebpf contains all files in the ebpf sub-dir
+//go:embed ebpf
+var ebpf embed.FS
 
 // This intergration test, tests the loaders capability to relocate global data
 func TestIntegrationGlobalData(t *testing.T) {

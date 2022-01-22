@@ -148,9 +148,12 @@ func (r *Registers) Assign(reg ebpf.Register, value RegisterValue) error {
 	return nil
 }
 
+// RegisterValue represents the contents of a single register. Depending on the implementation a register type might
+// carry additional information which is not directly accessible to the eBPF program. The additional type information
+// is created and changed depending on where he eBPF program gets the value and what it does with it.
 type RegisterValue interface {
 	// Value returns the integer value of the register
-	Value(*VM) int64
+	Value() int64
 	// Copy returns a copy of the register.
 	// A copy can have different properties, like being modifyable while the original was not, the stack pointer for
 	// example.
@@ -161,10 +164,15 @@ type RegisterValue interface {
 	String() string
 }
 
+// PointerValue is a type of RegisterValue which can be dereferenced.
+type PointerValue interface {
+	Deref(offset int, size ebpf.Size) (RegisterValue, error)
+}
+
 // IMMValue is an immediate value, has no special meaning
 type IMMValue int64
 
-func (iv *IMMValue) Value(*VM) int64 {
+func (iv *IMMValue) Value() int64 {
 	return int64(*iv)
 }
 
@@ -192,20 +200,26 @@ func newIMM(v int64) *IMMValue {
 
 var _ RegisterValue = (*MemoryPtr)(nil)
 
-// MemoryPtr is a pointer to a particular piece of memory, which can be part of the stack frame or "heap" memory.
-// eBPF programs don't have an actual heap which the can allocate, but they can access it via the passed in context
-// and helper functions.
+// MemoryPtr is a pointer to a particular piece of memory. The eBPF program can't manipulate this pointer once gotten,
+// it can only manipulate to offset from the start of the memory. When the pointer is dereferenced a lookup into the
+// memory happens at the offset param + the offset property.
 type MemoryPtr struct {
-	Memory []byte
+	Name   string
+	Memory Memory
 	Offset int64
 }
 
-func (mp *MemoryPtr) Value(vm *VM) int64 {
+func (mp *MemoryPtr) Value() int64 {
 	return mp.Offset
+}
+
+func (mp *MemoryPtr) Deref(offset int, size ebpf.Size) (RegisterValue, error) {
+	return mp.Memory.Read(int(mp.Offset)+offset, size)
 }
 
 func (mp *MemoryPtr) Copy() RegisterValue {
 	return &MemoryPtr{
+		Name:   mp.Name,
 		Memory: mp.Memory,
 		Offset: mp.Offset,
 	}
@@ -213,11 +227,10 @@ func (mp *MemoryPtr) Copy() RegisterValue {
 
 func (mp *MemoryPtr) Clone() RegisterValue {
 	ptr := &MemoryPtr{
-		Memory: make([]byte, len(mp.Memory)),
+		Name:   mp.Name,
+		Memory: mp.Memory.Clone(),
 		Offset: mp.Offset,
 	}
-
-	copy(ptr.Memory, mp.Memory)
 
 	return ptr
 }
@@ -229,29 +242,40 @@ func (mp *MemoryPtr) Assign(v int64) error {
 }
 
 func (mp *MemoryPtr) String() string {
-	// TODO improve to str func
-	return fmt.Sprintf("* + %d", mp.Offset)
+	return fmt.Sprintf("%s + %d", mp.Name, mp.Offset)
 }
 
 var _ RegisterValue = (*FramePointer)(nil)
 
-// MemoryPtr is a pointer to a particular piece of memory, which can be part of the stack frame or "heap" memory.
-// eBPF programs don't have an actual heap which the can allocate, but they can access it via the passed in context
-// and helper functions.
+// FramePointer is a memory pointer just like the MemoryPointer, the major difference is that a FramePointer will always
+// point to a Piece of memory which is part of the stack frame. We have a distinct type for two reasons, first is that
+// the frame pointer at R10 is read-only, only copies are writable. Second is that frame pointers always point at the
+// end of a block of memory instread of the start.
 type FramePointer struct {
-	Memory   []byte
-	Offset   int64
+	// Slice of the actual underlying memory
+	Memory Memory
+	// The index of the current stack frame
+	Index int
+	// Offset into the stack frame
+	Offset int64
+	// If true, the offset may not be modified
 	Readonly bool
 }
 
-func (mp *FramePointer) Value(vm *VM) int64 {
+func (mp *FramePointer) Value() int64 {
 	return mp.Offset
+}
+
+func (mp *FramePointer) Deref(offset int, size ebpf.Size) (RegisterValue, error) {
+	off := mp.Memory.Size() + int(mp.Offset) + offset
+	return mp.Memory.Read(off, size)
 }
 
 func (mp *FramePointer) Copy() RegisterValue {
 	return &FramePointer{
 		Memory: mp.Memory,
 		Offset: mp.Offset,
+		Index:  mp.Index,
 
 		// When a copy of a read only pointer may be written to
 		Readonly: false,
@@ -260,12 +284,11 @@ func (mp *FramePointer) Copy() RegisterValue {
 
 func (mp *FramePointer) Clone() RegisterValue {
 	ptr := &FramePointer{
-		Memory:   make([]byte, len(mp.Memory)),
+		Memory:   mp.Memory.Clone(),
+		Index:    mp.Index,
 		Offset:   mp.Offset,
 		Readonly: mp.Readonly,
 	}
-
-	copy(ptr.Memory, mp.Memory)
 
 	return ptr
 }
@@ -288,6 +311,5 @@ func (mp *FramePointer) String() string {
 		offset = -offset
 	}
 
-	// TODO improve to str func
-	return fmt.Sprintf("fp0 %s %d", sign, mp.Offset)
+	return fmt.Sprintf("fp%d %s %d", mp.Index, sign, offset)
 }

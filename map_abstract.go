@@ -29,11 +29,26 @@ type AbstractMap struct {
 	// The type of the map.
 	BTFMapType BTFMap
 
+	// Initial contents of the map, set just after loading
+	InitialData map[interface{}]interface{}
+
 	// definition is an unexported copy of Definition which will be pinned as soon as the map is loaded
 	// to prevent the user from chaning the definition while the map is loaded.
 	definition BPFMapDef
 	loaded     bool
 	fd         bpfsys.BPFfd
+}
+
+func (m *AbstractMap) GetBTF() *BTF {
+	return m.BTF
+}
+
+func (m *AbstractMap) GetBTFMapType() BTFMap {
+	return m.BTFMapType
+}
+
+func (m *AbstractMap) GetInitialData() map[interface{}]interface{} {
+	return m.InitialData
 }
 
 // Load validates and loads the userspace map definition into the kernel.

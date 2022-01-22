@@ -6,7 +6,8 @@ import (
 	"github.com/dylandreimerink/gobpfld/ebpf"
 )
 
-// Instruction represents an eBPF instruction
+// Instruction represents an eBPF instruction, as apposed to the ebpf.Instruction interface, these instruction can
+// actually be executed by an emulator VM.
 type Instruction interface {
 	ebpf.Instruction
 
@@ -14,6 +15,8 @@ type Instruction interface {
 	Execute(vm *VM) error
 }
 
+// Translate translates the High level instructions of the ebpf package and embeds them into instructions defined
+// by the emulator package. The emulator instructions contain the logic to actually execute them.
 func Translate(prog []ebpf.Instruction) ([]Instruction, error) {
 	vmProg := make([]Instruction, len(prog))
 
@@ -45,6 +48,14 @@ func Translate(prog []ebpf.Instruction) ([]Instruction, error) {
 			newInst = &ARSH32Register{ARSH32Register: *inst}
 		case *ebpf.ARSH64Register:
 			newInst = &ARSH64Register{ARSH64Register: *inst}
+		case *ebpf.AtomicAdd:
+			newInst = &AtomicAdd{AtomicAdd: *inst}
+		case *ebpf.CallBPF:
+			newInst = &CallBPF{CallBPF: *inst}
+		case *ebpf.CallHelper:
+			newInst = &CallHelper{CallHelper: *inst}
+		case *ebpf.CallHelperIndirect:
+			newInst = &CallHelperIndirect{CallHelperIndirect: *inst}
 		case *ebpf.Div32:
 			newInst = &Div32{Div32: *inst}
 		case *ebpf.Div64:
@@ -53,6 +64,18 @@ func Translate(prog []ebpf.Instruction) ([]Instruction, error) {
 			newInst = &Div32Register{Div32Register: *inst}
 		case *ebpf.Div64Register:
 			newInst = &Div64Register{Div64Register: *inst}
+		case *ebpf.End16ToLE:
+			newInst = &End16ToLE{End16ToLE: *inst}
+		case *ebpf.End32ToLE:
+			newInst = &End32ToLE{End32ToLE: *inst}
+		case *ebpf.End64ToLE:
+			newInst = &End64ToLE{End64ToLE: *inst}
+		case *ebpf.End16ToBE:
+			newInst = &End16ToBE{End16ToBE: *inst}
+		case *ebpf.End32ToBE:
+			newInst = &End32ToBE{End32ToBE: *inst}
+		case *ebpf.End64ToBE:
+			newInst = &End64ToBE{End64ToBE: *inst}
 		case *ebpf.Exit:
 			newInst = &Exit{Exit: *inst}
 		case *ebpf.Jump:
@@ -65,6 +88,14 @@ func Translate(prog []ebpf.Instruction) ([]Instruction, error) {
 			newInst = &JumpEqualRegister{JumpEqualRegister: *inst}
 		case *ebpf.JumpEqualRegister32:
 			newInst = &JumpEqualRegister32{JumpEqualRegister32: *inst}
+		case *ebpf.JumpNotEqual:
+			newInst = &JumpNotEqual{JumpNotEqual: *inst}
+		case *ebpf.JumpNotEqual32:
+			newInst = &JumpNotEqual32{JumpNotEqual32: *inst}
+		case *ebpf.JumpNotEqualRegister:
+			newInst = &JumpNotEqualRegister{JumpNotEqualRegister: *inst}
+		case *ebpf.JumpNotEqualRegister32:
+			newInst = &JumpNotEqualRegister32{JumpNotEqualRegister32: *inst}
 		case *ebpf.JumpGreaterThanEqual:
 			newInst = &JumpGreaterThanEqual{JumpGreaterThanEqual: *inst}
 		case *ebpf.JumpGreaterThanEqual32:
@@ -157,6 +188,8 @@ func Translate(prog []ebpf.Instruction) ([]Instruction, error) {
 			newInst = &Neg32{Neg32: *inst}
 		case *ebpf.Neg64:
 			newInst = &Neg64{Neg64: *inst}
+		case *ebpf.Nop:
+			newInst = &Nop{Nop: *inst}
 		case *ebpf.Or32:
 			newInst = &Or32{Or32: *inst}
 		case *ebpf.Or64:
@@ -206,8 +239,8 @@ func Translate(prog []ebpf.Instruction) ([]Instruction, error) {
 func readReg(vm *VM, reg ebpf.Register) (int64, RegisterValue, error) {
 	r, err := vm.Registers.Get(reg)
 	if err != nil {
-		return 0, r, fmt.Errorf("read %s: %w", reg.String(), err)
+		return 0, r, fmt.Errorf("get %s: %w", reg.String(), err)
 	}
 
-	return r.Value(vm), r, err
+	return r.Value(), r, err
 }

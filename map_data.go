@@ -17,8 +17,7 @@ var _ BPFMap = (*dataMap)(nil)
 type dataMap struct {
 	AbstractMap
 
-	initialData []byte
-	readOnly    bool
+	readOnly bool
 }
 
 func (m *dataMap) Load() error {
@@ -40,7 +39,8 @@ func (m *dataMap) Load() error {
 		return fmt.Errorf("map register: %w", err)
 	}
 
-	if m.initialData != nil {
+	// TODO move to abstract map load
+	if m.InitialData[0] != nil {
 		k := uint32(0)
 		attr := bpfsys.BPFAttrMapElem{
 			MapFD: m.fd,
@@ -52,15 +52,19 @@ func (m *dataMap) Load() error {
 			return fmt.Errorf("unable to make ptr of uint32(0): %w", err)
 		}
 
-		if len(m.initialData) != int(m.definition.ValueSize) {
+		if len(m.InitialData[0].([]byte)) != int(m.definition.ValueSize) {
 			return fmt.Errorf(
 				"initial data(%d) not of same size as map definition(%d)",
-				len(m.initialData),
+				len(m.InitialData),
 				int(m.definition.ValueSize),
 			)
 		}
 
-		attr.Value_NextKey = uintptr(unsafe.Pointer(&m.initialData[0]))
+		value, ok := m.InitialData[0].([]byte)
+		if !ok {
+			panic("initial data value of a dataMap isn't []byte")
+		}
+		attr.Value_NextKey = uintptr(unsafe.Pointer(&value[0]))
 
 		err = bpfsys.MapUpdateElem(&attr)
 		if err != nil {

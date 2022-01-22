@@ -2,6 +2,7 @@ package gobpfld
 
 import (
 	"debug/elf"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -22,6 +23,7 @@ type ELFParseSettings struct {
 
 // BPFELF is the result of parsing an eBPF ELF file. It can contain multiple programs and maps.
 type BPFELF struct {
+	ByteOrder binary.ByteOrder
 	// Programs contained within the ELF
 	Programs map[string]BPFProgram
 	// Maps defined in the ELF
@@ -32,6 +34,7 @@ type BPFELF struct {
 
 // bpfELF is a temporary structure which we used to store data across multiple stages of parsing the ELF file.
 type bpfELF struct {
+	ByteOrder binary.ByteOrder
 	// ElfPrograms contained within the ELF
 	ElfPrograms map[string]*elfBPFProgram
 	Programs    map[string]BPFProgram
@@ -109,6 +112,7 @@ func LoadProgramFromELF(r io.ReaderAt, settings ELFParseSettings) (BPFELF, error
 
 func newBPFELF(elfFile *elf.File, settings ELFParseSettings) *bpfELF {
 	return &bpfELF{
+		ByteOrder:    elfFile.ByteOrder,
 		ElfPrograms:  make(map[string]*elfBPFProgram),
 		Programs:     make(map[string]BPFProgram),
 		AbstractMaps: make(map[string]AbstractMap),
@@ -408,7 +412,9 @@ func (bpfElf *bpfELF) dataToMap(sectionIndex int, section *elf.Section) error {
 		},
 	}
 
-	datasecMap.initialData = secData
+	datasecMap.InitialData = map[interface{}]interface{}{
+		0: secData,
+	}
 
 	switch section.Name {
 	case ".rodata":
@@ -418,7 +424,7 @@ func (bpfElf *bpfELF) dataToMap(sectionIndex int, section *elf.Section) error {
 		datasecMap.Name = MustNewObjName("bss")
 		// .bss is zero initialzed, the kernel will zero-init the map, so if we just don't write
 		// to it, we are good.
-		datasecMap.initialData = nil
+		datasecMap.InitialData = nil
 	case ".data":
 		datasecMap.Name = MustNewObjName("data")
 	}
@@ -535,12 +541,12 @@ func (bpfElf *bpfELF) linkAndRelocate() error {
 	btfLinesPerSection := make(map[string][]BTFLine)
 	btfFuncsPerSection := make(map[string][]BTFFunc)
 	if bpfElf.BTF != nil {
-		for _, line := range bpfElf.BTF.lines {
+		for _, line := range bpfElf.BTF.Lines {
 			lines := btfLinesPerSection[line.Section]
 			lines = append(lines, line)
 			btfLinesPerSection[line.Section] = lines
 		}
-		for _, f := range bpfElf.BTF.funcs {
+		for _, f := range bpfElf.BTF.Funcs {
 			funcs := btfFuncsPerSection[f.Section]
 			funcs = append(funcs, f)
 			btfFuncsPerSection[f.Section] = funcs
@@ -593,6 +599,35 @@ func (bpfElf *bpfELF) linkAndRelocate() error {
 				txtInsOff = copy(newInst, program.Instructions)
 				copy(newInst[txtInsOff:], bpfElf.txtInstr)
 				program.Instructions = newInst
+
+				// Add the BTF lines of the .text section to the ones of the program section
+				progLines := btfLinesPerSection[program.section]
+				for _, textLine := range btfLinesPerSection[".text"] {
+					progLines = append(progLines, BTFLine{
+						Section:           program.section,
+						SectionOffset:     progLines[0].SectionOffset,
+						InstructionOffset: textLine.InstructionOffset + uint32(txtInsOff*ebpf.BPFInstSize),
+						FileName:          textLine.FileName,
+						FileNameOffset:    textLine.FileNameOffset,
+						Line:              textLine.Line,
+						LineOffset:        textLine.LineOffset,
+						LineNumber:        textLine.LineNumber,
+						ColumnNumber:      textLine.ColumnNumber,
+					})
+				}
+				btfLinesPerSection[program.section] = progLines
+
+				progFuncs := btfFuncsPerSection[program.section]
+				for _, progFunc := range btfFuncsPerSection[".text"] {
+					progFuncs = append(progFuncs, BTFFunc{
+						Section:           program.section,
+						SectionOffset:     progLines[0].SectionOffset,
+						InstructionOffset: progFunc.InstructionOffset + uint32(txtInsOff*ebpf.BPFInstSize),
+						Type:              progFunc.Type,
+						TypeID:            progFunc.TypeID,
+					})
+				}
+				btfFuncsPerSection[program.section] = progFuncs
 			}
 		}
 
@@ -609,26 +644,6 @@ func (bpfElf *bpfELF) linkAndRelocate() error {
 			// Since the program is at the top, we can just divide by the instruction size.
 			f.InstructionOffset = f.InstructionOffset / uint32(ebpf.BPFInstSize)
 			program.BTFFuncs = append(program.BTFFuncs, f)
-		}
-
-		// If the program has linked code in the .text section.
-		if txtInsOff != -1 {
-			for _, textLine := range btfLinesPerSection[".text"] {
-				line := textLine.ToKernel()
-				// The offsets in ELF are in bytes from section start, for the kernel we need the offset of instructions
-				// Divide to offset within the .text section by instruction size and add the txtInsOff to get
-				// the correct absolute instruction offset.
-				line.InstructionOffset = (line.InstructionOffset / uint32(ebpf.BPFInstSize)) + uint32(txtInsOff)
-				program.BTFLines = append(program.BTFLines, line)
-			}
-			for _, textFunc := range btfFuncsPerSection[".text"] {
-				f := textFunc.ToKernel()
-				// The offsets in ELF are in bytes from section start, for the kernel we need the offset of instructions
-				// Divide to offset within the .text section by instruction size and add the txtInsOff to get
-				// the correct absolute instruction offset.
-				f.InstructionOffset = (f.InstructionOffset / uint32(ebpf.BPFInstSize)) + uint32(txtInsOff)
-				program.BTFFuncs = append(program.BTFFuncs, f)
-			}
 		}
 
 		// Handle relocation entries which can includes:
@@ -705,6 +720,18 @@ func (bpfElf *bpfELF) linkAndRelocate() error {
 			}
 		}
 
+		if bpfElf.BTF != nil {
+			// Each program is only interested in lines and funcs applicable to itself, not other programs in the
+			// ELF file. So copy the BTF struct, this will keep pointers to types etc.
+			progBTF := *bpfElf.BTF
+
+			// Just replace the lines and funcs slices in this copy
+			progBTF.Lines = btfLinesPerSection[program.section]
+			progBTF.Funcs = btfFuncsPerSection[program.section]
+
+			program.BTF = &progBTF
+		}
+
 		// If this program has the .text section appended, we need to resolve any map relocations from that section
 		if txtInsOff != -1 {
 			txtRelocTable, found := bpfElf.relTables[".rel.text"]
@@ -778,7 +805,6 @@ func (bpfElf *bpfELF) specializePrograms() error {
 	for name, prog := range bpfElf.ElfPrograms {
 		// Assign license and BTF to abstract program before specializing them.
 		prog.License = bpfElf.license
-		prog.BTF = bpfElf.BTF
 
 		specificProgInt := BPFProgramFromAbstract(prog.AbstractBPFProgram)
 
@@ -856,9 +882,10 @@ func (bpfElf *bpfELF) specializePrograms() error {
 // variables produced during parsing.
 func (bpfElf *bpfELF) toBPFELF() BPFELF {
 	retBpfELF := BPFELF{
-		Maps:     bpfElf.Maps,
-		Programs: bpfElf.Programs,
-		BTF:      bpfElf.BTF,
+		ByteOrder: bpfElf.ByteOrder,
+		Maps:      bpfElf.Maps,
+		Programs:  bpfElf.Programs,
+		BTF:       bpfElf.BTF,
 	}
 
 	return retBpfELF

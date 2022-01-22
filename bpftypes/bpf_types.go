@@ -980,5 +980,9 @@ func (f BPFMapFlags) String() string {
 		}
 	}
 
+	if len(flags) == 0 {
+		return "(none)"
+	}
+
 	return strings.Join(flags, "|")
 }

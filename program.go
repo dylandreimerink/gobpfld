@@ -53,6 +53,7 @@ type BPFProgram interface {
 	Fd() (bpfsys.BPFfd, error)
 	Pin(relativePath string) error
 	Unpin(relativePath string, deletePin bool) error
+	GetAbstractProgram() AbstractBPFProgram
 }
 
 type ObjName struct {

@@ -55,7 +55,7 @@ var (
 	flagRun      string
 	flagTestEnvs []string
 
-	originalUid = func() int {
+	originalUID = func() int {
 		if os.Getenv("SUDO_UID") != "" {
 			uid, err := strconv.Atoi(os.Getenv("SUDO_UID"))
 			if err == nil {
@@ -64,7 +64,7 @@ var (
 		}
 		return os.Getuid()
 	}()
-	originalGid = func() int {
+	originalGID = func() int {
 		if os.Getenv("SUDO_GID") != "" {
 			gid, err := strconv.Atoi(os.Getenv("SUDO_GID"))
 			if err == nil {
@@ -260,7 +260,12 @@ func buildAndRunTests(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("create html report: %w", err)
 		}
 		defer htmlFile.Close()
-		defer os.Chown(htmlPath, originalUid, originalGid)
+		defer func() {
+			err := os.Chown(htmlPath, originalUID, originalGID)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "CHOWN: err", err)
+			}
+		}()
 
 		err = renderHTMLReport(results, htmlFile)
 		if err != nil {
@@ -831,7 +836,7 @@ func extractData(ctx *testCtx) error {
 		if err != nil {
 			return fmt.Errorf("close combined coverfile: %w", err)
 		}
-		err = os.Chown(coverPath, originalUid, originalGid)
+		err = os.Chown(coverPath, originalUID, originalGID)
 		if err != nil {
 			return fmt.Errorf("chown combined coverfile: %w", err)
 		}
@@ -841,7 +846,7 @@ func extractData(ctx *testCtx) error {
 			if err != nil {
 				return fmt.Errorf("make html coverage report: %w", err)
 			}
-			err = os.Chown(path.Join(ctx.tmpDir, "gobpfld.cover.html"), originalUid, originalGid)
+			err = os.Chown(path.Join(ctx.tmpDir, "gobpfld.cover.html"), originalUID, originalGID)
 			if err != nil {
 				return fmt.Errorf("chown html coverage report: %w", err)
 			}
@@ -877,13 +882,13 @@ func extractData(ctx *testCtx) error {
 	}
 
 	printlnVerbose("CHOWN:", flagOutputDir)
-	err = os.Chown(flagOutputDir, originalUid, originalGid)
+	err = os.Chown(flagOutputDir, originalUID, originalGID)
 	if err != nil {
 		return fmt.Errorf("chown output dir: %w", err)
 	}
 
 	printlnVerbose("CHOWN:", outDir)
-	err = os.Chown(outDir, originalUid, originalGid)
+	err = os.Chown(outDir, originalUID, originalGID)
 	if err != nil {
 		return fmt.Errorf("chown output dir: %w", err)
 	}
@@ -895,7 +900,7 @@ func extractData(ctx *testCtx) error {
 		}
 
 		printlnVerbose("CHOWN:", path.Join(outDir, fileName))
-		err = os.Chown(path.Join(outDir, fileName), originalUid, originalGid)
+		err = os.Chown(path.Join(outDir, fileName), originalUID, originalGID)
 		if err != nil {
 			return fmt.Errorf("chown output file: %w", err)
 		}

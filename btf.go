@@ -28,10 +28,10 @@ type BTF struct {
 	// Parsed type information, the index of the types is equal to their ID's
 	Types []BTFType
 
-	// Parsed lines information with ELF section relative instruction offsets
-	lines []BTFLine
+	// Parsed Lines information with ELF section relative instruction offsets
+	Lines []BTFLine
 	// Parsed function information with ELF section relative instruction offsets
-	funcs []BTFFunc
+	Funcs []BTFFunc
 
 	// A mapping of BTF types indexed on name, used to find the currect types for BPF Maps
 	typesByName map[string]BTFType
@@ -450,7 +450,7 @@ func (btf *BTF) ParseBTFExt(btfBytes []byte) error {
 			f.InstructionOffset = btf.btfExtHdr.byteOrder.Uint32(funcs[off : off+4])
 			f.TypeID = btf.btfExtHdr.byteOrder.Uint32(funcs[off+4 : off+8])
 			f.Type = btf.Types[f.TypeID]
-			btf.funcs = append(btf.funcs, f)
+			btf.Funcs = append(btf.Funcs, f)
 
 			// Increment by funcRecordSize, since newer version of BTF might start using larger records.
 			// This makes the code forward compatible
@@ -503,7 +503,7 @@ func (btf *BTF) ParseBTFExt(btfBytes []byte) error {
 			col := btf.btfExtHdr.byteOrder.Uint32(lines[off+12 : off+16])
 			l.LineNumber = col >> 10
 			l.ColumnNumber = col & 0x3FF
-			btf.lines = append(btf.lines, l)
+			btf.Lines = append(btf.Lines, l)
 
 			// Increment by lineRecordSize, since newer version of BTF might start using larger records.
 			// This makes the code forward compatible

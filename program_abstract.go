@@ -47,6 +47,10 @@ func (p *AbstractBPFProgram) Fd() (bpfsys.BPFfd, error) {
 	return p.fd, nil
 }
 
+func (p AbstractBPFProgram) GetAbstractProgram() AbstractBPFProgram {
+	return p
+}
+
 func (p *AbstractBPFProgram) load(attr bpfsys.BPFAttrProgramLoad) (log string, err error) {
 	if p.ProgramType == bpftypes.BPF_PROG_TYPE_UNSPEC {
 		return "", fmt.Errorf("program type unspecified")
