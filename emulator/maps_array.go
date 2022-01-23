@@ -28,6 +28,7 @@ func (m *ArrayMap) GetDef() gobpfld.BPFMapDef {
 
 func (m *ArrayMap) Init() error {
 	m.Memory = ByteMemory{
+		MemName: m.Name,
 		Backing: make([]byte, m.Def.ValueSize*m.Def.MaxEntries),
 	}
 
@@ -71,7 +72,7 @@ func (m *ArrayMap) Lookup(key RegisterValue) (RegisterValue, error) {
 		return newIMM(0), nil
 	}
 
-	return &MemoryPtr{Name: m.Name, Memory: &m.Memory, Offset: off}, nil
+	return &MemoryPtr{Memory: &m.Memory, Offset: off}, nil
 }
 
 func (m *ArrayMap) Update(

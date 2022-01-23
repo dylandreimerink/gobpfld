@@ -42,7 +42,7 @@ func (i *LoadConstant64bit) Execute(vm *VM) error {
 		}
 
 		m := vm.Maps[i.Val1]
-		mapValue, err := m.Lookup(&MemoryPtr{Name: "(tmp mem)", Memory: &ByteMemory{Backing: make([]byte, 4)}})
+		mapValue, err := m.Lookup(&MemoryPtr{Memory: &ByteMemory{MemName: "(tmp mem)", Backing: make([]byte, 4)}})
 		if err != nil {
 			return fmt.Errorf("map lookup: %w", err)
 		}

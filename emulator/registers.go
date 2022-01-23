@@ -204,7 +204,6 @@ var _ RegisterValue = (*MemoryPtr)(nil)
 // it can only manipulate to offset from the start of the memory. When the pointer is dereferenced a lookup into the
 // memory happens at the offset param + the offset property.
 type MemoryPtr struct {
-	Name   string
 	Memory Memory
 	Offset int64
 }
@@ -219,7 +218,6 @@ func (mp *MemoryPtr) Deref(offset int, size ebpf.Size) (RegisterValue, error) {
 
 func (mp *MemoryPtr) Copy() RegisterValue {
 	return &MemoryPtr{
-		Name:   mp.Name,
 		Memory: mp.Memory,
 		Offset: mp.Offset,
 	}
@@ -227,7 +225,6 @@ func (mp *MemoryPtr) Copy() RegisterValue {
 
 func (mp *MemoryPtr) Clone() RegisterValue {
 	ptr := &MemoryPtr{
-		Name:   mp.Name,
 		Memory: mp.Memory.Clone(),
 		Offset: mp.Offset,
 	}
@@ -242,7 +239,7 @@ func (mp *MemoryPtr) Assign(v int64) error {
 }
 
 func (mp *MemoryPtr) String() string {
-	return fmt.Sprintf("%s + %d", mp.Name, mp.Offset)
+	return fmt.Sprintf("%s + %d", mp.Memory.Name(), mp.Offset)
 }
 
 var _ RegisterValue = (*FramePointer)(nil)

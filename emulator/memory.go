@@ -9,6 +9,7 @@ import (
 
 // Memory represents memory which can be accessed by the eBPF VM.
 type Memory interface {
+	Name() string
 	Read(offset int, size ebpf.Size) (RegisterValue, error)
 	Write(offset int, value RegisterValue, size ebpf.Size) error
 	Size() int
@@ -19,7 +20,12 @@ type Memory interface {
 // addessable memory slab in which pointers are assigned, rather in the type information we store pointers to actual
 // memory blocks. Therefor, it is important to not lose type information when pointers are written to the stack.
 type ValueMemory struct {
+	MemName string
 	Mapping []RegisterValue
+}
+
+func (vm *ValueMemory) Name() string {
+	return vm.MemName
 }
 
 func (vm *ValueMemory) Read(offset int, size ebpf.Size) (RegisterValue, error) {
@@ -69,8 +75,13 @@ func (vm *ValueMemory) Size() int {
 // Since the bytes may be directly loaded from ELF files with a byte order different from the host, reads and writes
 // will happen according to the given byte order.
 type ByteMemory struct {
+	MemName   string
 	ByteOrder binary.ByteOrder
 	Backing   []byte
+}
+
+func (vm *ByteMemory) Name() string {
+	return vm.MemName
 }
 
 func (bm *ByteMemory) Read(offset int, size ebpf.Size) (RegisterValue, error) {
