@@ -80,8 +80,8 @@ type ByteMemory struct {
 	Backing   []byte
 }
 
-func (vm *ByteMemory) Name() string {
-	return vm.MemName
+func (bm *ByteMemory) Name() string {
+	return bm.MemName
 }
 
 func (bm *ByteMemory) Read(offset int, size ebpf.Size) (RegisterValue, error) {

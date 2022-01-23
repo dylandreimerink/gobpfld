@@ -213,7 +213,7 @@ func (vm *VM) Reset() {
 	}
 
 	for i := range vm.StackFrames {
-		vm.StackFrames[i].MemName = fmt.Sprint("sf#%d", i)
+		vm.StackFrames[i].MemName = fmt.Sprintf("sf#%d", i)
 		if vm.StackFrames[i].Mapping == nil {
 			vm.StackFrames[i].Mapping = make([]RegisterValue, vm.settings.StackFrameSize)
 			continue
