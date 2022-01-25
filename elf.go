@@ -204,6 +204,13 @@ func (bpfElf *bpfELF) processBTF() error {
 		}
 	}
 
+	// If we have a BTF object, add it to all programs
+	if bpfElf.BTF != nil {
+		for _, program := range bpfElf.ElfPrograms {
+			program.BTF = bpfElf.BTF
+		}
+	}
+
 	return nil
 }
 
@@ -646,6 +653,18 @@ func (bpfElf *bpfELF) linkAndRelocate() error {
 			program.BTFFuncs = append(program.BTFFuncs, f)
 		}
 
+		if bpfElf.BTF != nil {
+			// Each program is only interested in lines and funcs applicable to itself, not other programs in the
+			// ELF file. So copy the BTF struct, this will keep pointers to types etc.
+			progBTF := *bpfElf.BTF
+
+			// Just replace the lines and funcs slices in this copy
+			progBTF.Lines = btfLinesPerSection[program.section]
+			progBTF.Funcs = btfFuncsPerSection[program.section]
+
+			program.BTF = &progBTF
+		}
+
 		// Handle relocation entries which can includes:
 		//  - Map references(need to be resolved at load time)
 		//  - BPF to BPF function calls (can be resolved here)
@@ -718,18 +737,6 @@ func (bpfElf *bpfELF) linkAndRelocate() error {
 
 				program.MapFDLocations[mapName] = relLocations
 			}
-		}
-
-		if bpfElf.BTF != nil {
-			// Each program is only interested in lines and funcs applicable to itself, not other programs in the
-			// ELF file. So copy the BTF struct, this will keep pointers to types etc.
-			progBTF := *bpfElf.BTF
-
-			// Just replace the lines and funcs slices in this copy
-			progBTF.Lines = btfLinesPerSection[program.section]
-			progBTF.Funcs = btfFuncsPerSection[program.section]
-
-			program.BTF = &progBTF
 		}
 
 		// If this program has the .text section appended, we need to resolve any map relocations from that section
