@@ -129,8 +129,16 @@ func (vm *VM) RunContext(ctx context.Context) error {
 
 // Step executes a single instruction, allowing us to "step" through the program
 func (vm *VM) Step() (stop bool, err error) {
+	if vm.Registers.PI >= len(vm.Programs) {
+		return true, fmt.Errorf("no program loaded at PI(%d)", vm.Registers.PI)
+	}
 	program := vm.Programs[vm.Registers.PI]
+
 	inst := program[vm.Registers.PC]
+	if vm.Registers.PC >= len(program) {
+		return true, fmt.Errorf("PC(%d) outside of program", vm.Registers.PC)
+	}
+
 	// Store the program count of the current instruction
 	pc := vm.Registers.PC
 	err = inst.Execute(vm)

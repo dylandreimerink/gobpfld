@@ -53,10 +53,29 @@ func (m *ArrayMap) Init() error {
 	return nil
 }
 
+func (m *ArrayMap) Keys() []RegisterValue {
+	keys := make([]RegisterValue, m.Def.MaxEntries)
+	for i := range keys {
+		imm := newIMM(int64(i))
+		keys[i] = &MemoryPtr{
+			Memory: &ValueMemory{
+				MemName: fmt.Sprintf("%s[%d]", m.Name, m.Def.ValueSize),
+				Mapping: []RegisterValue{
+					imm,
+					imm,
+					imm,
+					imm,
+				},
+			},
+		}
+	}
+	return keys
+}
+
 func (m *ArrayMap) Lookup(key RegisterValue) (RegisterValue, error) {
 	keyPtr, ok := key.(PointerValue)
 	if !ok {
-		return nil, fmt.Errorf("key is not a pointer")
+		return nil, errMapKeyNoPtr
 	}
 
 	keyValReg, err := keyPtr.Deref(0, ebpf.BPF_W)
@@ -69,6 +88,8 @@ func (m *ArrayMap) Lookup(key RegisterValue) (RegisterValue, error) {
 
 	// Outside of map
 	if off >= int64(m.Memory.Size()) {
+		// Return NULL if key out of bounds
+		// https://elixir.bootlin.com/linux/v5.16.4/source/kernel/bpf/arraymap.c#L164
 		return newIMM(0), nil
 	}
 
@@ -85,15 +106,13 @@ func (m *ArrayMap) Update(
 ) {
 	vPtr, ok := value.(*MemoryPtr)
 	if !ok {
-		// TODO lookup actual error code used by linux
-		return newIMM(-1), nil
+		return nil, errMapValNoPtr
 	}
 
 	kv := key.Value()
 	// Outside of map
 	if kv >= int64(m.Memory.Size()) {
-		// TODO lookup actual error code used by linux
-		return newIMM(-2), nil
+		return newIMM(0), nil
 	}
 
 	for i := 0; i < int(m.Def.ValueSize); i++ {

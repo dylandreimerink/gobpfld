@@ -11,6 +11,7 @@ import (
 type Memory interface {
 	Name() string
 	Read(offset int, size ebpf.Size) (RegisterValue, error)
+	ReadRange(offset, count int) ([]byte, error)
 	Write(offset int, value RegisterValue, size ebpf.Size) error
 	Size() int
 	Clone() Memory
@@ -30,7 +31,7 @@ func (vm *ValueMemory) Name() string {
 
 func (vm *ValueMemory) Read(offset int, size ebpf.Size) (RegisterValue, error) {
 	if offset < 0 || offset+size.Bytes() > len(vm.Mapping) {
-		return nil, fmt.Errorf("attempt to read outside of stack memory bounds, off %d, size %d", offset, size.Bytes())
+		return nil, fmt.Errorf("attempt to read outside of memory bounds, off %d, size %d", offset, size.Bytes())
 	}
 
 	val := vm.Mapping[offset]
@@ -47,9 +48,51 @@ func (vm *ValueMemory) Read(offset int, size ebpf.Size) (RegisterValue, error) {
 	return val, nil
 }
 
+func (vm *ValueMemory) ReadRange(offset, count int) ([]byte, error) {
+	if offset < 0 || offset+count > len(vm.Mapping) {
+		return nil, fmt.Errorf("attempt to read range outside of memory bounds, off %d, count %d", offset, count)
+	}
+
+	r := make([]byte, count)
+	for i := 0; i < count; {
+		v := vm.Mapping[offset+i]
+		if v == nil {
+			r[i] = 0
+			i++
+			continue
+		}
+
+		size := 1
+		for j := i + 1; j < i+8 && j < count; j++ {
+			if v != vm.Mapping[offset+j] {
+				break
+			}
+			size++
+		}
+
+		// Round up to nearest valid value size
+		switch {
+		case size > 4:
+			binary.LittleEndian.PutUint64(r[i:i+8], uint64(v.Value()))
+			i += 8
+		case size > 2:
+			binary.LittleEndian.PutUint32(r[i:i+4], uint32(v.Value()))
+			i += 4
+		case size > 1:
+			binary.LittleEndian.PutUint16(r[i:i+2], uint16(v.Value()))
+			i += 2
+		default:
+			r[i] = byte(v.Value())
+			i++
+		}
+	}
+
+	return r, nil
+}
+
 func (vm *ValueMemory) Write(offset int, value RegisterValue, size ebpf.Size) error {
 	if offset < 0 || offset+size.Bytes() > len(vm.Mapping) {
-		return fmt.Errorf("attempt to read outside of stack memory bounds, off %d, size %d", offset, size.Bytes())
+		return fmt.Errorf("attempt to read outside of memory bounds, off %d, size %d", offset, size.Bytes())
 	}
 
 	for i := offset; i < offset+size.Bytes(); i++ {
@@ -61,6 +104,7 @@ func (vm *ValueMemory) Write(offset int, value RegisterValue, size ebpf.Size) er
 
 func (vm *ValueMemory) Clone() Memory {
 	clone := &ValueMemory{
+		MemName: vm.MemName,
 		Mapping: make([]RegisterValue, len(vm.Mapping)),
 	}
 	copy(clone.Mapping, vm.Mapping)
@@ -86,7 +130,7 @@ func (bm *ByteMemory) Name() string {
 
 func (bm *ByteMemory) Read(offset int, size ebpf.Size) (RegisterValue, error) {
 	if offset < 0 || offset+size.Bytes() > len(bm.Backing) {
-		return nil, fmt.Errorf("attempt to read outside of stack memory bounds, off %d, size %d", offset, size.Bytes())
+		return nil, fmt.Errorf("attempt to read outside of memory bounds, off %d, size %d", offset, size.Bytes())
 	}
 
 	if bm.ByteOrder == nil {
@@ -125,9 +169,20 @@ func (bm *ByteMemory) Read(offset int, size ebpf.Size) (RegisterValue, error) {
 	return newIMM(val), nil
 }
 
+func (bm *ByteMemory) ReadRange(offset, count int) ([]byte, error) {
+	if offset < 0 || offset+count > len(bm.Backing) {
+		return nil, fmt.Errorf("attempt to read range outside of memory bounds, off %d, count %d", offset, count)
+	}
+
+	r := make([]byte, count)
+	copy(r, bm.Backing[offset:])
+
+	return r, nil
+}
+
 func (bm *ByteMemory) Write(offset int, value RegisterValue, size ebpf.Size) error {
 	if offset < 0 || offset+size.Bytes() > len(bm.Backing) {
-		return fmt.Errorf("attempt to read outside of stack memory bounds, off %d, size %d", offset, size.Bytes())
+		return fmt.Errorf("attempt to read outside of memory bounds, off %d, size %d", offset, size.Bytes())
 	}
 
 	if bm.ByteOrder == nil {
@@ -152,6 +207,7 @@ func (bm *ByteMemory) Write(offset int, value RegisterValue, size ebpf.Size) err
 
 func (bm *ByteMemory) Clone() Memory {
 	clone := &ByteMemory{
+		MemName: bm.MemName,
 		Backing: make([]byte, len(bm.Backing)),
 	}
 	copy(clone.Backing, bm.Backing)

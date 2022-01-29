@@ -3,6 +3,8 @@ package emulator
 import (
 	"errors"
 	"fmt"
+
+	"github.com/dylandreimerink/gobpfld/bpfsys"
 )
 
 // HelperFunc are functions in go space which can be called from the eBPF VM. They are used expand eBPF capabilities
@@ -33,7 +35,14 @@ func MapLookupElement(vm *VM) error {
 	m := vm.Maps[mapIdx]
 	val, err := m.Lookup(vm.Registers.R2)
 	if err != nil {
-		return fmt.Errorf("lookup: %w", err)
+		switch err {
+		case errMapKeyNoPtr, errMapValNoPtr:
+			val = efault()
+		case errMapOutOfMemory:
+			val = e2big()
+		default:
+			return fmt.Errorf("lookup: %w", err)
+		}
 	}
 
 	vm.Registers.R0 = val
@@ -43,7 +52,26 @@ func MapLookupElement(vm *VM) error {
 
 // MapUpdateElement implements the bpf_map_update_element helper
 func MapUpdateElement(vm *VM) error {
-	return errors.New("not yet implemented")
+	mapIdx := vm.Registers.R1.Value()
+	if int(mapIdx) >= len(vm.Maps) {
+		vm.Registers.R0 = newIMM(0)
+	}
+
+	m := vm.Maps[mapIdx]
+	val, err := m.Update(vm.Registers.R2, vm.Registers.R3, bpfsys.BPFAttrMapElemFlags(vm.Registers.R4.Value()))
+	if err != nil {
+		switch err {
+		case errMapKeyNoPtr, errMapValNoPtr:
+			val = efault()
+		case errMapOutOfMemory:
+			val = e2big()
+		default:
+			return fmt.Errorf("update: %w", err)
+		}
+	}
+
+	vm.Registers.R0 = val
+	return nil
 }
 
 // MapDeleteElement implements the bpf_map_delete_element helper

@@ -1,6 +1,7 @@
 package emulator
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/dylandreimerink/gobpfld"
@@ -15,6 +16,9 @@ type Map interface {
 	GetName() string
 
 	GetDef() gobpfld.BPFMapDef
+
+	// Keys returns all keys contained in the map
+	Keys() []RegisterValue
 
 	// Lookup looks up a value in the map for a given key and return a pointer to the value or NULL/0 if it can't find
 	// it.
@@ -31,9 +35,17 @@ type Map interface {
 // AbstractMapToVM converts an AbstractMap to an emulated version
 func AbstractMapToVM(am gobpfld.AbstractMap) (Map, error) {
 	switch am.Definition.Type {
+	case bpftypes.BPF_MAP_TYPE_HASH:
+		return &HashMap{Name: am.Name.String(), Def: am.Definition}, nil
 	case bpftypes.BPF_MAP_TYPE_ARRAY:
 		return &ArrayMap{Name: am.Name.String(), Def: am.Definition, InitialData: am.InitialData}, nil
 	}
 
 	return nil, fmt.Errorf("map type '%s' not yet implemented", am.Definition.Type)
 }
+
+var (
+	errMapKeyNoPtr    = errors.New("key is not a pointer")
+	errMapValNoPtr    = errors.New("value is not a pointer")
+	errMapOutOfMemory = errors.New("map is full or access outside of bounds")
+)

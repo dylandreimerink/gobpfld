@@ -19,7 +19,8 @@ Implementing a userspace eBPF implementation is not trivial and we don't be doin
 
 **Map types**:
 
-- BPF_MAP_TYPE_HASH
+- ~~BPF_MAP_TYPE_ARRAY~~
+- ~~BPF_MAP_TYPE_HASH~~
 - BPF_MAP_TYPE_PROG_ARRAY
 - BPF_MAP_TYPE_PERF_EVENT_ARRAY
 - BPF_MAP_TYPE_PERCPU_HASH
@@ -50,7 +51,8 @@ Implementing a userspace eBPF implementation is not trivial and we don't be doin
 
 **Linux helpers**:
 
-- bpf_update_element
+- ~~bpf_lookup_element~~
+- ~~bpf_update_element~~
 - bpf_delete_element
 - bpf_probe_read
 - bpf_ktime_get_ns

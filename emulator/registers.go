@@ -166,7 +166,10 @@ type RegisterValue interface {
 
 // PointerValue is a type of RegisterValue which can be dereferenced.
 type PointerValue interface {
+	// Dereferences the pointer and returns the value of given size at the memory location + additional offset
 	Deref(offset int, size ebpf.Size) (RegisterValue, error)
+	// ReadRange reads of bytes from the pointer+offset to pointer+offset+count
+	ReadRange(offset, count int) ([]byte, error)
 }
 
 // IMMValue is an immediate value, has no special meaning
@@ -214,6 +217,10 @@ func (mp *MemoryPtr) Value() int64 {
 
 func (mp *MemoryPtr) Deref(offset int, size ebpf.Size) (RegisterValue, error) {
 	return mp.Memory.Read(int(mp.Offset)+offset, size)
+}
+
+func (mp *MemoryPtr) ReadRange(offset, count int) ([]byte, error) {
+	return mp.Memory.ReadRange(int(mp.Offset)+offset, count)
 }
 
 func (mp *MemoryPtr) Copy() RegisterValue {
@@ -266,6 +273,11 @@ func (mp *FramePointer) Value() int64 {
 func (mp *FramePointer) Deref(offset int, size ebpf.Size) (RegisterValue, error) {
 	off := mp.Memory.Size() + int(mp.Offset) + offset
 	return mp.Memory.Read(off, size)
+}
+
+func (mp *FramePointer) ReadRange(offset, count int) ([]byte, error) {
+	off := mp.Memory.Size() + int(mp.Offset) + offset
+	return mp.Memory.ReadRange(off, count)
 }
 
 func (mp *FramePointer) Copy() RegisterValue {
