@@ -112,7 +112,7 @@ func (m *ArrayMap) Update(
 	kv := key.Value()
 	// Outside of map
 	if kv >= int64(m.Memory.Size()) {
-		return newIMM(0), nil
+		return nil, errMapOutOfMemory
 	}
 
 	for i := 0; i < int(m.Def.ValueSize); i++ {

@@ -23,12 +23,12 @@ Implementing a userspace eBPF implementation is not trivial and we don't be doin
 - ~~BPF_MAP_TYPE_HASH~~
 - BPF_MAP_TYPE_PROG_ARRAY
 - BPF_MAP_TYPE_PERF_EVENT_ARRAY
-- BPF_MAP_TYPE_PERCPU_HASH
-- BPF_MAP_TYPE_PERCPU_ARRAY
+- ~~BPF_MAP_TYPE_PERCPU_HASH~~ (currently we just use the normal map since we don't support parallel execution)
+- ~~BPF_MAP_TYPE_PERCPU_ARRAY~~ (currently we just use the normal map since we don't support parallel execution)
 - BPF_MAP_TYPE_STACK_TRACE
 - BPF_MAP_TYPE_CGROUP_ARRAY
-- BPF_MAP_TYPE_LRU_HASH
-- BPF_MAP_TYPE_LRU_PERCPU_HASH
+- ~~BPF_MAP_TYPE_LRU_HASH~~
+- ~~BPF_MAP_TYPE_LRU_PERCPU_HASH~~ (currently we just use the normal map since we don't support parallel execution)
 - BPF_MAP_TYPE_LPM_TRIE
 - BPF_MAP_TYPE_ARRAY_OF_MAPS
 - BPF_MAP_TYPE_HASH_OF_MAPS
