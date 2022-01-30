@@ -73,9 +73,28 @@ func (i *Add32Register) Execute(vm *VM) error {
 		return err
 	}
 
-	sv, _, err := readReg(vm, i.Src)
+	sv, sr, err := readReg(vm, i.Src)
 	if err != nil {
 		return err
+	}
+
+	// Edge case: if we add a pointer to a value, we want to convert the destination type into a pointer as well
+	if _, ok := sr.(PointerValue); ok {
+		scp, err := vm.Registers.Copy(i.Src)
+		if err != nil {
+			return err
+		}
+
+		err = scp.Assign(int64(int32(dv) + int32(sv)))
+		if err != nil {
+			return err
+		}
+
+		err = vm.Registers.Assign(i.Dest, scp)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 
 	err = dr.Assign(int64(int32(dv) + int32(sv)))
@@ -103,9 +122,28 @@ func (i *Add64Register) Execute(vm *VM) error {
 		return err
 	}
 
-	sv, _, err := readReg(vm, i.Src)
+	sv, sr, err := readReg(vm, i.Src)
 	if err != nil {
 		return err
+	}
+
+	// Edge case: if we add a pointer to a value, we want to convert the destination type into a pointer as well
+	if _, ok := sr.(PointerValue); ok {
+		scp, err := vm.Registers.Copy(i.Src)
+		if err != nil {
+			return err
+		}
+
+		err = scp.Assign(dv + sv)
+		if err != nil {
+			return err
+		}
+
+		err = vm.Registers.Assign(i.Dest, scp)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 
 	err = dr.Assign(dv + sv)
