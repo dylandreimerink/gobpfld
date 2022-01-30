@@ -17,10 +17,10 @@ type VM struct {
 	Registers Registers
 	// A slice of frames, each frame is represented by a byte slice
 	StackFrames []ValueMemory
-	// A stack of program counter values, each time a function bpf-to-bpf function call is made, we push the current PC.
-	// Each time we hit an exit, we pop a value, if no values are left, we exit.
-	CallStack       []int
-	HelperFunctions []HelperFunc
+	// When calling into a function, R6-9 are preserved, meaning that we need to save them and retore them back
+	// once we return from a function call.
+	PreservedRegisters []Registers
+	HelperFunctions    []HelperFunc
 
 	// A slice of eBPF programs
 	Programs [][]Instruction

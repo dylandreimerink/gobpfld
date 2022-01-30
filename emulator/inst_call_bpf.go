@@ -16,8 +16,8 @@ func (i *CallBPF) Clone() Instruction {
 }
 
 func (i *CallBPF) Execute(vm *VM) error {
-	// Push the current PC onto the stack
-	vm.CallStack = append(vm.CallStack, vm.Registers.PC)
+	// Preserve current registers
+	vm.PreservedRegisters = append(vm.PreservedRegisters, vm.Registers.Clone())
 
 	// Change R10 to the next stack frame
 	vm.Registers.R10 = FramePointer{

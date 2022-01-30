@@ -21,17 +21,20 @@ func (i *Exit) Clone() Instruction {
 
 func (i *Exit) Execute(vm *VM) error {
 	// If the call stack is empty, we exit the program
-	if len(vm.CallStack) == 0 {
+	if len(vm.PreservedRegisters) == 0 {
 		return errExit
 	}
 
 	// If there are values on the call stack, this is a return statement
+	preserved := vm.PreservedRegisters[len(vm.PreservedRegisters)-1]
+	vm.PreservedRegisters = vm.PreservedRegisters[:len(vm.PreservedRegisters)-1]
 
-	pc := vm.CallStack[len(vm.CallStack)-1]
-	vm.CallStack = vm.CallStack[:len(vm.CallStack)-1]
-
-	// Restore the stored program counter
-	vm.Registers.PC = pc
+	// Restore preserved Program counter and callee saved registers
+	vm.Registers.PC = preserved.PC
+	vm.Registers.R6 = preserved.R6
+	vm.Registers.R7 = preserved.R7
+	vm.Registers.R8 = preserved.R8
+	vm.Registers.R9 = preserved.R9
 
 	// Restore the previous stack frame
 	vm.Registers.R10 = FramePointer{
