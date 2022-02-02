@@ -514,8 +514,7 @@ func (bpfElf *bpfELF) parseMaps(sectionIndex int, section *elf.Section) error {
 // linkAndRelocate links data parsed from different ELF sections together and relocates any addresses/pointers
 // that have changed as result of the linking.
 func (bpfElf *bpfELF) linkAndRelocate() error {
-	// FIXME this assumes all maps at this stage are data maps, which is a bad assumption.
-	//       restructure parsing phases to make this nicer
+	// Set BTF k/v type for dataMaps
 	for name, bpfMap := range bpfElf.Maps {
 		dataMap, ok := bpfMap.(*dataMap)
 		if !ok {
@@ -536,10 +535,49 @@ func (bpfElf *bpfELF) linkAndRelocate() error {
 	// Add BTF info to the abstract maps and resolve the actual map type, to be used during map loading.
 	for name, bpfMap := range bpfElf.AbstractMaps {
 		bpfMap.BTF = bpfElf.BTF
-		// if bpfElf.BTF != nil {
-		// TODO resolve more information about the map from BTF
-		// bpfMap.BTFMapType = bpfElf.BTF.typesByName[name]
-		// }
+		if bpfElf.BTF != nil {
+			func() {
+				// TODO resolve more information about the map from BTF
+				// bpfMap.BTFMapType = bpfElf.BTF.typesByName[name]
+				// }
+
+				// The "new" way of doing it is to allow users to specify a 'key' and 'value' field instread of the
+				// sizes.These fields should be pointers to the types used in the key and or value types.
+				// We can use the BTF types to infer the size of these types for the map_def.
+				// https://lwn.net/ml/netdev/20190531202132.379386-7-andriin@fb.com/
+				// We can't use this method yet until the map parsing in an earlier phase can postpone map creation
+				// until now. So use the "old school" method instread :( .
+
+				// The "old school" way of associating BTF Key/Value types to a map is with an annotation which no
+				// longer exists(BPF_ANNOTATE_KV_PAIR). This would produce an additional struct ____btf_map_##name
+				// which refers to the key and value types.
+				// https://github.com/libbpf/libbpf/blob/3febb8a16597f4605450f6c947f4deefb446cb8a/src/btf.c#L1401
+
+				container, found := bpfElf.BTF.typesByName["____btf_map_"+name]
+				if !found {
+					return
+				}
+
+				annotationVar, ok := container.(*BTFVarType)
+				if !ok {
+					return
+				}
+
+				annotationType, ok := annotationVar.Type.(*BTFStructType)
+				if !ok {
+					return
+				}
+
+				for _, m := range annotationType.Members {
+					if m.Name == "key" {
+						bpfMap.BTFMapType.Key = m.Type
+					}
+					if m.Name == "value" {
+						bpfMap.BTFMapType.Value = m.Type
+					}
+				}
+			}()
+		}
 
 		bpfElf.Maps[name] = bpfMapFromAbstractMap(bpfMap)
 	}
@@ -702,6 +740,10 @@ func (bpfElf *bpfELF) linkAndRelocate() error {
 
 			globalData := section.Name == ".data" || section.Name == ".rodata" || section.Name == ".bss"
 
+			// TODO maps and .maps should be handled differently. The maps section always contains "old school" 20byte
+			// map definitions. The .maps section, contains BTF-defined maps, the map definition for these maps should
+			// be created based on both the info in the section as well as BTF info.
+			// https://lwn.net/ml/netdev/20190531202132.379386-7-andriin@fb.com/
 			if section.Name == "maps" || section.Name == ".maps" || globalData {
 				// The map name is the name of the symbol truncated to BPF_OBJ_NAME_LEN
 				mapName := relocEntry.Symbol.Name

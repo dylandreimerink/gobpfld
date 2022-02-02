@@ -5,6 +5,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
+	"math"
+	"math/big"
+	"strconv"
 	"unsafe"
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
@@ -704,8 +708,18 @@ type BTFType interface {
 	GetID() int
 	GetKind() BTFKind
 	GetName() string
+	// Serialize to BTF binary representation
 	Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byte, error)
 }
+
+type BTFValueFormater interface {
+	// Format a byteslice of data to something human-readable using the BTF type information.
+	// The resulting output is written to `w``, if `pretty` is true the output is pretty printed(with whitespace).
+	// The func returns the remaining bytes and/or an error.
+	FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error)
+}
+
+var _ BTFValueFormater = (*BTFIntType)(nil)
 
 // BTFIntType is the type of KIND_INT, it represents a integer type.
 type BTFIntType struct {
@@ -734,6 +748,210 @@ func (t *BTFIntType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byt
 	return append(commonBytes, typeBytes...), nil
 }
 
+func (t *BTFIntType) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	bytes := (t.Bits / 8)
+	if bytes == 0 {
+		bytes = 1
+	}
+
+	if len(b) < int(bytes) {
+		return nil, fmt.Errorf("'%s' not enough bytes, want '%d' got '%d'", t.Name, bytes, len(b))
+	}
+
+	if t.Offset != 0 {
+		return nil, fmt.Errorf("'%s' non-0 offset int formatting not implemented", t.Name)
+	}
+
+	switch t.Bits {
+	case 128:
+		var i big.Int
+		_, err := fmt.Fprint(w, i.SetBytes(b[:bytes]).Text(10))
+		if err != nil {
+			return nil, fmt.Errorf("'%s' error writing bigint: %w", t.Name, err)
+		}
+
+		switch t.Encoding {
+		case 0:
+			_, err := fmt.Fprint(w, i)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_SIGNED:
+			return nil, fmt.Errorf("'%s' signed printing of 128 bit number not implemented", t.Name)
+		case INT_CHAR:
+			_, err := fmt.Fprintf(w, "%032x", i.Bytes())
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_BOOL:
+			_, err := fmt.Fprint(w, i.Sign() > 0)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		default:
+			return nil, fmt.Errorf("'%s' unsupported encoding '%d'", t.Name, t.Encoding)
+		}
+
+	case 64:
+		i := binary.LittleEndian.Uint64(b[:bytes])
+
+		switch t.Encoding {
+		case 0:
+			_, err := fmt.Fprint(w, i)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_SIGNED:
+			_, err := fmt.Fprint(w, int64(i))
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_CHAR:
+			_, err := fmt.Fprintf(w, "%016x", i)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_BOOL:
+			_, err := fmt.Fprint(w, i > 0)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		default:
+			return nil, fmt.Errorf("'%s' unsupported encoding '%d'", t.Name, t.Encoding)
+		}
+
+	case 32:
+		i := binary.LittleEndian.Uint32(b[:bytes])
+
+		switch t.Encoding {
+		case 0:
+			_, err := fmt.Fprint(w, i)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_SIGNED:
+			_, err := fmt.Fprint(w, int32(i))
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_CHAR:
+			_, err := fmt.Fprintf(w, "%08x", i)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_BOOL:
+			_, err := fmt.Fprint(w, i > 0)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		default:
+			return nil, fmt.Errorf("'%s' unsupported encoding '%d'", t.Name, t.Encoding)
+		}
+
+	case 16:
+		i := binary.LittleEndian.Uint16(b[:bytes])
+
+		switch t.Encoding {
+		case 0:
+			_, err := fmt.Fprint(w, i)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_SIGNED:
+			_, err := fmt.Fprint(w, int16(i))
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_CHAR:
+			_, err := fmt.Fprintf(w, "%04x", i)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_BOOL:
+			_, err := fmt.Fprint(w, i > 0)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		default:
+			return nil, fmt.Errorf("'%s' unsupported encoding '%d'", t.Name, t.Encoding)
+		}
+
+	case 8:
+		switch t.Encoding {
+		case 0:
+			_, err := fmt.Fprint(w, b[0])
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_SIGNED:
+			_, err := fmt.Fprint(w, int8(b[0]))
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_CHAR:
+			_, err := fmt.Fprintf(w, "%02x", b[0])
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_BOOL:
+			_, err := fmt.Fprint(w, b[0] > 0)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		default:
+			return nil, fmt.Errorf("'%s' unsupported encoding '%d'", t.Name, t.Encoding)
+		}
+
+	case 1:
+		i := b[0] & 1
+		switch t.Encoding {
+		case 0, INT_SIGNED:
+			_, err := fmt.Fprint(w, i)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_CHAR:
+			_, err := fmt.Fprintf(w, "%02x", b[0])
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		case INT_BOOL:
+			_, err := fmt.Fprint(w, b[0] > 0)
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+
+		default:
+			return nil, fmt.Errorf("'%s' unsupported encoding '%d'", t.Name, t.Encoding)
+		}
+	default:
+		return nil, fmt.Errorf("'%s' int bitsize '%d' formatting not implemented", t.Name, t.Bits)
+	}
+
+	return b[bytes:], nil
+}
+
 // BTFIntEncoding is used to indicate what the integer encodes, used to determine how to pretty print an integer.
 type BTFIntEncoding uint8
 
@@ -757,6 +975,8 @@ func (ie BTFIntEncoding) String() string {
 	return fmt.Sprintf("%s (%d)", btfIntEncToStr[ie], ie)
 }
 
+var _ BTFValueFormater = (*BTFPtrType)(nil)
+
 // BTFPtrType is the type for KIND_PTR, which represents a pointer type which points to some other type.
 type BTFPtrType struct {
 	commonType
@@ -771,6 +991,21 @@ func (t *BTFPtrType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byt
 		sizeType: uint32(t.Type.GetID()),
 	}.ToBTFType(strTbl).ToBytes(order)), nil
 }
+
+func (t *BTFPtrType) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	_, err := fmt.Fprint(w, "*")
+	if err != nil {
+		return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+	}
+
+	if bfmt, ok := t.Type.(BTFValueFormater); ok {
+		return bfmt.FormatValue(b, w, pretty)
+	}
+
+	return nil, fmt.Errorf("'%s' ptr to unformatable type '%T'", t.Name, t.Type)
+}
+
+var _ BTFValueFormater = (*BTFArrayType)(nil)
 
 // BTFArrayType is the type for KIND_ARR, which represents a array
 type BTFArrayType struct {
@@ -799,6 +1034,53 @@ func (t *BTFArrayType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]b
 
 	return append(commonBytes, uint32sToBytes(order, t.typeID, t.indexTypeID, t.NumElements)...), nil
 }
+
+func (t *BTFArrayType) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	var err error
+	if pretty {
+		_, err = fmt.Fprint(w, "[\n  ")
+	} else {
+		_, err = fmt.Fprint(w, "[")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+	}
+
+	bfmt, ok := t.Type.(BTFValueFormater)
+	if !ok {
+		return nil, fmt.Errorf("'%s' array contains nonformattable type '%T'", t.Name, t.Type)
+	}
+
+	for i := 0; i < int(t.NumElements); i++ {
+		b, err = bfmt.FormatValue(b, w, pretty)
+		if err != nil {
+			return nil, fmt.Errorf("'%s'[%d]: %w", t.Name, i, err)
+		}
+		if i+1 != int(t.NumElements) || pretty {
+			if pretty {
+				if i+1 == int(t.NumElements) {
+					_, err = fmt.Fprint(w, ",\n")
+				} else {
+					_, err = fmt.Fprint(w, ",\n  ")
+				}
+			} else {
+				_, err = fmt.Fprint(w, ", ")
+			}
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+		}
+	}
+
+	_, err = fmt.Fprint(w, "]")
+	if err != nil {
+		return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+	}
+
+	return b, nil
+}
+
+var _ BTFValueFormater = (*BTFStructType)(nil)
 
 // BTFStructType is the type for KIND_STRUCT, which represents a structure.
 type BTFStructType struct {
@@ -930,6 +1212,64 @@ func (t *BTFStructType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]
 	return buf.Bytes(), nil
 }
 
+func (t *BTFStructType) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	var err error
+	if pretty {
+		_, err = fmt.Fprint(w, "{\n  ")
+	} else {
+		_, err = fmt.Fprint(w, "{")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+	}
+
+	for _, m := range t.Members {
+		_, err = fmt.Fprint(w, m.Name, ": ")
+		if err != nil {
+			return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+		}
+
+		bfmt, ok := m.Type.(BTFValueFormater)
+		if !ok {
+			return nil, fmt.Errorf(
+				"'%s' struct contains nonformattable field '%s' of type '%T'",
+				t.Name,
+				m.Name,
+				m.Type,
+			)
+		}
+
+		b, err = bfmt.FormatValue(b, w, pretty)
+		if err != nil {
+			return nil, fmt.Errorf("'%s'[%s]: %w", t.Name, m.Name, err)
+		}
+
+		if m != t.Members[len(t.Members)-1] || pretty {
+			if pretty {
+				if m == t.Members[len(t.Members)-1] {
+					_, err = fmt.Fprint(w, ",\n")
+				} else {
+					_, err = fmt.Fprint(w, ",\n  ")
+				}
+			} else {
+				_, err = fmt.Fprint(w, ", ")
+			}
+			if err != nil {
+				return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+			}
+		}
+	}
+
+	_, err = fmt.Fprint(w, "}")
+	if err != nil {
+		return nil, fmt.Errorf("'%s' write error: %w", t.Name, err)
+	}
+
+	return b, nil
+}
+
+var _ BTFValueFormater = (*BTFUnionType)(nil)
+
 // BTFUnionType is the type for KIND_UNION, which represents a union, where all members occupy the same memory.
 type BTFUnionType struct {
 	commonType
@@ -968,6 +1308,12 @@ func (t *BTFUnionType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]b
 	return buf.Bytes(), nil
 }
 
+func (t *BTFUnionType) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	return nil, errors.New("not yet implemented")
+}
+
+var _ BTFValueFormater = (*BTFMember)(nil)
+
 // BTFMember is a member of a struct or union.
 type BTFMember struct {
 	// Name of the member/field
@@ -978,6 +1324,12 @@ type BTFMember struct {
 	BitfieldSize uint32
 	BitOffset    uint32
 }
+
+func (t *BTFMember) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	return nil, errors.New("not yet implemented")
+}
+
+var _ BTFValueFormater = (*BTFEnumType)(nil)
 
 type BTFEnumType struct {
 	commonType
@@ -1005,10 +1357,16 @@ func (t *BTFEnumType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]by
 	return buf.Bytes(), nil
 }
 
+func (t *BTFEnumType) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	return nil, errors.New("not yet implemented")
+}
+
 type BTFEnumOption struct {
 	Name  string
 	Value int32
 }
+
+var _ BTFValueFormater = (*BTFForwardType)(nil)
 
 type BTFForwardType struct {
 	commonType
@@ -1024,6 +1382,12 @@ func (t *BTFForwardType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([
 	}.ToBTFType(strTbl).ToBytes(order)), nil
 }
 
+func (t *BTFForwardType) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	return nil, errors.New("not yet implemented")
+}
+
+var _ BTFValueFormater = (*BTFTypeDefType)(nil)
+
 type BTFTypeDefType struct {
 	commonType
 }
@@ -1037,6 +1401,16 @@ func (t *BTFTypeDefType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([
 		sizeType: uint32(t.Type.GetID()), // TODO resolve ID based on index in BTF.Types
 	}.ToBTFType(strTbl).ToBytes(order)), nil
 }
+
+func (t *BTFTypeDefType) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	if bfmt, ok := t.Type.(BTFValueFormater); ok {
+		return bfmt.FormatValue(b, w, pretty)
+	}
+
+	return nil, fmt.Errorf("'%s' typedef to unformatable type '%T'", t.Name, t.Type)
+}
+
+var _ BTFValueFormater = (*BTFVolatileType)(nil)
 
 type BTFVolatileType struct {
 	commonType
@@ -1052,6 +1426,17 @@ func (t *BTFVolatileType) Serialize(strTbl *StringTbl, order binary.ByteOrder) (
 	}.ToBTFType(strTbl).ToBytes(order)), nil
 }
 
+func (t *BTFVolatileType) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	// Volatile is a modifier, doesn't change anything to the value formatting of the underlaying type
+	if bfmt, ok := t.Type.(BTFValueFormater); ok {
+		return bfmt.FormatValue(b, w, pretty)
+	}
+
+	return nil, fmt.Errorf("'%s' volatile type to unformatable type '%T'", t.Name, t.Type)
+}
+
+var _ BTFValueFormater = (*BTFConstType)(nil)
+
 type BTFConstType struct {
 	commonType
 }
@@ -1066,6 +1451,17 @@ func (t *BTFConstType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]b
 	}.ToBTFType(strTbl).ToBytes(order)), nil
 }
 
+func (t *BTFConstType) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	// Const is a modifier, doesn't change anything to the value formatting of the underlaying type
+	if bfmt, ok := t.Type.(BTFValueFormater); ok {
+		return bfmt.FormatValue(b, w, pretty)
+	}
+
+	return nil, fmt.Errorf("'%s' const type to unformatable type '%T'", t.Name, t.Type)
+}
+
+var _ BTFValueFormater = (*BTFRestrictType)(nil)
+
 type BTFRestrictType struct {
 	commonType
 }
@@ -1078,6 +1474,15 @@ func (t *BTFRestrictType) Serialize(strTbl *StringTbl, order binary.ByteOrder) (
 		VLen:     0,
 		sizeType: uint32(t.Type.GetID()), // TODO resolve ID based on index in BTF.Types
 	}.ToBTFType(strTbl).ToBytes(order)), nil
+}
+
+func (t *BTFRestrictType) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	// Restrict is a modifier, doesn't change anything to the value formatting of the underlaying type
+	if bfmt, ok := t.Type.(BTFValueFormater); ok {
+		return bfmt.FormatValue(b, w, pretty)
+	}
+
+	return nil, fmt.Errorf("'%s' restrict type to unformatable type '%T'", t.Name, t.Type)
 }
 
 // A BTFFuncType defines not a type, but a subprogram (function) whose signature is defined by type.
@@ -1164,6 +1569,14 @@ func (t *BTFVarType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]byt
 	return append(commonBytes, uint32sToBytes(order, t.Linkage)...), nil
 }
 
+func (t *BTFVarType) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	if bfmt, ok := t.Type.(BTFValueFormater); ok {
+		return bfmt.FormatValue(b, w, pretty)
+	}
+
+	return nil, fmt.Errorf("'%s' variable to unformatable type '%T'", t.Name, t.Type)
+}
+
 type BTFDataSecType struct {
 	commonType
 	Variables []BTFDataSecVariable
@@ -1205,6 +1618,8 @@ type BTFDataSecVariable struct {
 	offsetOffset int
 }
 
+var _ BTFValueFormater = (*BTFFloatType)(nil)
+
 type BTFFloatType struct {
 	commonType
 }
@@ -1217,6 +1632,46 @@ func (t *BTFFloatType) Serialize(strTbl *StringTbl, order binary.ByteOrder) ([]b
 		VLen:     0,
 		sizeType: t.Size,
 	}.ToBTFType(strTbl).ToBytes(order)), nil
+}
+
+func (t *BTFFloatType) FormatValue(b []byte, w io.Writer, pretty bool) ([]byte, error) {
+	if len(b) < int(t.Size) {
+		return nil, fmt.Errorf("%s not enough bytes to decode float of size '%d'", t.Name, t.Size)
+	}
+
+	switch t.Size {
+	case 2:
+		// Go doesn't have native 16 bit floating point numbers, maybe use https://pkg.go.dev/github.com/x448/float16?
+		// Then again, how common is this?
+		return nil, fmt.Errorf("%s ieee754 binary16 floating point not supported", t.Name)
+
+	case 4:
+		bits := binary.LittleEndian.Uint32(b[:4])
+		float := math.Float32frombits(bits)
+		_, err := fmt.Fprint(w, strconv.FormatFloat(float64(float), 'g', -1, 32))
+		if err != nil {
+			return nil, fmt.Errorf("%s write error: %w", t.Name, err)
+		}
+
+		return b[4:], nil
+
+	case 8:
+		bits := binary.LittleEndian.Uint32(b[:8])
+		float := math.Float32frombits(bits)
+		_, err := fmt.Fprint(w, strconv.FormatFloat(float64(float), 'g', -1, 64))
+		if err != nil {
+			return nil, fmt.Errorf("%s write error: %w", t.Name, err)
+		}
+
+		return b[8:], nil
+
+	case 16:
+		// Go doesn't have native 128 bit floating point numbers, can we use big.Int here?
+		// Then again, how common is this?
+		return nil, fmt.Errorf("%s ieee754 binary128 floating point not supported", t.Name)
+	}
+
+	return nil, fmt.Errorf("%s '%d'-byte floating point number not supported", t.Name, t.Size)
 }
 
 // BTFDeclTagType The name_off encodes btf_decl_tag attribute string.
