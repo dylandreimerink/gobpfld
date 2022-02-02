@@ -2,6 +2,7 @@ package emulator
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/dylandreimerink/gobpfld/ebpf"
 )
@@ -243,4 +244,15 @@ func readReg(vm *VM, reg ebpf.Register) (int64, RegisterValue, error) {
 	}
 
 	return r.Value(), r, err
+}
+
+func isIMM(r RegisterValue) bool {
+	_, ok := r.(*IMMValue)
+	return ok
+}
+
+func sameRVType(a, b RegisterValue) bool {
+	at := reflect.TypeOf(a)
+	bt := reflect.TypeOf(b)
+	return at == bt
 }

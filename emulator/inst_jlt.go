@@ -16,12 +16,12 @@ func (i *JumpSmallerThan32) Clone() Instruction {
 }
 
 func (i *JumpSmallerThan32) Execute(vm *VM) error {
-	dv, _, err := readReg(vm, i.Dest)
+	dv, dr, err := readReg(vm, i.Dest)
 	if err != nil {
 		return err
 	}
 
-	if uint32(dv) < uint32(i.Value) {
+	if isIMM(dr) && uint32(dv) < uint32(i.Value) {
 		vm.Registers.PC += int(i.Offset)
 	}
 
@@ -40,12 +40,12 @@ func (i *JumpSmallerThan) Clone() Instruction {
 }
 
 func (i *JumpSmallerThan) Execute(vm *VM) error {
-	dv, _, err := readReg(vm, i.Dest)
+	dv, dr, err := readReg(vm, i.Dest)
 	if err != nil {
 		return err
 	}
 
-	if uint64(dv) < uint64(i.Value) {
+	if isIMM(dr) && uint64(dv) < uint64(i.Value) {
 		vm.Registers.PC += int(i.Offset)
 	}
 
@@ -64,17 +64,17 @@ func (i *JumpSmallerThanRegister32) Clone() Instruction {
 }
 
 func (i *JumpSmallerThanRegister32) Execute(vm *VM) error {
-	dv, _, err := readReg(vm, i.Dest)
+	dv, dr, err := readReg(vm, i.Dest)
 	if err != nil {
 		return err
 	}
 
-	sv, _, err := readReg(vm, i.Src)
+	sv, sr, err := readReg(vm, i.Src)
 	if err != nil {
 		return err
 	}
 
-	if uint32(dv) < uint32(sv) {
+	if sameRVType(dr, sr) && uint32(dv) < uint32(sv) {
 		vm.Registers.PC += int(i.Offset)
 	}
 
@@ -93,17 +93,17 @@ func (i *JumpSmallerThanRegister) Clone() Instruction {
 }
 
 func (i *JumpSmallerThanRegister) Execute(vm *VM) error {
-	dv, _, err := readReg(vm, i.Dest)
+	dv, dr, err := readReg(vm, i.Dest)
 	if err != nil {
 		return err
 	}
 
-	sv, _, err := readReg(vm, i.Src)
+	sv, sr, err := readReg(vm, i.Src)
 	if err != nil {
 		return err
 	}
 
-	if uint64(dv) < uint64(sv) {
+	if sameRVType(dr, sr) && uint64(dv) < uint64(sv) {
 		vm.Registers.PC += int(i.Offset)
 	}
 
