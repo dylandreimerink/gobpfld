@@ -10,8 +10,9 @@ import (
 )
 
 type HashMap struct {
-	Name string
-	Def  gobpfld.BPFMapDef
+	Name    string
+	Def     gobpfld.BPFMapDef
+	BTFType gobpfld.BTFMap
 
 	// Go can't use slices as map values, so what we do is we sha256 hash the slice which always results in a
 	// uniform sized array which we can use as key. Since we now don't index by the actual key, we also need to
@@ -27,6 +28,10 @@ func (m *HashMap) GetName() string {
 
 func (m *HashMap) GetDef() gobpfld.BPFMapDef {
 	return m.Def
+}
+
+func (m *HashMap) GetType() gobpfld.BTFMap {
+	return m.BTFType
 }
 
 func (m *HashMap) Init() error {

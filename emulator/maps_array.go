@@ -13,6 +13,7 @@ import (
 type ArrayMap struct {
 	Name          string
 	Def           gobpfld.BPFMapDef
+	BTFType       gobpfld.BTFMap
 	Memory        ByteMemory
 	InitialDataBO binary.ByteOrder
 	InitialData   map[interface{}]interface{}
@@ -24,6 +25,10 @@ func (m *ArrayMap) GetName() string {
 
 func (m *ArrayMap) GetDef() gobpfld.BPFMapDef {
 	return m.Def
+}
+
+func (m *ArrayMap) GetType() gobpfld.BTFMap {
+	return m.BTFType
 }
 
 func (m *ArrayMap) Init() error {

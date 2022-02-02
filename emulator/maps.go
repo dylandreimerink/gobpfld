@@ -16,6 +16,7 @@ type Map interface {
 	GetName() string
 
 	GetDef() gobpfld.BPFMapDef
+	GetType() gobpfld.BTFMap
 
 	// Keys returns all keys contained in the map
 	Keys() []RegisterValue
@@ -39,17 +40,30 @@ func AbstractMapToVM(am gobpfld.AbstractMap) (Map, error) {
 		// NOTE since the emulator currently only support single threading, a per-cpu map is effectively the same
 		// as a normal map. As soon as we want to support parallel execution, we should add an actual separate
 		// type
-		return &HashMap{Name: am.Name.String(), Def: am.Definition}, nil
+		return &HashMap{
+			Name:    am.Name.String(),
+			Def:     am.Definition,
+			BTFType: am.BTFMapType,
+		}, nil
 	case bpftypes.BPF_MAP_TYPE_ARRAY, bpftypes.BPF_MAP_TYPE_PERCPU_ARRAY:
 		// NOTE since the emulator currently only support single threading, a per-cpu map is effectively the same
 		// as a normal map. As soon as we want to support parallel execution, we should add an actual separate
 		// type
-		return &ArrayMap{Name: am.Name.String(), Def: am.Definition, InitialData: am.InitialData}, nil
+		return &ArrayMap{
+			Name:        am.Name.String(),
+			Def:         am.Definition,
+			InitialData: am.InitialData,
+			BTFType:     am.BTFMapType,
+		}, nil
 	case bpftypes.BPF_MAP_TYPE_LRU_HASH, bpftypes.BPF_MAP_TYPE_LRU_PERCPU_HASH:
 		// NOTE since the emulator currently only support single threading, a per-cpu map is effectively the same
 		// as a normal map. As soon as we want to support parallel execution, we should add an actual separate
 		// type
-		return &HashMapLRU{Name: am.Name.String(), Def: am.Definition}, nil
+		return &HashMapLRU{
+			Name:    am.Name.String(),
+			Def:     am.Definition,
+			BTFType: am.BTFMapType,
+		}, nil
 	}
 
 	return nil, fmt.Errorf("map type '%s' not yet implemented", am.Definition.Type)
