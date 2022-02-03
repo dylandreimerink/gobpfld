@@ -22,7 +22,7 @@ Implementing a userspace eBPF implementation is not trivial and we don't be doin
 - ~~BPF_MAP_TYPE_ARRAY~~
 - ~~BPF_MAP_TYPE_HASH~~
 - BPF_MAP_TYPE_PROG_ARRAY
-- BPF_MAP_TYPE_PERF_EVENT_ARRAY
+- ~~BPF_MAP_TYPE_PERF_EVENT_ARRAY~~
 - ~~BPF_MAP_TYPE_PERCPU_HASH~~ (currently we just use the normal map since we don't support parallel execution)
 - ~~BPF_MAP_TYPE_PERCPU_ARRAY~~ (currently we just use the normal map since we don't support parallel execution)
 - BPF_MAP_TYPE_STACK_TRACE
@@ -64,7 +64,7 @@ Implementing a userspace eBPF implementation is not trivial and we don't be doin
 - bpf_l4_csum_replace
 - bpf_tail_call
 - bpf_clone_redirect
-- bpf_get_current_pid_tgid
+- ~~bpf_get_current_pid_tgid~~
 - bpf_get_current_uid_gid
 - bpf_get_current_comm
 - bpf_get_cgroup_classid
@@ -75,7 +75,7 @@ Implementing a userspace eBPF implementation is not trivial and we don't be doin
 - bpf_perf_event_read
 - bpf_redirect
 - bpf_get_route_realm
-- bpf_perf_event_output
+- ~~bpf_perf_event_output~~
 - bpf_skb_load_bytes
 - bpf_get_stackid
 - bpf_csum_diff

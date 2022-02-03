@@ -3,6 +3,11 @@ package emulator
 // These error codes are defined by linux and used to return errors from eBPF helper calls
 // https://elixir.bootlin.com/linux/latest/source/include/uapi/asm-generic/errno-base.h
 
+// Permission denied
+func eperm() *IMMValue {
+	return newIMM(-1)
+}
+
 // Argument list too long
 func e2big() *IMMValue {
 	return newIMM(-7)

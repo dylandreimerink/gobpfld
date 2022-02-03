@@ -55,6 +55,12 @@ func AbstractMapToVM(am gobpfld.AbstractMap) (Map, error) {
 			InitialData: am.InitialData,
 			BTFType:     am.BTFMapType,
 		}, nil
+	case bpftypes.BPF_MAP_TYPE_PERF_EVENT_ARRAY:
+		return &PerfEventArray{
+			Name:    am.Name.String(),
+			Def:     am.Definition,
+			BTFType: am.BTFMapType,
+		}, nil
 	case bpftypes.BPF_MAP_TYPE_LRU_HASH, bpftypes.BPF_MAP_TYPE_LRU_PERCPU_HASH:
 		// NOTE since the emulator currently only support single threading, a per-cpu map is effectively the same
 		// as a normal map. As soon as we want to support parallel execution, we should add an actual separate
@@ -70,7 +76,8 @@ func AbstractMapToVM(am gobpfld.AbstractMap) (Map, error) {
 }
 
 var (
-	errMapKeyNoPtr    = errors.New("key is not a pointer")
-	errMapValNoPtr    = errors.New("value is not a pointer")
-	errMapOutOfMemory = errors.New("map is full or access outside of bounds")
+	errMapNotImplemented = errors.New("feature is not implemented on this map type")
+	errMapKeyNoPtr       = errors.New("key is not a pointer")
+	errMapValNoPtr       = errors.New("value is not a pointer")
+	errMapOutOfMemory    = errors.New("map is full or access outside of bounds")
 )
