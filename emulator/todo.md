@@ -63,7 +63,7 @@ Implementing a userspace eBPF implementation is not trivial and we don't be doin
 - bpf_skb_store_bytes
 - bpf_l3_csum_replace
 - bpf_l4_csum_replace
-- bpf_tail_call
+- ~~bpf_tail_call~~
 - bpf_clone_redirect
 - ~~bpf_get_current_pid_tgid~~
 - bpf_get_current_uid_gid

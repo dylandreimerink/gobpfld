@@ -33,6 +33,12 @@ func NewVM(settings VMSettings) (*VM, error) {
 	vm := &VM{
 		settings:        settings,
 		HelperFunctions: LinuxHelperFunctions(),
+		Programs: [][]Instruction{
+			nil, // Have index 0 be an "invalid" program, to make certain errors more apparent
+		},
+		Maps: []Map{
+			nil, // Have index 0 be an "invalid" map, to make certain errors more apparent
+		},
 	}
 
 	// Reset will make the VM ready to start execution of a program
@@ -92,7 +98,7 @@ func (vm *VM) AddAbstractMap(am gobpfld.AbstractMap) (int, error) {
 }
 
 func (vm *VM) SetEntrypoint(index int) error {
-	if len(vm.Programs) <= index {
+	if index < 1 || len(vm.Programs) <= index {
 		return fmt.Errorf("program index out of bounds")
 	}
 
@@ -129,7 +135,7 @@ func (vm *VM) RunContext(ctx context.Context) error {
 
 // Step executes a single instruction, allowing us to "step" through the program
 func (vm *VM) Step() (stop bool, err error) {
-	if vm.Registers.PI >= len(vm.Programs) {
+	if vm.Registers.PI < 1 || vm.Registers.PI >= len(vm.Programs) {
 		return true, fmt.Errorf("no program loaded at PI(%d)", vm.Registers.PI)
 	}
 	program := vm.Programs[vm.Registers.PI]

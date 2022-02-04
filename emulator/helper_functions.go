@@ -38,7 +38,7 @@ func LinuxHelperFunctions() []HelperFunc {
 // MapLookupElement implements the bpf_map_lookup_element helper
 func MapLookupElement(vm *VM) error {
 	mapIdx := vm.Registers.R1.Value()
-	if int(mapIdx) >= len(vm.Maps) {
+	if mapIdx < 1 || int(mapIdx) >= len(vm.Maps) {
 		vm.Registers.R0 = newIMM(0)
 		return nil
 	}
@@ -66,7 +66,7 @@ func MapLookupElement(vm *VM) error {
 // MapUpdateElement implements the bpf_map_update_element helper
 func MapUpdateElement(vm *VM) error {
 	mapIdx := vm.Registers.R1.Value()
-	if int(mapIdx) >= len(vm.Maps) {
+	if mapIdx < 1 || int(mapIdx) >= len(vm.Maps) {
 		vm.Registers.R0 = efault()
 		return nil
 	}
@@ -99,7 +99,7 @@ func MapDeleteElement(vm *VM) error {
 func TailCall(vm *VM) error {
 	// R1 = ctx, R2 = map fd(of prog_array), R3 = index in map (key for the program to execute)
 	mapIdx := vm.Registers.R2.Value()
-	if int(mapIdx) >= len(vm.Maps) {
+	if mapIdx < 1 || int(mapIdx) >= len(vm.Maps) {
 		vm.Registers.R0 = efault()
 		return nil
 	}
@@ -157,6 +157,10 @@ func TailCall(vm *VM) error {
 		return nil
 	}
 
+	if progIdx == 0 {
+		return fmt.Errorf("no program loaded at index 0")
+	}
+
 	// On success, change the current program index
 	vm.Registers.PI = int(progIdx)
 	// Change the instruction pointer to -1, since after this helper call the PC will be incremented so we will end
@@ -181,7 +185,7 @@ func GetCurrentPidTgid(vm *VM) error {
 func PerfEventOutput(vm *VM) error {
 	// R1 = ctx, R2 = map index, R3 = flags, R4 = data, R5 = size
 	mapIdx := vm.Registers.R2.Value()
-	if int(mapIdx) >= len(vm.Maps) {
+	if mapIdx < 1 || int(mapIdx) >= len(vm.Maps) {
 		vm.Registers.R0 = efault()
 		return nil
 	}
