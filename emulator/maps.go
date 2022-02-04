@@ -55,6 +55,14 @@ func AbstractMapToVM(am gobpfld.AbstractMap) (Map, error) {
 			InitialData: am.InitialData,
 			BTFType:     am.BTFMapType,
 		}, nil
+	case bpftypes.BPF_MAP_TYPE_PROG_ARRAY:
+		// In linux this needs to be a special map type because it holds addresses to programs, but in the emulator
+		// we can just insert the program indexes, so it is effectively a normal array map with an int32 value
+		return &ArrayMap{
+			Name:    am.Name.String(),
+			Def:     am.Definition,
+			BTFType: am.BTFMapType,
+		}, nil
 	case bpftypes.BPF_MAP_TYPE_PERF_EVENT_ARRAY:
 		return &PerfEventArray{
 			Name:    am.Name.String(),

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/dylandreimerink/gobpfld/bpfsys"
+	"github.com/dylandreimerink/gobpfld/bpftypes"
 	"github.com/dylandreimerink/gobpfld/ebpf"
 )
 
@@ -26,11 +27,10 @@ func LinuxHelperFunctions() []HelperFunc {
 	funcs[1] = MapLookupElement
 	funcs[2] = MapUpdateElement
 	funcs[3] = MapDeleteElement
-	// 4...13
+	funcs[12] = TailCall
 	funcs[14] = GetCurrentPidTgid
-	// 15...24
 	funcs[25] = PerfEventOutput
-	// 26...191
+	// ...191
 
 	return funcs
 }
@@ -95,6 +95,82 @@ func MapDeleteElement(vm *VM) error {
 	return errors.New("not yet implemented")
 }
 
+// TailCall implements the bpf_tail_call helper
+func TailCall(vm *VM) error {
+	// R1 = ctx, R2 = map fd(of prog_array), R3 = index in map (key for the program to execute)
+	mapIdx := vm.Registers.R2.Value()
+	if int(mapIdx) >= len(vm.Maps) {
+		vm.Registers.R0 = efault()
+		return nil
+	}
+
+	// This helper only works for PROG arrays
+	m := vm.Maps[mapIdx]
+	if m.GetDef().Type != bpftypes.BPF_MAP_TYPE_PROG_ARRAY {
+		vm.Registers.R0 = efault()
+		return nil
+	}
+
+	k := &MemoryPtr{
+		Memory: &ValueMemory{
+			Mapping: []RegisterValue{
+				vm.Registers.R3,
+				vm.Registers.R3,
+				vm.Registers.R3,
+				vm.Registers.R3,
+			},
+		},
+	}
+
+	// Lookup the value
+	val := newIMM(0)
+	valReg, err := m.Lookup(k)
+	if err != nil {
+		switch err {
+		case errMapKeyNoPtr, errMapValNoPtr:
+			val = efault()
+		case errMapOutOfMemory:
+			val = e2big()
+		case errMapNotImplemented:
+			val = eperm()
+		default:
+			return fmt.Errorf("lookup: %w", err)
+		}
+
+		vm.Registers.R0 = val
+		return nil
+	}
+
+	valPtr, ok := valReg.(PointerValue)
+	if !ok {
+		return fmt.Errorf("lookup didn't return a pointer")
+	}
+
+	valVar, err := valPtr.Deref(0, ebpf.BPF_W)
+	if err != nil {
+		return fmt.Errorf("deref value pointer: %w", err)
+	}
+
+	progIdx := valVar.Value()
+	if len(vm.Programs) < int(progIdx) {
+		vm.Registers.R0 = efault()
+		return nil
+	}
+
+	// On success, change the current program index
+	vm.Registers.PI = int(progIdx)
+	// Change the instruction pointer to -1, since after this helper call the PC will be incremented so we will end
+	// up at a PC of 0
+	vm.Registers.PC = -1
+	// Don't reset the VM since we want to preserve the memory and register state.
+	// Not that, because the ctx was passed as the first argument to this function it lives in the R1 register
+	// where the next program will expect it to be, this is free, no need to manually set the correct ctx.
+
+	// Set the return value to 0, for success
+	vm.Registers.R0 = val
+	return nil
+}
+
 // GetCurrentPidTgid implements the bpf_get_current_pid_tgid helper
 func GetCurrentPidTgid(vm *VM) error {
 	// TODO replace const value with value gotten from dynamic context of VM as soon as this feature is added.
@@ -117,7 +193,7 @@ func PerfEventOutput(vm *VM) error {
 		return nil
 	}
 
-	var val RegisterValue
+	val := newIMM(0)
 	err := pa.Push(vm.Registers.R4, vm.Registers.R5.Value())
 	if err != nil {
 		switch err {

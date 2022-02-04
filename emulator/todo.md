@@ -15,13 +15,14 @@ Implementing a userspace eBPF implementation is not trivial and we don't be doin
 
 **Mechanisms**:
 
-- Tailcalling
+- ~~bpf-to-bpf~~
+- ~~Tailcalling~~
 
 **Map types**:
 
 - ~~BPF_MAP_TYPE_ARRAY~~
 - ~~BPF_MAP_TYPE_HASH~~
-- BPF_MAP_TYPE_PROG_ARRAY
+- ~~BPF_MAP_TYPE_PROG_ARRAY~~
 - ~~BPF_MAP_TYPE_PERF_EVENT_ARRAY~~
 - ~~BPF_MAP_TYPE_PERCPU_HASH~~ (currently we just use the normal map since we don't support parallel execution)
 - ~~BPF_MAP_TYPE_PERCPU_ARRAY~~ (currently we just use the normal map since we don't support parallel execution)

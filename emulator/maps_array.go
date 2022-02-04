@@ -114,19 +114,29 @@ func (m *ArrayMap) Update(
 		return nil, errMapValNoPtr
 	}
 
-	kv := key.Value()
+	keyPtr, ok := key.(*MemoryPtr)
+	if !ok {
+		return nil, errMapValNoPtr
+	}
+
+	keyVar, err := keyPtr.Deref(0, ebpf.BPF_W)
+	if err != nil {
+		return nil, err
+	}
+
+	kv := keyVar.Value()
 	// Outside of map
 	if kv >= int64(m.Memory.Size()) {
 		return nil, errMapOutOfMemory
 	}
 
 	for i := 0; i < int(m.Def.ValueSize); i++ {
-		v, err := vPtr.Memory.Read(0, ebpf.BPF_B)
+		v, err := vPtr.Memory.Read(i, ebpf.BPF_B)
 		if err != nil {
 			return nil, fmt.Errorf("memory read: %w", err)
 		}
 
-		err = m.Memory.Write(int(kv)+i, v, ebpf.BPF_B)
+		err = m.Memory.Write(int(kv*int64(m.Def.ValueSize))+i, v, ebpf.BPF_B)
 		if err != nil {
 			return nil, fmt.Errorf("memory write: %w", err)
 		}
