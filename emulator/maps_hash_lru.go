@@ -5,14 +5,11 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/dylandreimerink/gobpfld"
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 )
 
 type HashMapLRU struct {
-	Name    string
-	Def     gobpfld.BPFMapDef
-	BTFType gobpfld.BTFMap
+	AbstractMap
 
 	// Go can't use slices as map values, so what we do is we sha256 hash the slice which always results in a
 	// uniform sized array which we can use as key. Since we now don't index by the actual key, we also need to
@@ -28,18 +25,6 @@ type HashMapLRU struct {
 }
 
 type hashKey [sha256.Size]byte
-
-func (m *HashMapLRU) GetName() string {
-	return m.Name
-}
-
-func (m *HashMapLRU) GetDef() gobpfld.BPFMapDef {
-	return m.Def
-}
-
-func (m *HashMapLRU) GetType() gobpfld.BTFMap {
-	return m.BTFType
-}
 
 func (m *HashMapLRU) Init() error {
 	m.KeysMap = make(map[hashKey]*ByteMemory)

@@ -31,8 +31,8 @@ Implementing a userspace eBPF implementation is not trivial and we don't be doin
 - ~~BPF_MAP_TYPE_LRU_HASH~~
 - ~~BPF_MAP_TYPE_LRU_PERCPU_HASH~~ (currently we just use the normal map since we don't support parallel execution)
 - BPF_MAP_TYPE_LPM_TRIE
-- BPF_MAP_TYPE_ARRAY_OF_MAPS
-- BPF_MAP_TYPE_HASH_OF_MAPS
+- ~~BPF_MAP_TYPE_ARRAY_OF_MAPS~~
+- ~~BPF_MAP_TYPE_HASH_OF_MAPS~~
 - BPF_MAP_TYPE_DEVMAP
 - BPF_MAP_TYPE_SOCKMAP
 - BPF_MAP_TYPE_CPUMAP
@@ -41,8 +41,8 @@ Implementing a userspace eBPF implementation is not trivial and we don't be doin
 - BPF_MAP_TYPE_CGROUP_STORAGE
 - BPF_MAP_TYPE_REUSEPORT_SOCKARRAY
 - BPF_MAP_TYPE_PERCPU_CGROUP_STORAGE
-- BPF_MAP_TYPE_QUEUE
-- BPF_MAP_TYPE_STACK
+- ~~BPF_MAP_TYPE_QUEUE~~
+- ~~BPF_MAP_TYPE_STACK~~
 - BPF_MAP_TYPE_SK_STORAGE
 - BPF_MAP_TYPE_DEVMAP_HASH
 - BPF_MAP_TYPE_STRUCT_OPS
@@ -138,9 +138,9 @@ Implementing a userspace eBPF implementation is not trivial and we don't be doin
 - bpf_sk_lookup_tcp
 - bpf_sk_lookup_udp
 - bpf_sk_release
-- bpf_map_push_elem
-- bpf_map_pop_elem
-- bpf_map_peek_elem
+- ~~bpf_map_push_elem~~
+- ~~bpf_map_pop_elem~~
+- ~~bpf_map_peek_elem~~
 - bpf_msg_push_data
 - bpf_msg_pop_data
 - bpf_rc_pointer_rel

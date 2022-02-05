@@ -45,6 +45,10 @@ func (vm *ValueMemory) Read(offset int, size ebpf.Size) (RegisterValue, error) {
 		// should we get the value and bit shift it? Or just error?
 	}
 
+	if val == nil {
+		return nil, fmt.Errorf("reading from non-initialized memory")
+	}
+
 	return val, nil
 }
 

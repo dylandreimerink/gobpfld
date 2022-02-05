@@ -27,9 +27,16 @@ func LinuxHelperFunctions() []HelperFunc {
 	funcs[1] = MapLookupElement
 	funcs[2] = MapUpdateElement
 	funcs[3] = MapDeleteElement
+	// ...
 	funcs[12] = TailCall
+	// ...
 	funcs[14] = GetCurrentPidTgid
+	// ...
 	funcs[25] = PerfEventOutput
+	// ...
+	funcs[87] = MapPushElement
+	funcs[88] = MapPopElement
+	funcs[89] = MapPeekElement
 	// ...191
 
 	return funcs
@@ -240,6 +247,128 @@ func PerfEventOutput(vm *VM) error {
 	}
 
 	vm.Registers.R0 = val
+
+	return nil
+}
+
+// MapPushElement implements the bpf_map_push_elem helper
+func MapPushElement(vm *VM) error {
+	m, err := regToMap(vm, vm.Registers.R1)
+	if err != nil {
+		return err
+	}
+	if m == nil {
+		return nil
+	}
+
+	val := newIMM(0)
+	err = m.Push(vm.Registers.R2, int64(m.GetDef().ValueSize))
+	if err != nil {
+		switch err {
+		case errMapKeyNoPtr, errMapValNoPtr:
+			val = efault()
+		case errMapOutOfMemory:
+			val = e2big()
+		case errMapNotImplemented:
+			val = eperm()
+		default:
+			return fmt.Errorf("push: %w", err)
+		}
+	}
+
+	vm.Registers.R0 = val
+	return nil
+}
+
+// MapPopElement implements the bpf_map_pop_element helper
+func MapPopElement(vm *VM) error {
+	// R1 = id/fd of the map, R2 = pointer to value
+	m, err := regToMap(vm, vm.Registers.R1)
+	if err != nil {
+		return err
+	}
+	if m == nil {
+		return nil
+	}
+
+	vm.Registers.R0 = newIMM(0)
+	val, err := m.Pop()
+	if err != nil {
+		switch err {
+		case errMapKeyNoPtr, errMapValNoPtr:
+			vm.Registers.R0 = efault()
+		case errMapOutOfMemory:
+			vm.Registers.R0 = e2big()
+		case errMapNotImplemented:
+			vm.Registers.R0 = eperm()
+		default:
+			return fmt.Errorf("pop: %w", err)
+		}
+
+		return nil
+	}
+
+	switch valPtr := vm.Registers.R2.(type) {
+	case *MemoryPtr:
+		// Memory pointers point to the start of a memory block
+		err := valPtr.Memory.Write(int(valPtr.Offset), val, ebpf.BPF_DW)
+		if err != nil {
+			return fmt.Errorf("write memory: %w", err)
+		}
+
+	case *FramePointer:
+		// Frame pointers point to the end of a stack frame
+		err := valPtr.Memory.Write(valPtr.Memory.Size()+int(valPtr.Offset), val, ebpf.BPF_DW)
+		if err != nil {
+			return fmt.Errorf("write memory: %w", err)
+		}
+
+	default:
+		vm.Registers.R0 = efault()
+		return nil
+	}
+
+	return nil
+}
+
+// MapPeekElement implements the bpf_map_peek_element helper
+func MapPeekElement(vm *VM) error {
+	// R1 = id/fd of the map, R2 = pointer to value
+	m, err := regToMap(vm, vm.Registers.R1)
+	if err != nil {
+		return err
+	}
+	if m == nil {
+		return nil
+	}
+
+	key := newIMM(0)
+	val, err := m.Lookup(&MemoryPtr{
+		Memory: &ValueMemory{
+			Mapping: []RegisterValue{
+				key,
+				key,
+				key,
+				key,
+			},
+		},
+	})
+	ret := newIMM(0)
+	if err != nil {
+		switch err {
+		case errMapKeyNoPtr, errMapValNoPtr:
+			ret = efault()
+		case errMapOutOfMemory:
+			ret = e2big()
+		case errMapNotImplemented:
+			ret = eperm()
+		default:
+			return fmt.Errorf("peek: %w", err)
+		}
+	}
+
+	vm.Registers.R0 = ret
+	vm.Registers.R2 = val
 
 	return nil
 }

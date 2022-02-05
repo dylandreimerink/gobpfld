@@ -5,30 +5,15 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/dylandreimerink/gobpfld"
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/ebpf"
 )
 
 type ArrayMap struct {
-	Name          string
-	Def           gobpfld.BPFMapDef
-	BTFType       gobpfld.BTFMap
+	AbstractMap
 	Memory        ByteMemory
 	InitialDataBO binary.ByteOrder
 	InitialData   map[interface{}]interface{}
-}
-
-func (m *ArrayMap) GetName() string {
-	return m.Name
-}
-
-func (m *ArrayMap) GetDef() gobpfld.BPFMapDef {
-	return m.Def
-}
-
-func (m *ArrayMap) GetType() gobpfld.BTFMap {
-	return m.BTFType
 }
 
 func (m *ArrayMap) Init() error {

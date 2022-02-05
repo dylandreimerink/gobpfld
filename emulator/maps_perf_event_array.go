@@ -3,7 +3,6 @@ package emulator
 import (
 	"fmt"
 
-	"github.com/dylandreimerink/gobpfld"
 	"github.com/dylandreimerink/gobpfld/bpfsys"
 	"github.com/dylandreimerink/gobpfld/ebpf"
 )
@@ -15,23 +14,9 @@ import (
 // This emulated map type has to be consumed by the caller of virtual machine, the event data is stored in a slice
 // which is currently unlimited in size, it can be read and consumed just like an array map.
 type PerfEventArray struct {
-	Name    string
-	Def     gobpfld.BPFMapDef
-	BTFType gobpfld.BTFMap
+	AbstractMap
 
 	Events [][]byte
-}
-
-func (m *PerfEventArray) GetName() string {
-	return m.Name
-}
-
-func (m *PerfEventArray) GetDef() gobpfld.BPFMapDef {
-	return m.Def
-}
-
-func (m *PerfEventArray) GetType() gobpfld.BTFMap {
-	return m.BTFType
 }
 
 func (m *PerfEventArray) Init() error {
