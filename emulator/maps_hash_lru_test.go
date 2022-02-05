@@ -11,12 +11,14 @@ import (
 
 func TestEmulatedHashMapLRU(t *testing.T) {
 	m := HashMapLRU{
-		Name: "LRU map",
-		Def: gobpfld.BPFMapDef{
-			Type:       bpftypes.BPF_MAP_TYPE_LRU_HASH,
-			KeySize:    4,
-			ValueSize:  4,
-			MaxEntries: 5,
+		AbstractMap: AbstractMap{
+			Name: "LRU map",
+			Def: gobpfld.BPFMapDef{
+				Type:       bpftypes.BPF_MAP_TYPE_LRU_HASH,
+				KeySize:    4,
+				ValueSize:  4,
+				MaxEntries: 5,
+			},
 		},
 	}
 
