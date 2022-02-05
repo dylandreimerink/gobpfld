@@ -469,6 +469,7 @@ func (bpfElf *bpfELF) parseMaps(sectionIndex int, section *elf.Section) error {
 			},
 		}
 
+		longName := ""
 		for _, symbol := range symbols {
 			// If the symbol isn't for this section
 			if int(symbol.Section) != sectionIndex {
@@ -480,6 +481,7 @@ func (bpfElf *bpfELF) parseMaps(sectionIndex int, section *elf.Section) error {
 				continue
 			}
 
+			longName = symbol.Name
 			err = abstractMap.Name.SetString(symbol.Name)
 			if err != nil {
 				if bpfElf.settings.TruncateNames && errors.Is(err, ErrObjNameToLarge) {
@@ -505,7 +507,7 @@ func (bpfElf *bpfELF) parseMaps(sectionIndex int, section *elf.Section) error {
 
 		// TODO map name duplicate check
 
-		bpfElf.AbstractMaps[abstractMap.Name.String()] = abstractMap
+		bpfElf.AbstractMaps[longName] = abstractMap
 	}
 
 	return nil
@@ -747,9 +749,6 @@ func (bpfElf *bpfELF) linkAndRelocate() error {
 			if section.Name == "maps" || section.Name == ".maps" || globalData {
 				// The map name is the name of the symbol truncated to BPF_OBJ_NAME_LEN
 				mapName := relocEntry.Symbol.Name
-				if bpfElf.settings.TruncateNames && len(mapName) > bpftypes.BPF_OBJ_NAME_LEN-1 {
-					mapName = mapName[:bpftypes.BPF_OBJ_NAME_LEN-1]
-				}
 
 				// the dot of the .data, .rodata, and .bss sections are removed
 				if globalData {
