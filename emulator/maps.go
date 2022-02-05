@@ -78,6 +78,22 @@ func AbstractMapToVM(am gobpfld.AbstractMap) (Map, error) {
 			Def:     am.Definition,
 			BTFType: am.BTFMapType,
 		}, nil
+	case bpftypes.BPF_MAP_TYPE_ARRAY_OF_MAPS:
+		// In linux this needs to be a special may type because it holds addresses to maps, but in the emulator
+		// we can just insert the map indexes, so it is effectively a normal array map with a int32 value
+		return &ArrayMap{
+			Name:    am.Name.String(),
+			Def:     am.Definition,
+			BTFType: am.BTFMapType,
+		}, nil
+	case bpftypes.BPF_MAP_TYPE_HASH_OF_MAPS:
+		// In linux this needs to be a special may type because it holds addresses to maps, but in the emulator
+		// we can just insert the map indexes, so it is effectively a normal hash map with a int32 value
+		return &HashMap{
+			Name:    am.Name.String(),
+			Def:     am.Definition,
+			BTFType: am.BTFMapType,
+		}, nil
 	}
 
 	return nil, fmt.Errorf("map type '%s' not yet implemented", am.Definition.Type)

@@ -37,13 +37,15 @@ func LinuxHelperFunctions() []HelperFunc {
 
 // MapLookupElement implements the bpf_map_lookup_element helper
 func MapLookupElement(vm *VM) error {
-	mapIdx := vm.Registers.R1.Value()
-	if mapIdx < 1 || int(mapIdx) >= len(vm.Maps) {
-		vm.Registers.R0 = newIMM(0)
+	// R1 = id/fd of the map, R2 = pointer to key value
+	m, err := regToMap(vm, vm.Registers.R1)
+	if err != nil {
+		return err
+	}
+	if m == nil {
 		return nil
 	}
 
-	m := vm.Maps[mapIdx]
 	val, err := m.Lookup(vm.Registers.R2)
 	if err != nil {
 		switch err {
@@ -65,13 +67,14 @@ func MapLookupElement(vm *VM) error {
 
 // MapUpdateElement implements the bpf_map_update_element helper
 func MapUpdateElement(vm *VM) error {
-	mapIdx := vm.Registers.R1.Value()
-	if mapIdx < 1 || int(mapIdx) >= len(vm.Maps) {
-		vm.Registers.R0 = efault()
+	m, err := regToMap(vm, vm.Registers.R1)
+	if err != nil {
+		return err
+	}
+	if m == nil {
 		return nil
 	}
 
-	m := vm.Maps[mapIdx]
 	val, err := m.Update(vm.Registers.R2, vm.Registers.R3, bpfsys.BPFAttrMapElemFlags(vm.Registers.R4.Value()))
 	if err != nil {
 		switch err {
@@ -93,6 +96,30 @@ func MapUpdateElement(vm *VM) error {
 // MapDeleteElement implements the bpf_map_delete_element helper
 func MapDeleteElement(vm *VM) error {
 	return errors.New("not yet implemented")
+}
+
+// Convert a register values passed into a helper to the actual map
+func regToMap(vm *VM, reg RegisterValue) (Map, error) {
+	mapIdx := reg.Value()
+
+	// If R1 is a pointer, not a value, we should dereference it.
+	// Pointers can still be valid, usually they are passed when the id/fd comes from a map-in-map type map.
+	if ptr, ok := reg.(*MemoryPtr); ok {
+		// Deref as 32 bit, which is always the size of an id/fd
+		mapIdxVal, err := ptr.Deref(0, ebpf.BPF_W)
+		if err != nil {
+			return nil, fmt.Errorf("deref ptr to map idx: %w", err)
+		}
+
+		mapIdx = mapIdxVal.Value()
+	}
+
+	if mapIdx < 1 || int(mapIdx) >= len(vm.Maps) {
+		vm.Registers.R0 = newIMM(0)
+		return nil, nil
+	}
+
+	return vm.Maps[mapIdx], nil
 }
 
 // TailCall implements the bpf_tail_call helper
